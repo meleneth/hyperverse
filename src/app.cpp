@@ -269,6 +269,7 @@ int App::run() {
     const SectorTuning sector{};
     const FlightTuning flight{};
     const CameraTuning camera_tuning{};
+    FlightInputMapper input_mapper;
     SemanticInputFrame latest_intent{};
 
     std::cout << application_name() << " " << version() << "\n";
@@ -305,7 +306,7 @@ int App::run() {
       }
 
       while (timestep.consume_tick()) {
-        latest_intent = map_flight_intent(gamepad.sample());
+        latest_intent = input_mapper.map(gamepad.sample());
         simulate_assisted_flight(ship, latest_intent, flight, sector, timestep.tick_seconds());
         update_camera_anchor(camera, ship, sector, camera_tuning, timestep.tick_seconds());
         update_target_lock(target_lock, account.registry(), ship.position, ship.velocity, latest_intent, sector);

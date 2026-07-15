@@ -27,4 +27,17 @@ SemanticInputFrame map_flight_intent(const RawInputFrame& raw, const InputTuning
   };
 }
 
+SemanticInputFrame FlightInputMapper::map(const RawInputFrame& raw, const InputTuning& tuning) {
+  SemanticInputFrame intent = map_flight_intent(raw, tuning);
+  if (has_previous_) {
+    intent.confirm_requested = raw.confirm && !previous_.confirm;
+    intent.cancel_requested = raw.cancel && !previous_.cancel;
+    intent.target_cycle_requested = raw.target_cycle && !previous_.target_cycle;
+  }
+
+  previous_ = raw;
+  has_previous_ = true;
+  return intent;
+}
+
 }  // namespace hyperverse

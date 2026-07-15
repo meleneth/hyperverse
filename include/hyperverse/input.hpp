@@ -33,4 +33,13 @@ struct InputTuning {
 
 [[nodiscard]] SemanticInputFrame map_flight_intent(const RawInputFrame& raw, const InputTuning& tuning = {});
 
+class FlightInputMapper {
+public:
+  [[nodiscard]] SemanticInputFrame map(const RawInputFrame& raw, const InputTuning& tuning = {});
+
+private:
+  RawInputFrame previous_{};
+  bool has_previous_{false};
+};
+
 }  // namespace hyperverse

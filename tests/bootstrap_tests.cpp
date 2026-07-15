@@ -57,6 +57,20 @@ TEST_CASE("flight input maps raw devices into semantic movement intent") {
   CHECK(moving.control_mapping == hyperverse::ControlMapping::Gamepad);
 }
 
+TEST_CASE("stateful flight input mapper emits button requests on rising edges") {
+  hyperverse::FlightInputMapper mapper;
+
+  const hyperverse::SemanticInputFrame pressed = mapper.map({.target_cycle = true});
+  const hyperverse::SemanticInputFrame held = mapper.map({.target_cycle = true});
+  const hyperverse::SemanticInputFrame released = mapper.map({});
+  const hyperverse::SemanticInputFrame pressed_again = mapper.map({.target_cycle = true});
+
+  CHECK(pressed.target_cycle_requested);
+  CHECK_FALSE(held.target_cycle_requested);
+  CHECK_FALSE(released.target_cycle_requested);
+  CHECK(pressed_again.target_cycle_requested);
+}
+
 TEST_CASE("wrapped sector distance uses the shortest edge crossing") {
   const hyperverse::SectorTuning sector{.width = 9000.0F, .height = 9000.0F};
   const hyperverse::Vec2 from{.x = 8950.0F, .y = 100.0F};
