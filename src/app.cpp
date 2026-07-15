@@ -1,6 +1,7 @@
 #include "hyperverse/app.hpp"
 
 #include "hyperverse/camera.hpp"
+#include "hyperverse/cargo.hpp"
 #include "hyperverse/collision.hpp"
 #include "hyperverse/fixed_timestep.hpp"
 #include "hyperverse/flight.hpp"
@@ -226,6 +227,7 @@ void log_gamepad_state() {
   const hyperverse::CameraState& camera,
   const hyperverse::TargetLockModel& target_lock,
   const hyperverse::MiningHudSnapshot& mining,
+  const hyperverse::CargoHudSnapshot& cargo,
   const hyperverse::CollisionHudSnapshot& collision
 ) {
   const char* mapping = hud.control_mapping == hyperverse::ControlMapping::Gamepad ? "gamepad" : "keyboard";
@@ -262,6 +264,11 @@ void log_gamepad_state() {
     title << " | UNSTABLE";
   } else if (mining.gas_venting) {
     title << " | VENTING";
+  }
+  title << " | cargo " << cargo.delivered_mass << "/" << cargo.required_mass << " boxes " << cargo.cargo_boxes
+        << " payout x" << std::setprecision(2) << cargo.payout_multiplier;
+  if (cargo.extraction_authorized) {
+    title << " EXTRACT";
   }
   if (collision.contact) {
     title << " | COLLISION " << collision.impact_speed;
@@ -308,6 +315,33 @@ void tint_sprite(hyperverse::SpriteDraw& sprite, float r, float g, float b, floa
   sprite.tint_g = g;
   sprite.tint_b = b;
   sprite.tint_a = a;
+}
+
+void add_target_bracket_lines(
+  std::vector<hyperverse::LineDraw>& lines,
+  const hyperverse::SpriteDraw& bounds,
+  float r,
+  float g,
+  float b
+) {
+  const float left = bounds.center_x_ndc - bounds.half_width_ndc;
+  const float right = bounds.center_x_ndc + bounds.half_width_ndc;
+  const float bottom = bounds.center_y_ndc - bounds.half_height_ndc;
+  const float top = bounds.center_y_ndc + bounds.half_height_ndc;
+  const float horizontal = bounds.half_width_ndc * 0.38F;
+  const float vertical = bounds.half_height_ndc * 0.38F;
+  const auto add_line = [&](float x0, float y0, float x1, float y1) {
+    lines.push_back({.start_x_ndc = x0, .start_y_ndc = y0, .end_x_ndc = x1, .end_y_ndc = y1, .r = r, .g = g, .b = b});
+  };
+
+  add_line(left, top, left + horizontal, top);
+  add_line(left, top, left, top - vertical);
+  add_line(right, top, right - horizontal, top);
+  add_line(right, top, right, top - vertical);
+  add_line(left, bottom, left + horizontal, bottom);
+  add_line(left, bottom, left, bottom + vertical);
+  add_line(right, bottom, right - horizontal, bottom);
+  add_line(right, bottom, right, bottom + vertical);
 }
 
 [[nodiscard]] hyperverse::SpriteDraw make_world_sprite(
@@ -378,6 +412,8 @@ int App::run() {
     account.registry().emplace<CameraState>(player, CameraState{.position = ship.position});
     account.registry().emplace<TargetLockModel>(player);
     account.registry().emplace<MiningHudSnapshot>(player);
+    account.registry().emplace<CargoManifest>(player);
+    account.registry().emplace<CargoHudSnapshot>(player);
     account.registry().emplace<CollisionHudSnapshot>(player);
 
     const entt::entity primary_asteroid = account.registry().create();
@@ -399,6 +435,7 @@ int App::run() {
     const FlightTuning flight{};
     const CameraTuning camera_tuning{};
     const MiningLaserTuning mining_laser{};
+    const ContractQuotaTuning quota{};
     FlightInputMapper input_mapper;
     SemanticInputFrame latest_intent{};
 
@@ -441,11 +478,14 @@ int App::run() {
         CameraState& camera = account.registry().get<CameraState>(player);
         TargetLockModel& target_lock = account.registry().get<TargetLockModel>(player);
         MiningHudSnapshot& mining_hud = account.registry().get<MiningHudSnapshot>(player);
+        CargoManifest& cargo_manifest = account.registry().get<CargoManifest>(player);
+        CargoHudSnapshot& cargo_hud = account.registry().get<CargoHudSnapshot>(player);
         CollisionHudSnapshot& collision_hud = account.registry().get<CollisionHudSnapshot>(player);
         update_camera_anchor(camera, ship, sector, camera_tuning, timestep.tick_seconds());
         update_target_lock(target_lock, account.registry(), ship.position, ship.velocity, latest_intent, sector);
         mining_hud =
           update_mining_laser(account.registry(), target_lock, ship, latest_intent, sector, mining_laser, timestep.tick_seconds());
+        cargo_hud = update_cargo_manifest(cargo_manifest, account.registry(), quota);
         collision_hud = predict_ship_asteroid_collision(ship, account.registry(), sector);
       }
 
@@ -453,10 +493,11 @@ int App::run() {
       const CameraState& camera = account.registry().get<CameraState>(player);
       const TargetLockModel& target_lock = account.registry().get<TargetLockModel>(player);
       const MiningHudSnapshot& mining_hud = account.registry().get<MiningHudSnapshot>(player);
+      const CargoHudSnapshot& cargo_hud = account.registry().get<CargoHudSnapshot>(player);
       const CollisionHudSnapshot& collision_hud = account.registry().get<CollisionHudSnapshot>(player);
 
       if (hud_title_accumulator >= 0.25F) {
-        window.set_title(make_title(hud, camera, target_lock, mining_hud, collision_hud));
+        window.set_title(make_title(hud, camera, target_lock, mining_hud, cargo_hud, collision_hud));
         hud_title_accumulator = 0.0F;
       }
 
@@ -527,6 +568,29 @@ int App::run() {
             ship_sprite_rotation(ship.facing_radians)
           ));
           return sprites;
+        }(),
+        .lines = [&] {
+          std::vector<LineDraw> lines;
+          if (has_locked_target(target_lock) && account.registry().valid(target_lock.target)) {
+            const AsteroidBody& target = account.registry().get<AsteroidBody>(target_lock.target);
+            const SpriteDraw reticle_bounds = make_world_sprite(
+              SpriteTexture::Reticle,
+              target.position,
+              camera.position,
+              sector,
+              renderer.width(),
+              renderer.height(),
+              (target.radius * 0.55F) + 24.0F
+            );
+            if (collision_hud.contact) {
+              add_target_bracket_lines(lines, reticle_bounds, 1.0F, 0.2F, 0.15F);
+            } else if (collision_hud.warning) {
+              add_target_bracket_lines(lines, reticle_bounds, 1.0F, 0.85F, 0.2F);
+            } else {
+              add_target_bracket_lines(lines, reticle_bounds, 0.45F, 0.9F, 1.0F);
+            }
+          }
+          return lines;
         }(),
       });
       SDL_Delay(1);

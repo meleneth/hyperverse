@@ -30,6 +30,17 @@ struct SpritePushConstants {
   float tint_a{1.0F};
 };
 
+struct LinePushConstants {
+  float start_x{0.0F};
+  float start_y{0.0F};
+  float end_x{0.0F};
+  float end_y{0.0F};
+  float r{1.0F};
+  float g{1.0F};
+  float b{1.0F};
+  float a{1.0F};
+};
+
 void check(VkResult result, const char* message) {
   if (result != VK_SUCCESS) {
     throw std::runtime_error(message);
@@ -146,6 +157,7 @@ VulkanRenderer::VulkanRenderer(SDL_Window& window) {
   create_render_pass();
   create_descriptor_set_layout();
   create_graphics_pipeline();
+  create_line_pipeline();
   create_framebuffers();
   create_command_pool();
   create_texture_resources();
@@ -191,8 +203,14 @@ VulkanRenderer::~VulkanRenderer() {
   if (graphics_pipeline_ != VK_NULL_HANDLE) {
     vkDestroyPipeline(device_, graphics_pipeline_, nullptr);
   }
+  if (line_pipeline_ != VK_NULL_HANDLE) {
+    vkDestroyPipeline(device_, line_pipeline_, nullptr);
+  }
   if (pipeline_layout_ != VK_NULL_HANDLE) {
     vkDestroyPipelineLayout(device_, pipeline_layout_, nullptr);
+  }
+  if (line_pipeline_layout_ != VK_NULL_HANDLE) {
+    vkDestroyPipelineLayout(device_, line_pipeline_layout_, nullptr);
   }
   if (descriptor_set_layout_ != VK_NULL_HANDLE) {
     vkDestroyDescriptorSetLayout(device_, descriptor_set_layout_, nullptr);
@@ -590,6 +608,112 @@ void VulkanRenderer::create_graphics_pipeline() {
   vkDestroyShaderModule(device_, vertex_shader, nullptr);
 }
 
+void VulkanRenderer::create_line_pipeline() {
+  const std::vector<char> vertex_code = read_file("assets/shaders/line.vert.spv");
+  const std::vector<char> fragment_code = read_file("assets/shaders/line.frag.spv");
+
+  VkShaderModule vertex_shader = create_shader_module(device_, vertex_code);
+  VkShaderModule fragment_shader = create_shader_module(device_, fragment_code);
+
+  VkPipelineShaderStageCreateInfo vertex_stage{};
+  vertex_stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+  vertex_stage.stage = VK_SHADER_STAGE_VERTEX_BIT;
+  vertex_stage.module = vertex_shader;
+  vertex_stage.pName = "main";
+
+  VkPipelineShaderStageCreateInfo fragment_stage{};
+  fragment_stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+  fragment_stage.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+  fragment_stage.module = fragment_shader;
+  fragment_stage.pName = "main";
+
+  const std::array stages{vertex_stage, fragment_stage};
+
+  VkPipelineVertexInputStateCreateInfo vertex_input{};
+  vertex_input.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+
+  VkPipelineInputAssemblyStateCreateInfo input_assembly{};
+  input_assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+  input_assembly.topology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+
+  VkViewport viewport{};
+  viewport.x = 0.0F;
+  viewport.y = 0.0F;
+  viewport.width = static_cast<float>(swapchain_extent_.width);
+  viewport.height = static_cast<float>(swapchain_extent_.height);
+  viewport.minDepth = 0.0F;
+  viewport.maxDepth = 1.0F;
+
+  VkRect2D scissor{};
+  scissor.offset = {0, 0};
+  scissor.extent = swapchain_extent_;
+
+  VkPipelineViewportStateCreateInfo viewport_state{};
+  viewport_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+  viewport_state.viewportCount = 1;
+  viewport_state.pViewports = &viewport;
+  viewport_state.scissorCount = 1;
+  viewport_state.pScissors = &scissor;
+
+  VkPipelineRasterizationStateCreateInfo rasterizer{};
+  rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+  rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+  rasterizer.cullMode = VK_CULL_MODE_NONE;
+  rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+  rasterizer.lineWidth = 1.0F;
+
+  VkPipelineMultisampleStateCreateInfo multisampling{};
+  multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+  multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+  VkPipelineColorBlendAttachmentState color_blend_attachment{};
+  color_blend_attachment.colorWriteMask =
+    VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+  color_blend_attachment.blendEnable = VK_TRUE;
+  color_blend_attachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+  color_blend_attachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+  color_blend_attachment.colorBlendOp = VK_BLEND_OP_ADD;
+  color_blend_attachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+  color_blend_attachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+  color_blend_attachment.alphaBlendOp = VK_BLEND_OP_ADD;
+
+  VkPipelineColorBlendStateCreateInfo color_blending{};
+  color_blending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+  color_blending.attachmentCount = 1;
+  color_blending.pAttachments = &color_blend_attachment;
+
+  VkPushConstantRange push_range{};
+  push_range.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+  push_range.offset = 0;
+  push_range.size = sizeof(LinePushConstants);
+
+  VkPipelineLayoutCreateInfo layout_info{};
+  layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  layout_info.pushConstantRangeCount = 1;
+  layout_info.pPushConstantRanges = &push_range;
+
+  check(vkCreatePipelineLayout(device_, &layout_info, nullptr, &line_pipeline_layout_), "create line pipeline layout");
+
+  VkGraphicsPipelineCreateInfo pipeline_info{};
+  pipeline_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+  pipeline_info.stageCount = static_cast<std::uint32_t>(stages.size());
+  pipeline_info.pStages = stages.data();
+  pipeline_info.pVertexInputState = &vertex_input;
+  pipeline_info.pInputAssemblyState = &input_assembly;
+  pipeline_info.pViewportState = &viewport_state;
+  pipeline_info.pRasterizationState = &rasterizer;
+  pipeline_info.pMultisampleState = &multisampling;
+  pipeline_info.pColorBlendState = &color_blending;
+  pipeline_info.layout = line_pipeline_layout_;
+  pipeline_info.renderPass = render_pass_;
+  pipeline_info.subpass = 0;
+
+  check(vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipeline_info, nullptr, &line_pipeline_), "create line pipeline");
+
+  vkDestroyShaderModule(device_, fragment_shader, nullptr);
+  vkDestroyShaderModule(device_, vertex_shader, nullptr);
+}
+
 void VulkanRenderer::create_framebuffers() {
   framebuffers_.reserve(swapchain_image_views_.size());
 
@@ -824,6 +948,29 @@ void VulkanRenderer::record_command_buffer(std::uint32_t image_index, const Spri
       &push_constants
     );
     vkCmdDraw(command_buffer, 6, 1, 0, 0);
+  }
+
+  vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, line_pipeline_);
+  for (const LineDraw& line : frame.lines) {
+    const LinePushConstants push_constants{
+      .start_x = line.start_x_ndc,
+      .start_y = line.start_y_ndc,
+      .end_x = line.end_x_ndc,
+      .end_y = line.end_y_ndc,
+      .r = line.r,
+      .g = line.g,
+      .b = line.b,
+      .a = line.a,
+    };
+    vkCmdPushConstants(
+      command_buffer,
+      line_pipeline_layout_,
+      VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+      0,
+      sizeof(LinePushConstants),
+      &push_constants
+    );
+    vkCmdDraw(command_buffer, 2, 1, 0, 0);
   }
 
   vkCmdEndRenderPass(command_buffer);

@@ -9,6 +9,7 @@
 #include "hyperverse/fixed_timestep.hpp"
 #include "hyperverse/flight.hpp"
 #include "hyperverse/camera.hpp"
+#include "hyperverse/cargo.hpp"
 #include "hyperverse/collision.hpp"
 #include "hyperverse/grand_central.hpp"
 #include "hyperverse/input.hpp"
@@ -512,6 +513,45 @@ TEST_CASE("mining laser cannot hit targets outside range") {
   CHECK_FALSE(snapshot.beam_active);
   CHECK_FALSE(snapshot.target_in_range);
   CHECK(snapshot.target_integrity == Catch::Approx(100.0F));
+}
+
+TEST_CASE("cargo manifest converts mined mass into quota status") {
+  entt::registry registry;
+  const entt::entity first = registry.create();
+  const entt::entity second = registry.create();
+  registry.emplace<hyperverse::MiningResource>(first, hyperverse::MiningResource{.extracted_mass = 12.0F});
+  registry.emplace<hyperverse::MiningResource>(second, hyperverse::MiningResource{.extracted_mass = 18.0F});
+  hyperverse::CargoManifest manifest;
+
+  const hyperverse::CargoHudSnapshot cargo = hyperverse::update_cargo_manifest(
+    manifest,
+    registry,
+    {.required_mass = 40.0F, .cargo_box_mass = 10.0F, .over_quota_bonus_step_mass = 20.0F}
+  );
+
+  CHECK(manifest.delivered_mass == Catch::Approx(30.0F));
+  CHECK(manifest.cargo_boxes == 3);
+  CHECK(cargo.cargo_boxes == 3);
+  CHECK(cargo.quota_fraction == Catch::Approx(0.75F));
+  CHECK_FALSE(cargo.extraction_authorized);
+}
+
+TEST_CASE("cargo manifest authorizes extraction and calculates over-quota bonus") {
+  entt::registry registry;
+  const entt::entity asteroid = registry.create();
+  registry.emplace<hyperverse::MiningResource>(asteroid, hyperverse::MiningResource{.extracted_mass = 72.0F});
+  hyperverse::CargoManifest manifest;
+
+  const hyperverse::CargoHudSnapshot cargo = hyperverse::update_cargo_manifest(
+    manifest,
+    registry,
+    {.required_mass = 40.0F, .cargo_box_mass = 10.0F, .over_quota_bonus_step_mass = 16.0F, .bonus_per_step = 0.25F}
+  );
+
+  CHECK(cargo.extraction_authorized);
+  CHECK(cargo.over_quota_mass == Catch::Approx(32.0F));
+  CHECK(cargo.payout_multiplier == Catch::Approx(1.5F));
+  CHECK(cargo.quota_fraction == Catch::Approx(1.0F));
 }
 
 TEST_CASE("grand central derives a minimal account context without exposing ownership") {

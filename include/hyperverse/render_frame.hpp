@@ -40,9 +40,21 @@ struct SpriteDraw {
   float tint_a{1.0F};
 };
 
+struct LineDraw {
+  float start_x_ndc{0.0F};
+  float start_y_ndc{0.0F};
+  float end_x_ndc{0.0F};
+  float end_y_ndc{0.0F};
+  float r{1.0F};
+  float g{1.0F};
+  float b{1.0F};
+  float a{1.0F};
+};
+
 struct SpriteFrame {
   VulkanFrameSnapshot state{};
   std::vector<SpriteDraw> sprites{};
+  std::vector<LineDraw> lines{};
 };
 
 }  // namespace hyperverse

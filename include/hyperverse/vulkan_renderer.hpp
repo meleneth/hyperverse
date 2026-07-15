@@ -36,6 +36,7 @@ private:
   void create_render_pass();
   void create_descriptor_set_layout();
   void create_graphics_pipeline();
+  void create_line_pipeline();
   void create_framebuffers();
   void create_command_pool();
   void create_texture_resources();
@@ -71,6 +72,8 @@ private:
   VkDescriptorSetLayout descriptor_set_layout_{VK_NULL_HANDLE};
   VkPipelineLayout pipeline_layout_{VK_NULL_HANDLE};
   VkPipeline graphics_pipeline_{VK_NULL_HANDLE};
+  VkPipelineLayout line_pipeline_layout_{VK_NULL_HANDLE};
+  VkPipeline line_pipeline_{VK_NULL_HANDLE};
   std::vector<VkFramebuffer> framebuffers_;
   VkCommandPool command_pool_{VK_NULL_HANDLE};
   std::vector<VkCommandBuffer> command_buffers_;

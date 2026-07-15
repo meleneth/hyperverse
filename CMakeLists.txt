@@ -97,6 +97,7 @@ add_library(
   hyperverse_core
   src/app.cpp
   src/camera.cpp
+  src/cargo.cpp
   src/collision.cpp
   src/fixed_timestep.cpp
   src/flight.cpp
