@@ -1,5 +1,7 @@
 #include "hyperverse/input.hpp"
 
+#include <algorithm>
+
 namespace {
 
 [[nodiscard]] hyperverse::Vec2 apply_deadzone(hyperverse::Vec2 value, float deadzone) {
@@ -23,6 +25,7 @@ SemanticInputFrame map_flight_intent(const RawInputFrame& raw, const InputTuning
     .confirm_requested = raw.confirm,
     .cancel_requested = raw.cancel,
     .target_cycle_requested = raw.target_cycle,
+    .tool_intensity = std::clamp(raw.tool_intensity, 0.0F, 1.0F),
     .control_mapping = raw.control_mapping,
   };
 }

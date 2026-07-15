@@ -15,6 +15,7 @@ struct RawInputFrame {
   bool confirm{false};
   bool cancel{false};
   bool target_cycle{false};
+  float tool_intensity{0.0F};
   ControlMapping control_mapping{ControlMapping::Keyboard};
 };
 
@@ -24,6 +25,7 @@ struct SemanticInputFrame {
   bool confirm_requested{false};
   bool cancel_requested{false};
   bool target_cycle_requested{false};
+  float tool_intensity{0.0F};
   ControlMapping control_mapping{ControlMapping::Keyboard};
 };
 

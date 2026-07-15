@@ -5,12 +5,14 @@
 #include "hyperverse/flight.hpp"
 #include "hyperverse/grand_central.hpp"
 #include "hyperverse/input.hpp"
+#include "hyperverse/mining.hpp"
 #include "hyperverse/targeting.hpp"
 #include "hyperverse/version.hpp"
 #include "hyperverse/vulkan_renderer.hpp"
 
 #include <SDL3/SDL.h>
 
+#include <algorithm>
 #include <chrono>
 #include <exception>
 #include <iomanip>
@@ -144,6 +146,7 @@ public:
       raw.confirm = key_down(SDL_SCANCODE_SPACE);
       raw.cancel = key_down(SDL_SCANCODE_ESCAPE);
       raw.target_cycle = key_down(SDL_SCANCODE_TAB);
+      raw.tool_intensity = key_down(SDL_SCANCODE_F) ? 1.0F : 0.0F;
     }
 
     if (gamepad_ != nullptr) {
@@ -159,6 +162,7 @@ public:
       raw.confirm = raw.confirm || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_SOUTH);
       raw.cancel = raw.cancel || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_EAST);
       raw.target_cycle = raw.target_cycle || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
+      raw.tool_intensity = std::max(raw.tool_intensity, trigger(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER));
     }
 
     return raw;
@@ -168,6 +172,11 @@ private:
   [[nodiscard]] float axis(SDL_GamepadAxis axis_id) const {
     constexpr float axis_max = 32767.0F;
     return static_cast<float>(SDL_GetGamepadAxis(gamepad_, axis_id)) / axis_max;
+  }
+
+  [[nodiscard]] float trigger(SDL_GamepadAxis axis_id) const {
+    constexpr float axis_max = 32767.0F;
+    return std::clamp(static_cast<float>(SDL_GetGamepadAxis(gamepad_, axis_id)) / axis_max, 0.0F, 1.0F);
   }
 
   void close() {
@@ -211,7 +220,8 @@ void log_gamepad_state() {
 [[nodiscard]] std::string make_title(
   const hyperverse::FlightHudSnapshot& hud,
   const hyperverse::CameraState& camera,
-  const hyperverse::TargetLockModel& target_lock
+  const hyperverse::TargetLockModel& target_lock,
+  const hyperverse::MiningHudSnapshot& mining
 ) {
   const char* mapping = hud.control_mapping == hyperverse::ControlMapping::Gamepad ? "gamepad" : "keyboard";
   std::ostringstream title;
@@ -228,6 +238,10 @@ void log_gamepad_state() {
           << " close " << target_lock.closing_speed;
   } else {
     title << " | target none";
+  }
+  if (mining.beam_active) {
+    title << " | ZAP heat " << mining.target_heat << " integrity " << mining.target_integrity << " ore "
+          << mining.extracted_mass;
   }
   title << " | " << mapping;
   return title.str();
@@ -256,12 +270,15 @@ int App::run() {
       primary_asteroid,
       AsteroidBody{.position = {.x = 5650.0F, .y = 3850.0F}, .radius = 220.0F, .scan_confidence = 0.34F}
     );
+    account.registry().emplace<MiningResource>(primary_asteroid);
     const entt::entity secondary_asteroid = account.registry().create();
     account.registry().emplace<AsteroidBody>(
       secondary_asteroid,
       AsteroidBody{.position = {.x = 3825.0F, .y = 5200.0F}, .radius = 150.0F, .scan_confidence = 0.58F}
     );
+    account.registry().emplace<MiningResource>(secondary_asteroid);
     TargetLockModel target_lock{};
+    MiningHudSnapshot mining_hud{};
 
     GamepadSlot gamepad;
     gamepad.open_first_available();
@@ -269,6 +286,7 @@ int App::run() {
     const SectorTuning sector{};
     const FlightTuning flight{};
     const CameraTuning camera_tuning{};
+    const MiningLaserTuning mining_laser{};
     FlightInputMapper input_mapper;
     SemanticInputFrame latest_intent{};
 
@@ -310,12 +328,13 @@ int App::run() {
         simulate_assisted_flight(ship, latest_intent, flight, sector, timestep.tick_seconds());
         update_camera_anchor(camera, ship, sector, camera_tuning, timestep.tick_seconds());
         update_target_lock(target_lock, account.registry(), ship.position, ship.velocity, latest_intent, sector);
+        mining_hud = update_mining_laser(account.registry(), target_lock, latest_intent, mining_laser, timestep.tick_seconds());
       }
 
       const FlightHudSnapshot hud = make_flight_hud_snapshot(ship, latest_intent, flight, sector);
 
       if (hud_title_accumulator >= 0.25F) {
-        window.set_title(make_title(hud, camera, target_lock));
+        window.set_title(make_title(hud, camera, target_lock, mining_hud));
         hud_title_accumulator = 0.0F;
       }
 
@@ -323,6 +342,7 @@ int App::run() {
         .speed_fraction = hud.speed_fraction,
         .wrap_warning = hud.wrap_warning,
         .target_locked = has_locked_target(target_lock),
+        .mining_active = mining_hud.beam_active,
       });
       SDL_Delay(1);
     }

@@ -100,6 +100,7 @@ add_library(
   src/flight.cpp
   src/grand_central.cpp
   src/input.cpp
+  src/mining.cpp
   src/render_frame.cpp
   src/sector.cpp
   src/targeting.cpp

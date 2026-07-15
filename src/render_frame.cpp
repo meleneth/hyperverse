@@ -18,6 +18,12 @@ RenderColor make_clear_color(const VulkanFrameSnapshot& frame) {
     color.g += 0.025F;
   }
 
+  if (frame.mining_active) {
+    color.r = 0.11F;
+    color.g = 0.055F;
+    color.b = 0.01F;
+  }
+
   if (frame.wrap_warning) {
     color.r = 0.12F;
     color.g = 0.025F;

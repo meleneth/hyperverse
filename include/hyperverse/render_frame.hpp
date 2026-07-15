@@ -13,6 +13,7 @@ struct VulkanFrameSnapshot {
   float speed_fraction{0.0F};
   bool wrap_warning{false};
   bool target_locked{false};
+  bool mining_active{false};
 };
 
 [[nodiscard]] RenderColor make_clear_color(const VulkanFrameSnapshot& frame);

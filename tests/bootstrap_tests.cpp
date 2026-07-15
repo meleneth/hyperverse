@@ -11,6 +11,7 @@
 #include "hyperverse/camera.hpp"
 #include "hyperverse/grand_central.hpp"
 #include "hyperverse/input.hpp"
+#include "hyperverse/mining.hpp"
 #include "hyperverse/render_frame.hpp"
 #include "hyperverse/sector.hpp"
 #include "hyperverse/targeting.hpp"
@@ -49,11 +50,13 @@ TEST_CASE("flight input maps raw devices into semantic movement intent") {
       .movement_axis = {.x = 1.0F, .y = 1.0F},
       .confirm = true,
       .target_cycle = true,
+      .tool_intensity = 0.5F,
       .control_mapping = hyperverse::ControlMapping::Gamepad,
     });
   CHECK(hyperverse::length(moving.desired_movement) == Catch::Approx(1.0F));
   CHECK(moving.confirm_requested);
   CHECK(moving.target_cycle_requested);
+  CHECK(moving.tool_intensity == Catch::Approx(0.5F));
   CHECK(moving.control_mapping == hyperverse::ControlMapping::Gamepad);
 }
 
@@ -234,13 +237,67 @@ TEST_CASE("Vulkan clear color exposes critical flight state") {
   const hyperverse::RenderColor idle = hyperverse::make_clear_color({});
   const hyperverse::RenderColor fast = hyperverse::make_clear_color({.speed_fraction = 1.0F});
   const hyperverse::RenderColor locked = hyperverse::make_clear_color({.target_locked = true});
+  const hyperverse::RenderColor mining = hyperverse::make_clear_color({.mining_active = true});
   const hyperverse::RenderColor warning = hyperverse::make_clear_color({.speed_fraction = 1.0F, .wrap_warning = true});
 
   CHECK(fast.b > idle.b);
   CHECK(locked.r > idle.r);
   CHECK(locked.g > idle.g);
+  CHECK(mining.r > idle.r);
+  CHECK(mining.b < idle.b);
   CHECK(warning.r > fast.r);
   CHECK(warning.g < fast.g);
+}
+
+TEST_CASE("mining laser extracts material from locked asteroid in range") {
+  entt::registry registry;
+  const entt::entity asteroid = registry.create();
+  registry.emplace<hyperverse::MiningResource>(asteroid);
+
+  const hyperverse::TargetLockModel lock{
+    .phase = hyperverse::TargetLockPhase::Locked,
+    .target = asteroid,
+    .wrapped_distance = 250.0F,
+  };
+  const hyperverse::MiningLaserTuning tuning{
+    .range = 500.0F,
+    .integrity_damage_per_second = 20.0F,
+    .extraction_per_second = 10.0F,
+    .heat_per_second = 30.0F,
+    .heat_decay_per_second = 5.0F,
+  };
+
+  const hyperverse::MiningHudSnapshot active =
+    hyperverse::update_mining_laser(registry, lock, {.tool_intensity = 0.5F}, tuning, 2.0F);
+
+  CHECK(active.beam_active);
+  CHECK(active.target_in_range);
+  CHECK(active.target_integrity == Catch::Approx(80.0F));
+  CHECK(active.target_heat == Catch::Approx(30.0F));
+  CHECK(active.extracted_mass == Catch::Approx(10.0F));
+
+  const hyperverse::MiningHudSnapshot cooling = hyperverse::update_mining_laser(registry, lock, {}, tuning, 2.0F);
+  CHECK_FALSE(cooling.beam_active);
+  CHECK(cooling.target_heat == Catch::Approx(20.0F));
+}
+
+TEST_CASE("mining laser cannot hit targets outside range") {
+  entt::registry registry;
+  const entt::entity asteroid = registry.create();
+  registry.emplace<hyperverse::MiningResource>(asteroid);
+
+  const hyperverse::TargetLockModel lock{
+    .phase = hyperverse::TargetLockPhase::Locked,
+    .target = asteroid,
+    .wrapped_distance = 900.0F,
+  };
+
+  const hyperverse::MiningHudSnapshot snapshot =
+    hyperverse::update_mining_laser(registry, lock, {.tool_intensity = 1.0F}, {.range = 500.0F}, 1.0F);
+
+  CHECK_FALSE(snapshot.beam_active);
+  CHECK_FALSE(snapshot.target_in_range);
+  CHECK(snapshot.target_integrity == Catch::Approx(100.0F));
 }
 
 TEST_CASE("grand central derives a minimal account context without exposing ownership") {
