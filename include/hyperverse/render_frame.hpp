@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 namespace hyperverse {
 
 struct RenderColor {
@@ -17,5 +19,24 @@ struct VulkanFrameSnapshot {
 };
 
 [[nodiscard]] RenderColor make_clear_color(const VulkanFrameSnapshot& frame);
+
+enum class SpriteTexture {
+  Ship,
+  Rock,
+  Reticle,
+};
+
+struct SpriteDraw {
+  SpriteTexture texture{SpriteTexture::Ship};
+  float center_x_ndc{0.0F};
+  float center_y_ndc{0.0F};
+  float half_width_ndc{0.05F};
+  float half_height_ndc{0.05F};
+};
+
+struct SpriteFrame {
+  VulkanFrameSnapshot state{};
+  std::vector<SpriteDraw> sprites{};
+};
 
 }  // namespace hyperverse

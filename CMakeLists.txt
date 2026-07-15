@@ -20,6 +20,7 @@ include(CPM)
 include(CompilerWarnings)
 
 find_package(Vulkan REQUIRED)
+find_package(PNG REQUIRED)
 
 CPMAddPackage(
   NAME SDL3
@@ -122,6 +123,7 @@ target_link_libraries(
     hyperverse::eventpp
   PRIVATE
     ${HYPERVERSE_SDL_TARGET}
+    PNG::PNG
     Vulkan::Vulkan
     ${HYPERVERSE_JOLT_TARGET}
 )

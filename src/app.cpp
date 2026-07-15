@@ -20,6 +20,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -251,6 +252,30 @@ void log_gamepad_state() {
   return title.str();
 }
 
+[[nodiscard]] hyperverse::SpriteDraw make_world_sprite(
+  hyperverse::SpriteTexture texture,
+  hyperverse::Vec2 world_position,
+  hyperverse::Vec2 camera_position,
+  const hyperverse::SectorTuning& sector,
+  std::uint32_t width,
+  std::uint32_t height,
+  float pixel_size
+) {
+  constexpr float pixels_per_world_unit = 0.35F;
+  constexpr float screen_anchor_y_fraction = 0.75F;
+  const hyperverse::Vec2 relative = hyperverse::wrapped_delta(camera_position, world_position, sector) * pixels_per_world_unit;
+  const float screen_x = (static_cast<float>(width) * 0.5F) + relative.x;
+  const float screen_y = (static_cast<float>(height) * screen_anchor_y_fraction) + relative.y;
+
+  return {
+    .texture = texture,
+    .center_x_ndc = ((screen_x / static_cast<float>(width)) * 2.0F) - 1.0F,
+    .center_y_ndc = 1.0F - ((screen_y / static_cast<float>(height)) * 2.0F),
+    .half_width_ndc = pixel_size / static_cast<float>(width),
+    .half_height_ndc = pixel_size / static_cast<float>(height),
+  };
+}
+
 }  // namespace
 
 namespace hyperverse {
@@ -343,10 +368,49 @@ int App::run() {
       }
 
       renderer.draw_frame({
-        .speed_fraction = hud.speed_fraction,
-        .wrap_warning = hud.wrap_warning,
-        .target_locked = has_locked_target(target_lock),
-        .mining_active = mining_hud.beam_active,
+        .state = {
+          .speed_fraction = hud.speed_fraction,
+          .wrap_warning = hud.wrap_warning,
+          .target_locked = has_locked_target(target_lock),
+          .mining_active = mining_hud.beam_active,
+        },
+        .sprites = [&] {
+          std::vector<SpriteDraw> sprites;
+          for (auto [entity, asteroid] : account.registry().view<AsteroidBody>().each()) {
+            (void)entity;
+            sprites.push_back(make_world_sprite(
+              SpriteTexture::Rock,
+              asteroid.position,
+              camera.position,
+              sector,
+              renderer.width(),
+              renderer.height(),
+              asteroid.radius * 0.45F
+            ));
+          }
+          if (has_locked_target(target_lock) && account.registry().valid(target_lock.target)) {
+            const AsteroidBody& target = account.registry().get<AsteroidBody>(target_lock.target);
+            sprites.push_back(make_world_sprite(
+              SpriteTexture::Reticle,
+              target.position,
+              camera.position,
+              sector,
+              renderer.width(),
+              renderer.height(),
+              (target.radius * 0.55F) + 24.0F
+            ));
+          }
+          sprites.push_back(make_world_sprite(
+            SpriteTexture::Ship,
+            ship.position,
+            camera.position,
+            sector,
+            renderer.width(),
+            renderer.height(),
+            56.0F
+          ));
+          return sprites;
+        }(),
       });
       SDL_Delay(1);
     }
