@@ -556,6 +556,37 @@ TEST_CASE("cargo manifest authorizes extraction and calculates over-quota bonus"
   CHECK(cargo.quota_fraction == Catch::Approx(1.0F));
 }
 
+TEST_CASE("cargo boxes are created at the extraction site from manifest mass") {
+  entt::registry registry;
+  const entt::entity asteroid = registry.create();
+  registry.emplace<hyperverse::MiningResource>(asteroid, hyperverse::MiningResource{.extracted_mass = 35.0F});
+  hyperverse::CargoManifest manifest;
+  (void)hyperverse::update_cargo_manifest(manifest, registry, {.cargo_box_mass = 10.0F});
+
+  const int box_count = hyperverse::sync_cargo_boxes(
+    registry,
+    manifest,
+    {.position = {.x = 1000.0F, .y = 2000.0F}},
+    {.box_mass = 10.0F, .box_spacing = 50.0F}
+  );
+
+  CHECK(box_count == 3);
+  int counted_boxes = 0;
+  bool saw_second_box = false;
+  for (auto [entity, box] : registry.view<hyperverse::CargoBox>().each()) {
+    (void)entity;
+    ++counted_boxes;
+    if (box.index == 1) {
+      saw_second_box = true;
+      CHECK(box.position.x == Catch::Approx(1050.0F));
+      CHECK(box.position.y == Catch::Approx(2000.0F));
+      CHECK(box.mass == Catch::Approx(10.0F));
+    }
+  }
+  CHECK(counted_boxes == 3);
+  CHECK(saw_second_box);
+}
+
 TEST_CASE("mining drone acquires the locked asteroid as its priority") {
   entt::registry registry;
   const entt::entity asteroid = registry.create();

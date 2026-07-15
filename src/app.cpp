@@ -360,6 +360,21 @@ void add_target_bracket_lines(
   add_line(right, bottom, right, bottom + vertical);
 }
 
+void add_box_lines(std::vector<hyperverse::LineDraw>& lines, const hyperverse::SpriteDraw& bounds, float r, float g, float b) {
+  const float left = bounds.center_x_ndc - bounds.half_width_ndc;
+  const float right = bounds.center_x_ndc + bounds.half_width_ndc;
+  const float bottom = bounds.center_y_ndc - bounds.half_height_ndc;
+  const float top = bounds.center_y_ndc + bounds.half_height_ndc;
+  const auto add_line = [&](float x0, float y0, float x1, float y1) {
+    lines.push_back({.start_x_ndc = x0, .start_y_ndc = y0, .end_x_ndc = x1, .end_y_ndc = y1, .r = r, .g = g, .b = b});
+  };
+
+  add_line(left, top, right, top);
+  add_line(right, top, right, bottom);
+  add_line(right, bottom, left, bottom);
+  add_line(left, bottom, left, top);
+}
+
 [[nodiscard]] hyperverse::SpriteDraw make_world_sprite(
   hyperverse::SpriteTexture texture,
   hyperverse::Vec2 world_position,
@@ -461,6 +476,8 @@ int App::run() {
     const CameraTuning camera_tuning{};
     const MiningLaserTuning mining_laser{};
     const ContractQuotaTuning quota{};
+    const ExtractionSite extraction_site{.position = {.x = 4300.0F, .y = 4300.0F}};
+    const CargoBoxTuning cargo_box_tuning{.box_mass = quota.cargo_box_mass};
     const SectorPressureTuning pressure_tuning{.escalation_interval_seconds = 30.0F};
     const MiningDroneTuning mining_drone_tuning{};
     FlightInputMapper input_mapper;
@@ -524,6 +541,7 @@ int App::run() {
           mining_drone_tuning
         );
         cargo_hud = update_cargo_manifest(cargo_manifest, account.registry(), quota);
+        (void)sync_cargo_boxes(account.registry(), cargo_manifest, extraction_site, cargo_box_tuning);
         pressure_hud = update_sector_pressure(pressure, timestep.tick_seconds(), pressure_tuning);
         collision_hud = predict_ship_asteroid_collision(ship, account.registry(), sector);
       }
@@ -644,6 +662,19 @@ int App::run() {
             } else {
               add_target_bracket_lines(lines, reticle_bounds, 0.45F, 0.9F, 1.0F);
             }
+          }
+          for (auto [entity, box] : account.registry().view<CargoBox>().each()) {
+            (void)entity;
+            const SpriteDraw box_bounds = make_world_sprite(
+              SpriteTexture::Reticle,
+              box.position,
+              camera.position,
+              sector,
+              renderer.width(),
+              renderer.height(),
+              28.0F
+            );
+            add_box_lines(lines, box_bounds, 0.4F, 1.0F, 0.52F);
           }
           return lines;
         }(),

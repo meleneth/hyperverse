@@ -1,6 +1,7 @@
 #pragma once
 
 #include "hyperverse/mining.hpp"
+#include "hyperverse/sector.hpp"
 
 #include <entt/entity/registry.hpp>
 
@@ -9,6 +10,21 @@ namespace hyperverse {
 struct CargoManifest {
   float delivered_mass{0.0F};
   int cargo_boxes{0};
+};
+
+struct ExtractionSite {
+  Vec2 position{};
+};
+
+struct CargoBox {
+  Vec2 position{};
+  float mass{0.0F};
+  int index{0};
+};
+
+struct CargoBoxTuning {
+  float box_mass{10.0F};
+  float box_spacing{78.0F};
 };
 
 struct ContractQuotaTuning {
@@ -32,6 +48,13 @@ struct CargoHudSnapshot {
   CargoManifest& manifest,
   entt::registry& registry,
   const ContractQuotaTuning& tuning = {}
+);
+
+int sync_cargo_boxes(
+  entt::registry& registry,
+  const CargoManifest& manifest,
+  const ExtractionSite& extraction_site,
+  const CargoBoxTuning& tuning = {}
 );
 
 }  // namespace hyperverse
