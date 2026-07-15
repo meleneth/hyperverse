@@ -251,10 +251,15 @@ int App::run() {
     ship.position = {.x = 4500.0F, .y = 4500.0F};
     CameraState camera{.position = ship.position};
 
-    const entt::entity asteroid = account.registry().create();
+    const entt::entity primary_asteroid = account.registry().create();
     account.registry().emplace<AsteroidBody>(
-      asteroid,
+      primary_asteroid,
       AsteroidBody{.position = {.x = 5650.0F, .y = 3850.0F}, .radius = 220.0F, .scan_confidence = 0.34F}
+    );
+    const entt::entity secondary_asteroid = account.registry().create();
+    account.registry().emplace<AsteroidBody>(
+      secondary_asteroid,
+      AsteroidBody{.position = {.x = 3825.0F, .y = 5200.0F}, .radius = 150.0F, .scan_confidence = 0.58F}
     );
     TargetLockModel target_lock{};
 
