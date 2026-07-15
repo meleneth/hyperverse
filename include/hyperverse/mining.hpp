@@ -1,6 +1,8 @@
 #pragma once
 
+#include "hyperverse/flight.hpp"
 #include "hyperverse/input.hpp"
+#include "hyperverse/sector.hpp"
 #include "hyperverse/targeting.hpp"
 
 #include <entt/entity/registry.hpp>
@@ -24,6 +26,8 @@ struct MiningLaserTuning {
 struct MiningHudSnapshot {
   bool beam_active{false};
   bool target_in_range{false};
+  entt::entity target{entt::null};
+  Vec2 beam_end_position{};
   float beam_intensity{0.0F};
   float target_integrity{0.0F};
   float target_heat{0.0F};
@@ -33,7 +37,9 @@ struct MiningHudSnapshot {
 [[nodiscard]] MiningHudSnapshot update_mining_laser(
   entt::registry& registry,
   const TargetLockModel& target_lock,
+  const ShipMotion& ship,
   const SemanticInputFrame& input,
+  const SectorTuning& sector,
   const MiningLaserTuning& tuning,
   float dt_seconds
 );

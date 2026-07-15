@@ -433,7 +433,8 @@ int App::run() {
         CollisionHudSnapshot& collision_hud = account.registry().get<CollisionHudSnapshot>(player);
         update_camera_anchor(camera, ship, sector, camera_tuning, timestep.tick_seconds());
         update_target_lock(target_lock, account.registry(), ship.position, ship.velocity, latest_intent, sector);
-        mining_hud = update_mining_laser(account.registry(), target_lock, latest_intent, mining_laser, timestep.tick_seconds());
+        mining_hud =
+          update_mining_laser(account.registry(), target_lock, ship, latest_intent, sector, mining_laser, timestep.tick_seconds());
         collision_hud = predict_ship_asteroid_collision(ship, account.registry(), sector);
       }
 
@@ -470,18 +471,6 @@ int App::run() {
           }
           if (has_locked_target(target_lock) && account.registry().valid(target_lock.target)) {
             const AsteroidBody& target = account.registry().get<AsteroidBody>(target_lock.target);
-            if (mining_hud.beam_active) {
-              SpriteDraw laser = make_laser_sprite(
-                ship.position,
-                target.position,
-                camera.position,
-                sector,
-                renderer.width(),
-                renderer.height()
-              );
-              tint_sprite(laser, 1.0F, 0.72F, 0.22F);
-              sprites.push_back(laser);
-            }
             SpriteDraw reticle = make_world_sprite(
               SpriteTexture::Reticle,
               target.position,
@@ -497,6 +486,18 @@ int App::run() {
               tint_sprite(reticle, 1.0F, 0.85F, 0.20F);
             }
             sprites.push_back(reticle);
+          }
+          if (mining_hud.beam_active) {
+            SpriteDraw laser = make_laser_sprite(
+              ship.position,
+              mining_hud.beam_end_position,
+              camera.position,
+              sector,
+              renderer.width(),
+              renderer.height()
+            );
+            tint_sprite(laser, 1.0F, 0.72F, 0.22F);
+            sprites.push_back(laser);
           }
           sprites.push_back(make_world_sprite(
             SpriteTexture::Ship,

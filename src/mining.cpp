@@ -1,24 +1,114 @@
 #include "hyperverse/mining.hpp"
 
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+#pragma GCC diagnostic ignored "-Wsign-conversion"
+#endif
+#include <Jolt/Jolt.h>
+#include <Jolt/Physics/Collision/CastResult.h>
+#include <Jolt/Physics/Collision/RayCast.h>
+#include <Jolt/Physics/Collision/Shape/SphereShape.h>
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
+
 #include <algorithm>
+#include <cmath>
+#include <limits>
 
 namespace hyperverse {
+namespace {
+
+struct MiningTarget {
+  entt::entity entity{entt::null};
+  float distance{0.0F};
+};
+
+[[nodiscard]] Vec2 facing_direction(float facing_radians) {
+  return {.x = std::cos(facing_radians), .y = std::sin(facing_radians)};
+}
+
+[[nodiscard]] MiningTarget raycast_mining_target(
+  entt::registry& registry,
+  const ShipMotion& ship,
+  Vec2 direction,
+  const SectorTuning& sector,
+  float range
+) {
+  MiningTarget best{};
+  float best_fraction = std::numeric_limits<float>::max();
+
+  const Vec2 normalized_direction = normalize_or_zero(direction);
+  if (length(normalized_direction) <= 0.0F) {
+    return best;
+  }
+
+  const JPH::Vec3 ray_direction{normalized_direction.x * range, normalized_direction.y * range, 0.0F};
+  for (auto [entity, asteroid, resource] : registry.view<AsteroidBody, MiningResource>().each()) {
+    if (resource.integrity <= 0.0F) {
+      continue;
+    }
+
+    const Vec2 relative_position = wrapped_delta(ship.position, asteroid.position, sector);
+    const JPH::SphereShape asteroid_shape{asteroid.radius};
+    JPH::RayCast ray{{-relative_position.x, -relative_position.y, 0.0F}, ray_direction};
+    JPH::RayCastResult hit{};
+    if (!asteroid_shape.CastRay(ray, JPH::SubShapeIDCreator(), hit)) {
+      continue;
+    }
+
+    if (hit.mFraction < best_fraction) {
+      best_fraction = hit.mFraction;
+      best = {.entity = entity, .distance = hit.mFraction * range};
+    }
+  }
+
+  return best;
+}
+
+[[nodiscard]] MiningTarget resolve_mining_target(
+  entt::registry& registry,
+  const TargetLockModel& target_lock,
+  const ShipMotion& ship,
+  const SemanticInputFrame& input,
+  const SectorTuning& sector,
+  const MiningLaserTuning& tuning
+) {
+  if (
+    has_locked_target(target_lock) && registry.valid(target_lock.target) &&
+    registry.all_of<AsteroidBody, MiningResource>(target_lock.target)
+  ) {
+    return {.entity = target_lock.target, .distance = target_lock.wrapped_distance};
+  }
+
+  const Vec2 direction = length(input.primary_aim) > 0.0F ? input.primary_aim : facing_direction(ship.facing_radians);
+  return raycast_mining_target(registry, ship, direction, sector, tuning.range);
+}
+
+}  // namespace
 
 MiningHudSnapshot update_mining_laser(
   entt::registry& registry,
   const TargetLockModel& target_lock,
+  const ShipMotion& ship,
   const SemanticInputFrame& input,
+  const SectorTuning& sector,
   const MiningLaserTuning& tuning,
   float dt_seconds
 ) {
   MiningHudSnapshot hud{};
-  if (!has_locked_target(target_lock) || !registry.valid(target_lock.target) || !registry.all_of<MiningResource>(target_lock.target)) {
+  hud.beam_intensity = std::clamp(input.tool_intensity, 0.0F, 1.0F);
+  const MiningTarget target = resolve_mining_target(registry, target_lock, ship, input, sector, tuning);
+  if (target.entity == entt::null) {
     return hud;
   }
 
-  MiningResource& resource = registry.get<MiningResource>(target_lock.target);
-  hud.target_in_range = target_lock.wrapped_distance <= tuning.range;
-  hud.beam_intensity = std::clamp(input.tool_intensity, 0.0F, 1.0F);
+  const AsteroidBody& asteroid = registry.get<AsteroidBody>(target.entity);
+  MiningResource& resource = registry.get<MiningResource>(target.entity);
+  hud.target = target.entity;
+  hud.target_in_range = target.distance <= tuning.range;
+  hud.beam_end_position = asteroid.position;
 
   if (hud.target_in_range && hud.beam_intensity > 0.0F && resource.integrity > 0.0F) {
     hud.beam_active = true;

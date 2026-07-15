@@ -301,6 +301,10 @@ TEST_CASE("collision prediction reports current contact") {
 TEST_CASE("mining laser extracts material from locked asteroid in range") {
   entt::registry registry;
   const entt::entity asteroid = registry.create();
+  registry.emplace<hyperverse::AsteroidBody>(
+    asteroid,
+    hyperverse::AsteroidBody{.position = {.x = 350.0F, .y = 100.0F}, .radius = 40.0F}
+  );
   registry.emplace<hyperverse::MiningResource>(asteroid);
 
   const hyperverse::TargetLockModel lock{
@@ -317,22 +321,69 @@ TEST_CASE("mining laser extracts material from locked asteroid in range") {
   };
 
   const hyperverse::MiningHudSnapshot active =
-    hyperverse::update_mining_laser(registry, lock, {.tool_intensity = 0.5F}, tuning, 2.0F);
+    hyperverse::update_mining_laser(
+      registry,
+      lock,
+      {.position = {.x = 100.0F, .y = 100.0F}},
+      {.tool_intensity = 0.5F},
+      {.width = 9000.0F, .height = 9000.0F},
+      tuning,
+      2.0F
+    );
 
   CHECK(active.beam_active);
   CHECK(active.target_in_range);
+  CHECK(active.target == asteroid);
   CHECK(active.target_integrity == Catch::Approx(80.0F));
   CHECK(active.target_heat == Catch::Approx(30.0F));
   CHECK(active.extracted_mass == Catch::Approx(10.0F));
 
-  const hyperverse::MiningHudSnapshot cooling = hyperverse::update_mining_laser(registry, lock, {}, tuning, 2.0F);
+  const hyperverse::MiningHudSnapshot cooling = hyperverse::update_mining_laser(
+    registry,
+    lock,
+    {.position = {.x = 100.0F, .y = 100.0F}},
+    {},
+    {.width = 9000.0F, .height = 9000.0F},
+    tuning,
+    2.0F
+  );
   CHECK_FALSE(cooling.beam_active);
   CHECK(cooling.target_heat == Catch::Approx(20.0F));
+}
+
+TEST_CASE("mining laser can acquire an asteroid from aim without a target lock") {
+  entt::registry registry;
+  const entt::entity asteroid = registry.create();
+  registry.emplace<hyperverse::AsteroidBody>(
+    asteroid,
+    hyperverse::AsteroidBody{.position = {.x = 350.0F, .y = 100.0F}, .radius = 40.0F}
+  );
+  registry.emplace<hyperverse::MiningResource>(asteroid);
+
+  const hyperverse::MiningHudSnapshot active = hyperverse::update_mining_laser(
+    registry,
+    {},
+    {.position = {.x = 100.0F, .y = 100.0F}},
+    {.primary_aim = {.x = 1.0F, .y = 0.0F}, .tool_intensity = 1.0F},
+    {.width = 9000.0F, .height = 9000.0F},
+    {.range = 500.0F, .integrity_damage_per_second = 25.0F},
+    1.0F
+  );
+
+  CHECK(active.beam_active);
+  CHECK(active.target == asteroid);
+  CHECK(active.beam_end_position.x == Catch::Approx(350.0F));
+  CHECK(active.beam_end_position.y == Catch::Approx(100.0F));
+  CHECK(registry.get<hyperverse::MiningResource>(asteroid).integrity == Catch::Approx(75.0F));
 }
 
 TEST_CASE("mining laser cannot hit targets outside range") {
   entt::registry registry;
   const entt::entity asteroid = registry.create();
+  registry.emplace<hyperverse::AsteroidBody>(
+    asteroid,
+    hyperverse::AsteroidBody{.position = {.x = 1000.0F, .y = 100.0F}, .radius = 40.0F}
+  );
   registry.emplace<hyperverse::MiningResource>(asteroid);
 
   const hyperverse::TargetLockModel lock{
@@ -342,7 +393,15 @@ TEST_CASE("mining laser cannot hit targets outside range") {
   };
 
   const hyperverse::MiningHudSnapshot snapshot =
-    hyperverse::update_mining_laser(registry, lock, {.tool_intensity = 1.0F}, {.range = 500.0F}, 1.0F);
+    hyperverse::update_mining_laser(
+      registry,
+      lock,
+      {.position = {.x = 100.0F, .y = 100.0F}},
+      {.tool_intensity = 1.0F},
+      {.width = 9000.0F, .height = 9000.0F},
+      {.range = 500.0F},
+      1.0F
+    );
 
   CHECK_FALSE(snapshot.beam_active);
   CHECK_FALSE(snapshot.target_in_range);
