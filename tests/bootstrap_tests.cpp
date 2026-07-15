@@ -106,6 +106,41 @@ TEST_CASE("assisted flight accelerates, brakes, and wraps through the sector") {
   CHECK(hyperverse::length(ship.velocity) == Catch::Approx(0.0F));
 }
 
+TEST_CASE("assisted flight turns the ship toward thrust direction") {
+  hyperverse::ShipMotion ship{.facing_radians = 0.0F};
+  const hyperverse::SectorTuning sector{.width = 9000.0F, .height = 9000.0F};
+  const hyperverse::FlightTuning flight{.max_speed = 100.0F, .acceleration = 100.0F, .braking = 200.0F, .turn_rate = 20.0F};
+
+  hyperverse::simulate_assisted_flight(
+    ship,
+    {.desired_movement = {.x = 0.0F, .y = 1.0F}},
+    flight,
+    sector,
+    1.0F
+  );
+
+  CHECK(ship.facing_radians == Catch::Approx(1.5707964F));
+}
+
+TEST_CASE("assisted flight prefers thrust facing over aim facing while moving") {
+  hyperverse::ShipMotion ship{.facing_radians = 0.0F};
+  const hyperverse::SectorTuning sector{.width = 9000.0F, .height = 9000.0F};
+  const hyperverse::FlightTuning flight{.max_speed = 100.0F, .acceleration = 100.0F, .braking = 200.0F, .turn_rate = 20.0F};
+
+  hyperverse::simulate_assisted_flight(
+    ship,
+    {
+      .desired_movement = {.x = 1.0F, .y = 0.0F},
+      .primary_aim = {.x = 0.0F, .y = 1.0F},
+    },
+    flight,
+    sector,
+    1.0F
+  );
+
+  CHECK(ship.facing_radians == Catch::Approx(0.0F));
+}
+
 TEST_CASE("fixed timestep consumes deterministic simulation ticks") {
   hyperverse::FixedTimestep timestep{0.25F};
   timestep.accumulate(0.74F);

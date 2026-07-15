@@ -43,7 +43,7 @@ void simulate_assisted_flight(
   ship.velocity = clamp_length(ship.velocity, flight.max_speed);
   ship.position = wrap_position(ship.position + (ship.velocity * dt_seconds), sector);
 
-  const Vec2 facing_intent = length(input.primary_aim) > 0.0F ? input.primary_aim : input.desired_movement;
+  const Vec2 facing_intent = length(input.desired_movement) > 0.0F ? input.desired_movement : input.primary_aim;
   if (length(facing_intent) > 0.0F) {
     const float target_angle = angle_of(facing_intent);
     const float max_turn = flight.turn_rate * dt_seconds;
