@@ -134,6 +134,16 @@ hyperverse_enable_project_warnings(hyperverse_core)
 add_executable(hyperverse src/main.cpp)
 target_link_libraries(hyperverse PRIVATE hyperverse::core)
 hyperverse_enable_project_warnings(hyperverse)
+add_custom_command(
+  TARGET hyperverse
+  POST_BUILD
+  COMMAND
+    "${CMAKE_COMMAND}" -E copy_directory
+    "${PROJECT_SOURCE_DIR}/assets"
+    "$<TARGET_FILE_DIR:hyperverse>/assets"
+  COMMENT "Copying runtime assets next to hyperverse"
+  VERBATIM
+)
 
 install(TARGETS hyperverse RUNTIME DESTINATION bin)
 install(DIRECTORY include/ DESTINATION include)
