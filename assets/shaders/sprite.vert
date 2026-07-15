@@ -30,7 +30,11 @@ void main() {
   float sine = sin(sprite.rotation.x);
   float cosine = cos(sprite.rotation.x);
   mat2 rotate = mat2(cosine, sine, -sine, cosine);
-  vec2 local = rotate * (positions[gl_VertexIndex] * sprite.transform.zw);
+  float aspect = sprite.rotation.y;
+  vec2 local = positions[gl_VertexIndex] * sprite.transform.zw;
+  local.x *= aspect;
+  local = rotate * local;
+  local.x /= aspect;
   vec2 position = sprite.transform.xy + local;
   gl_Position = vec4(position, 0.0, 1.0);
   out_uv = uvs[gl_VertexIndex];

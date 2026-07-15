@@ -924,6 +924,7 @@ void VulkanRenderer::record_command_buffer(std::uint32_t image_index, const Spri
       .half_width = sprite.half_width_ndc,
       .half_height = sprite.half_height_ndc,
       .rotation_radians = sprite.rotation_radians,
+      .padding0 = static_cast<float>(swapchain_extent_.width) / static_cast<float>(swapchain_extent_.height),
       .tint_r = sprite.tint_r,
       .tint_g = sprite.tint_g,
       .tint_b = sprite.tint_b,
