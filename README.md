@@ -29,6 +29,14 @@ The game is about feel, information, and controlled industrial violence.
 - Boost.Ext SML
 - Catch2
 
+## Bootstrap
+
+Milestone 0 builds a `hyperverse` executable that opens an SDL3 Vulkan window, clears the
+screen through Vulkan, initializes gamepad support, and builds a Catch2 test target.
+
+See [Installation and Bootstrap](docs/INSTALL.md) for Linux, Steam Deck, MSYS2, CI, and install
+commands.
+
 ## Visual Bootstrap
 
 Initial placeholder art should reuse sprites from:

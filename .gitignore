@@ -1,0 +1,57 @@
+# Build trees
+/build/
+/build-*/
+/cmake-build-*/
+/out/
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+DartConfiguration.tcl
+Testing/
+install_manifest.txt
+compile_commands.json
+CPackConfig.cmake
+CPackSourceConfig.cmake
+_deps/
+
+# Build artifacts
+*.a
+*.dll
+*.dylib
+*.exe
+*.ilk
+*.lib
+*.o
+*.obj
+*.pdb
+*.so
+*.so.*
+
+# Test and coverage output
+*.gcda
+*.gcno
+*.gcov
+coverage/
+
+# Tool caches
+/.cache/
+/.cpm-cache/
+/.ninja_deps
+/.ninja_log
+
+# Editor and IDE state
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# OS noise
+.DS_Store
+Thumbs.db

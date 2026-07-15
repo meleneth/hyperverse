@@ -1,0 +1,60 @@
+#include "hyperverse/flight.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <numbers>
+
+namespace {
+
+[[nodiscard]] float shortest_angle_delta(float from, float to) {
+  float delta = std::fmod(to - from, std::numbers::pi_v<float> * 2.0F);
+  if (delta > std::numbers::pi_v<float>) {
+    delta -= std::numbers::pi_v<float> * 2.0F;
+  } else if (delta < -std::numbers::pi_v<float>) {
+    delta += std::numbers::pi_v<float> * 2.0F;
+  }
+  return delta;
+}
+
+[[nodiscard]] float angle_of(hyperverse::Vec2 value) {
+  return std::atan2(value.y, value.x);
+}
+
+}  // namespace
+
+namespace hyperverse {
+
+void simulate_assisted_flight(
+  ShipMotion& ship,
+  const SemanticInputFrame& input,
+  const FlightTuning& flight,
+  const SectorTuning& sector,
+  float dt_seconds
+) {
+  const Vec2 desired_velocity = input.desired_movement * flight.max_speed;
+  const Vec2 velocity_error = desired_velocity - ship.velocity;
+  const float response = length(input.desired_movement) > 0.0F ? flight.acceleration : flight.braking;
+  ship.velocity += clamp_length(velocity_error, response * dt_seconds);
+  ship.velocity = clamp_length(ship.velocity, flight.max_speed);
+  ship.position = wrap_position(ship.position + (ship.velocity * dt_seconds), sector);
+
+  const Vec2 facing_intent = length(input.primary_aim) > 0.0F ? input.primary_aim : input.desired_movement;
+  if (length(facing_intent) > 0.0F) {
+    const float target_angle = angle_of(facing_intent);
+    const float max_turn = flight.turn_rate * dt_seconds;
+    const float delta = std::clamp(shortest_angle_delta(ship.facing_radians, target_angle), -max_turn, max_turn);
+    ship.facing_radians += delta;
+  }
+}
+
+FlightHudSnapshot make_flight_hud_snapshot(const ShipMotion& ship, const SemanticInputFrame& input) {
+  return {
+    .position = ship.position,
+    .velocity = ship.velocity,
+    .speed = length(ship.velocity),
+    .facing_radians = ship.facing_radians,
+    .desired_movement = input.desired_movement,
+  };
+}
+
+}  // namespace hyperverse

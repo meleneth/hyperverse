@@ -1,0 +1,30 @@
+stages:
+  - build
+  - test
+
+variables:
+  CMAKE_BUILD_TYPE: RelWithDebInfo
+  CMAKE_GENERATOR: Ninja
+
+default:
+  image: ubuntu:24.04
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends ca-certificates cmake g++ git libgl1-mesa-dev libvulkan-dev ninja-build pkg-config python3-wayland wayland-protocols xorg-dev
+
+build:
+  stage: build
+  script:
+    - cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DHYPERVERSE_BUILD_TESTS=ON
+    - cmake --build build
+  artifacts:
+    expire_in: 1 week
+    paths:
+      - build/
+
+test:
+  stage: test
+  needs:
+    - build
+  script:
+    - ctest --test-dir build --output-on-failure
