@@ -412,6 +412,77 @@ TEST_CASE("mining laser can acquire an asteroid from aim without a target lock")
   CHECK(registry.get<hyperverse::MiningResource>(asteroid).integrity == Catch::Approx(75.0F));
 }
 
+TEST_CASE("moderate mining extracts material without destabilizing the asteroid") {
+  entt::registry registry;
+  const entt::entity asteroid = registry.create();
+  registry.emplace<hyperverse::AsteroidBody>(
+    asteroid,
+    hyperverse::AsteroidBody{.position = {.x = 350.0F, .y = 100.0F}, .radius = 40.0F}
+  );
+  registry.emplace<hyperverse::MiningResource>(asteroid);
+
+  const hyperverse::MiningHudSnapshot active = hyperverse::update_mining_laser(
+    registry,
+    {},
+    {.position = {.x = 100.0F, .y = 100.0F}},
+    {.primary_aim = {.x = 1.0F, .y = 0.0F}, .tool_intensity = 0.35F},
+    {.width = 9000.0F, .height = 9000.0F},
+    {
+      .range = 500.0F,
+      .integrity_damage_per_second = 10.0F,
+      .extraction_per_second = 12.0F,
+      .heat_per_second = 20.0F,
+      .stress_per_second = 15.0F,
+      .pressure_per_second = 10.0F,
+    },
+    1.0F
+  );
+
+  CHECK(active.beam_active);
+  CHECK_FALSE(active.unstable);
+  CHECK_FALSE(active.blowout);
+  CHECK(active.extracted_mass == Catch::Approx(4.2F));
+}
+
+TEST_CASE("reckless mining can trigger a volatile asteroid blowout") {
+  entt::registry registry;
+  const entt::entity asteroid = registry.create();
+  registry.emplace<hyperverse::AsteroidBody>(
+    asteroid,
+    hyperverse::AsteroidBody{.position = {.x = 350.0F, .y = 100.0F}, .radius = 40.0F}
+  );
+  registry.emplace<hyperverse::MiningResource>(asteroid);
+
+  const hyperverse::MiningHudSnapshot blowout = hyperverse::update_mining_laser(
+    registry,
+    {},
+    {.position = {.x = 100.0F, .y = 100.0F}},
+    {.primary_aim = {.x = 1.0F, .y = 0.0F}, .tool_intensity = 1.0F},
+    {.width = 9000.0F, .height = 9000.0F},
+    {
+      .range = 500.0F,
+      .integrity_damage_per_second = 0.0F,
+      .extraction_per_second = 4.0F,
+      .heat_per_second = 100.0F,
+      .stress_per_second = 100.0F,
+      .pressure_per_second = 100.0F,
+      .unstable_heat = 70.0F,
+      .unstable_stress = 65.0F,
+      .volatile_pressure_limit = 55.0F,
+      .blowout_integrity_damage = 30.0F,
+    },
+    1.0F
+  );
+
+  const hyperverse::MiningResource& resource = registry.get<hyperverse::MiningResource>(asteroid);
+  CHECK(blowout.blowout);
+  CHECK(blowout.unstable);
+  CHECK(blowout.gas_venting);
+  CHECK(resource.integrity == Catch::Approx(70.0F));
+  CHECK(resource.volatile_pressure == Catch::Approx(0.0F));
+  CHECK(resource.structural_stress == Catch::Approx(35.0F));
+}
+
 TEST_CASE("mining laser cannot hit targets outside range") {
   entt::registry registry;
   const entt::entity asteroid = registry.create();

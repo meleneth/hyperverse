@@ -241,8 +241,12 @@ void log_gamepad_state() {
     title << " | target " << target_lock.wrapped_distance << " scan " << std::setprecision(0)
           << (target_lock.scan_confidence * 100.0F) << "%"
           << " close " << target_lock.closing_speed;
-    title << " | rock integrity " << mining.target_integrity << " heat " << mining.target_heat << " ore "
-          << mining.extracted_mass;
+  } else if (mining.target != entt::null) {
+    title << " | mining target";
+  }
+  if (hyperverse::has_locked_target(target_lock) || mining.target != entt::null) {
+    title << " | rock integrity " << mining.target_integrity << " heat " << mining.target_heat << " stress "
+          << mining.target_structural_stress << " gas " << mining.target_volatile_pressure << " ore " << mining.extracted_mass;
     if (!mining.target_in_range) {
       title << " OUT OF RANGE";
     }
@@ -251,6 +255,13 @@ void log_gamepad_state() {
   }
   if (mining.beam_active) {
     title << " | ZAP";
+  }
+  if (mining.blowout) {
+    title << " | BLOWOUT";
+  } else if (mining.unstable) {
+    title << " | UNSTABLE";
+  } else if (mining.gas_venting) {
+    title << " | VENTING";
   }
   if (collision.contact) {
     title << " | COLLISION " << collision.impact_speed;
@@ -459,7 +470,7 @@ int App::run() {
         .sprites = [&] {
           std::vector<SpriteDraw> sprites;
           for (auto [entity, asteroid] : account.registry().view<AsteroidBody>().each()) {
-            sprites.push_back(make_world_sprite(
+            SpriteDraw asteroid_sprite = make_world_sprite(
               SpriteTexture::Rock,
               asteroid.position,
               camera.position,
@@ -467,7 +478,13 @@ int App::run() {
               renderer.width(),
               renderer.height(),
               asteroid_sprite_size(asteroid, account.registry().try_get<MiningResource>(entity))
-            ));
+            );
+            if (entity == mining_hud.target && mining_hud.blowout) {
+              tint_sprite(asteroid_sprite, 1.0F, 0.24F, 0.12F);
+            } else if (entity == mining_hud.target && mining_hud.unstable) {
+              tint_sprite(asteroid_sprite, 1.0F, 0.68F, 0.18F);
+            }
+            sprites.push_back(asteroid_sprite);
           }
           if (has_locked_target(target_lock) && account.registry().valid(target_lock.target)) {
             const AsteroidBody& target = account.registry().get<AsteroidBody>(target_lock.target);

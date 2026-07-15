@@ -29,6 +29,17 @@ struct MiningTarget {
   return {.x = std::cos(facing_radians), .y = std::sin(facing_radians)};
 }
 
+void populate_hud_from_resource(MiningHudSnapshot& hud, const MiningResource& resource, const MiningLaserTuning& tuning) {
+  hud.target_integrity = resource.integrity;
+  hud.target_heat = resource.heat;
+  hud.target_structural_stress = resource.structural_stress;
+  hud.target_volatile_pressure = resource.volatile_pressure;
+  hud.extracted_mass = resource.extracted_mass;
+  hud.gas_venting = resource.venting;
+  hud.unstable = resource.heat >= tuning.unstable_heat || resource.structural_stress >= tuning.unstable_stress ||
+                 resource.volatile_pressure >= tuning.volatile_pressure_limit;
+}
+
 [[nodiscard]] MiningTarget raycast_mining_target(
   entt::registry& registry,
   const ShipMotion& ship,
@@ -116,13 +127,29 @@ MiningHudSnapshot update_mining_laser(
     resource.integrity = std::max(0.0F, resource.integrity - (tuning.integrity_damage_per_second * scaled_dt));
     resource.extracted_mass += tuning.extraction_per_second * scaled_dt;
     resource.heat = std::min(100.0F, resource.heat + (tuning.heat_per_second * scaled_dt));
+    resource.structural_stress = std::min(100.0F, resource.structural_stress + (tuning.stress_per_second * scaled_dt));
+    resource.volatile_pressure = std::min(100.0F, resource.volatile_pressure + (tuning.pressure_per_second * scaled_dt));
   } else {
     resource.heat = std::max(0.0F, resource.heat - (tuning.heat_decay_per_second * dt_seconds));
+    resource.structural_stress = std::max(0.0F, resource.structural_stress - (tuning.stress_relief_per_second * dt_seconds));
   }
 
-  hud.target_integrity = resource.integrity;
-  hud.target_heat = resource.heat;
-  hud.extracted_mass = resource.extracted_mass;
+  const bool blowout = resource.heat >= tuning.unstable_heat && resource.structural_stress >= tuning.unstable_stress &&
+                       resource.volatile_pressure >= tuning.volatile_pressure_limit;
+  if (blowout) {
+    hud.blowout = true;
+    resource.integrity = std::max(0.0F, resource.integrity - tuning.blowout_integrity_damage);
+    resource.structural_stress = std::max(0.0F, resource.structural_stress * 0.35F);
+    resource.volatile_pressure = 0.0F;
+    resource.venting = true;
+  } else {
+    resource.venting = resource.heat >= tuning.unstable_heat && resource.volatile_pressure > 0.0F;
+    if (resource.venting) {
+      resource.volatile_pressure = std::max(0.0F, resource.volatile_pressure - (tuning.pressure_vent_per_second * dt_seconds));
+    }
+  }
+
+  populate_hud_from_resource(hud, resource, tuning);
   return hud;
 }
 
