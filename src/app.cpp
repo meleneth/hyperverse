@@ -236,12 +236,16 @@ void log_gamepad_state() {
     title << " | target " << target_lock.wrapped_distance << " scan " << std::setprecision(0)
           << (target_lock.scan_confidence * 100.0F) << "%"
           << " close " << target_lock.closing_speed;
+    title << " | rock integrity " << mining.target_integrity << " heat " << mining.target_heat << " ore "
+          << mining.extracted_mass;
+    if (!mining.target_in_range) {
+      title << " OUT OF RANGE";
+    }
   } else {
     title << " | target none";
   }
   if (mining.beam_active) {
-    title << " | ZAP heat " << mining.target_heat << " integrity " << mining.target_integrity << " ore "
-          << mining.extracted_mass;
+    title << " | ZAP";
   }
   title << " | " << mapping;
   return title.str();
