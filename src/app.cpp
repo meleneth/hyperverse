@@ -1,6 +1,7 @@
 #include "hyperverse/app.hpp"
 
 #include "hyperverse/camera.hpp"
+#include "hyperverse/collision.hpp"
 #include "hyperverse/fixed_timestep.hpp"
 #include "hyperverse/flight.hpp"
 #include "hyperverse/grand_central.hpp"
@@ -223,7 +224,8 @@ void log_gamepad_state() {
   const hyperverse::FlightHudSnapshot& hud,
   const hyperverse::CameraState& camera,
   const hyperverse::TargetLockModel& target_lock,
-  const hyperverse::MiningHudSnapshot& mining
+  const hyperverse::MiningHudSnapshot& mining,
+  const hyperverse::CollisionHudSnapshot& collision
 ) {
   const char* mapping = hud.control_mapping == hyperverse::ControlMapping::Gamepad ? "gamepad" : "keyboard";
   std::ostringstream title;
@@ -248,6 +250,11 @@ void log_gamepad_state() {
   }
   if (mining.beam_active) {
     title << " | ZAP";
+  }
+  if (collision.contact) {
+    title << " | COLLISION " << collision.impact_speed;
+  } else if (collision.warning) {
+    title << " | IMPACT " << collision.time_to_contact_seconds << "s";
   }
   title << " | " << mapping;
   return title.str();
@@ -341,6 +348,7 @@ int App::run() {
     account.registry().emplace<CameraState>(player, CameraState{.position = ship.position});
     account.registry().emplace<TargetLockModel>(player);
     account.registry().emplace<MiningHudSnapshot>(player);
+    account.registry().emplace<CollisionHudSnapshot>(player);
 
     const entt::entity primary_asteroid = account.registry().create();
     account.registry().emplace<AsteroidBody>(
@@ -403,18 +411,21 @@ int App::run() {
         CameraState& camera = account.registry().get<CameraState>(player);
         TargetLockModel& target_lock = account.registry().get<TargetLockModel>(player);
         MiningHudSnapshot& mining_hud = account.registry().get<MiningHudSnapshot>(player);
+        CollisionHudSnapshot& collision_hud = account.registry().get<CollisionHudSnapshot>(player);
         update_camera_anchor(camera, ship, sector, camera_tuning, timestep.tick_seconds());
         update_target_lock(target_lock, account.registry(), ship.position, ship.velocity, latest_intent, sector);
         mining_hud = update_mining_laser(account.registry(), target_lock, latest_intent, mining_laser, timestep.tick_seconds());
+        collision_hud = predict_ship_asteroid_collision(ship, account.registry(), sector);
       }
 
       const FlightHudSnapshot hud = make_flight_hud_snapshot(ship, latest_intent, flight, sector);
       const CameraState& camera = account.registry().get<CameraState>(player);
       const TargetLockModel& target_lock = account.registry().get<TargetLockModel>(player);
       const MiningHudSnapshot& mining_hud = account.registry().get<MiningHudSnapshot>(player);
+      const CollisionHudSnapshot& collision_hud = account.registry().get<CollisionHudSnapshot>(player);
 
       if (hud_title_accumulator >= 0.25F) {
-        window.set_title(make_title(hud, camera, target_lock, mining_hud));
+        window.set_title(make_title(hud, camera, target_lock, mining_hud, collision_hud));
         hud_title_accumulator = 0.0F;
       }
 
