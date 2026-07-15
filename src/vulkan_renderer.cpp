@@ -74,7 +74,7 @@ VulkanRenderer::~VulkanRenderer() {
   }
 }
 
-void VulkanRenderer::draw_frame() {
+void VulkanRenderer::draw_frame(const VulkanFrameSnapshot& frame) {
   check(vkWaitForFences(device_, 1, &in_flight_, VK_TRUE, std::numeric_limits<std::uint64_t>::max()), "wait fence");
   check(vkResetFences(device_, 1, &in_flight_), "reset fence");
 
@@ -84,6 +84,8 @@ void VulkanRenderer::draw_frame() {
   if (acquire_result != VK_SUCCESS && acquire_result != VK_SUBOPTIMAL_KHR) {
     throw std::runtime_error("failed to acquire swapchain image");
   }
+
+  record_command_buffer(image_index, frame);
 
   VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
   VkSubmitInfo submit_info{};
@@ -345,29 +347,33 @@ void VulkanRenderer::create_command_buffers() {
   allocate_info.commandBufferCount = static_cast<std::uint32_t>(command_buffers_.size());
 
   check(vkAllocateCommandBuffers(device_, &allocate_info, command_buffers_.data()), "allocate command buffers");
+}
 
-  for (std::size_t index = 0; index < command_buffers_.size(); ++index) {
-    VkCommandBufferBeginInfo begin_info{};
-    begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    check(vkBeginCommandBuffer(command_buffers_[index], &begin_info), "begin command buffer");
+void VulkanRenderer::record_command_buffer(std::uint32_t image_index, const VulkanFrameSnapshot& frame) {
+  VkCommandBuffer command_buffer = command_buffers_.at(image_index);
+  check(vkResetCommandBuffer(command_buffer, 0), "reset command buffer");
 
-    VkClearValue clear_color{};
-    clear_color.color = {{0.02F, 0.025F, 0.04F, 1.0F}};
+  VkCommandBufferBeginInfo begin_info{};
+  begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  check(vkBeginCommandBuffer(command_buffer, &begin_info), "begin command buffer");
 
-    VkRenderPassBeginInfo render_pass_info{};
-    render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    render_pass_info.renderPass = render_pass_;
-    render_pass_info.framebuffer = framebuffers_[index];
-    render_pass_info.renderArea.offset = {0, 0};
-    render_pass_info.renderArea.extent = swapchain_extent_;
-    render_pass_info.clearValueCount = 1;
-    render_pass_info.pClearValues = &clear_color;
+  const RenderColor color = make_clear_color(frame);
+  VkClearValue clear_color{};
+  clear_color.color = {{color.r, color.g, color.b, color.a}};
 
-    vkCmdBeginRenderPass(command_buffers_[index], &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
-    vkCmdEndRenderPass(command_buffers_[index]);
+  VkRenderPassBeginInfo render_pass_info{};
+  render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+  render_pass_info.renderPass = render_pass_;
+  render_pass_info.framebuffer = framebuffers_.at(image_index);
+  render_pass_info.renderArea.offset = {0, 0};
+  render_pass_info.renderArea.extent = swapchain_extent_;
+  render_pass_info.clearValueCount = 1;
+  render_pass_info.pClearValues = &clear_color;
 
-    check(vkEndCommandBuffer(command_buffers_[index]), "end command buffer");
-  }
+  vkCmdBeginRenderPass(command_buffer, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
+  vkCmdEndRenderPass(command_buffer);
+
+  check(vkEndCommandBuffer(command_buffer), "end command buffer");
 }
 
 void VulkanRenderer::create_sync_objects() {

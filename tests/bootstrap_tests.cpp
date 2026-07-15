@@ -11,6 +11,7 @@
 #include "hyperverse/camera.hpp"
 #include "hyperverse/grand_central.hpp"
 #include "hyperverse/input.hpp"
+#include "hyperverse/render_frame.hpp"
 #include "hyperverse/sector.hpp"
 #include "hyperverse/targeting.hpp"
 
@@ -190,6 +191,19 @@ TEST_CASE("target lock cancels and breaks after release range") {
 
   hyperverse::update_target_lock(lock, registry, {.x = 1200.0F, .y = 100.0F}, {}, sector, tuning);
   CHECK_FALSE(hyperverse::has_locked_target(lock));
+}
+
+TEST_CASE("Vulkan clear color exposes critical flight state") {
+  const hyperverse::RenderColor idle = hyperverse::make_clear_color({});
+  const hyperverse::RenderColor fast = hyperverse::make_clear_color({.speed_fraction = 1.0F});
+  const hyperverse::RenderColor locked = hyperverse::make_clear_color({.target_locked = true});
+  const hyperverse::RenderColor warning = hyperverse::make_clear_color({.speed_fraction = 1.0F, .wrap_warning = true});
+
+  CHECK(fast.b > idle.b);
+  CHECK(locked.r > idle.r);
+  CHECK(locked.g > idle.g);
+  CHECK(warning.r > fast.r);
+  CHECK(warning.g < fast.g);
 }
 
 TEST_CASE("grand central derives a minimal account context without exposing ownership") {

@@ -305,12 +305,18 @@ int App::run() {
         update_target_lock(target_lock, account.registry(), ship.position, latest_intent, sector);
       }
 
+      const FlightHudSnapshot hud = make_flight_hud_snapshot(ship, latest_intent, flight, sector);
+
       if (hud_title_accumulator >= 0.25F) {
-        window.set_title(make_title(make_flight_hud_snapshot(ship, latest_intent, flight, sector), camera, target_lock));
+        window.set_title(make_title(hud, camera, target_lock));
         hud_title_accumulator = 0.0F;
       }
 
-      renderer.draw_frame();
+      renderer.draw_frame({
+        .speed_fraction = hud.speed_fraction,
+        .wrap_warning = hud.wrap_warning,
+        .target_locked = has_locked_target(target_lock),
+      });
       SDL_Delay(1);
     }
 

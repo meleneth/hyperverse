@@ -1,5 +1,7 @@
 #pragma once
 
+#include "hyperverse/render_frame.hpp"
+
 #include <SDL3/SDL_video.h>
 #include <vulkan/vulkan.h>
 
@@ -18,7 +20,7 @@ public:
   VulkanRenderer(VulkanRenderer&&) = delete;
   VulkanRenderer& operator=(VulkanRenderer&&) = delete;
 
-  void draw_frame();
+  void draw_frame(const VulkanFrameSnapshot& frame = {});
   void wait_idle() const;
 
 private:
@@ -33,6 +35,7 @@ private:
   void create_command_pool();
   void create_command_buffers();
   void create_sync_objects();
+  void record_command_buffer(std::uint32_t image_index, const VulkanFrameSnapshot& frame);
 
   [[nodiscard]] std::uint32_t find_graphics_present_queue_family(VkPhysicalDevice device) const;
   [[nodiscard]] VkSurfaceFormatKHR choose_surface_format(const std::vector<VkSurfaceFormatKHR>& formats) const;
