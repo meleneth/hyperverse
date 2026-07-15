@@ -3,6 +3,7 @@
 #include "hyperverse/camera.hpp"
 #include "hyperverse/cargo.hpp"
 #include "hyperverse/collision.hpp"
+#include "hyperverse/drone.hpp"
 #include "hyperverse/fixed_timestep.hpp"
 #include "hyperverse/flight.hpp"
 #include "hyperverse/grand_central.hpp"
@@ -230,6 +231,7 @@ void log_gamepad_state() {
   const hyperverse::MiningHudSnapshot& mining,
   const hyperverse::CargoHudSnapshot& cargo,
   const hyperverse::SectorPressureHudSnapshot& pressure,
+  const hyperverse::MiningDroneHudSnapshot& drone,
   const hyperverse::CollisionHudSnapshot& collision
 ) {
   const char* mapping = hud.control_mapping == hyperverse::ControlMapping::Gamepad ? "gamepad" : "keyboard";
@@ -277,6 +279,13 @@ void log_gamepad_state() {
   if (pressure.escalation_announced) {
     title << " ESCALATION";
   }
+  const char* drone_phase = "idle";
+  if (drone.phase == hyperverse::MiningDronePhase::Travelling) {
+    drone_phase = "travel";
+  } else if (drone.phase == hyperverse::MiningDronePhase::Mining) {
+    drone_phase = "mine";
+  }
+  title << " | drone " << drone_phase << " d" << drone.target_distance << " ore " << drone.extracted_mass;
   if (collision.contact) {
     title << " | COLLISION " << collision.impact_speed;
   } else if (collision.warning) {
@@ -423,7 +432,14 @@ int App::run() {
     account.registry().emplace<CargoHudSnapshot>(player);
     account.registry().emplace<SectorPressureModel>(player);
     account.registry().emplace<SectorPressureHudSnapshot>(player);
+    account.registry().emplace<MiningDroneHudSnapshot>(player);
     account.registry().emplace<CollisionHudSnapshot>(player);
+
+    const entt::entity mining_drone = account.registry().create();
+    account.registry().emplace<MiningDrone>(
+      mining_drone,
+      MiningDrone{.position = {.x = ship.position.x - 160.0F, .y = ship.position.y + 120.0F}}
+    );
 
     const entt::entity primary_asteroid = account.registry().create();
     account.registry().emplace<AsteroidBody>(
@@ -446,6 +462,7 @@ int App::run() {
     const MiningLaserTuning mining_laser{};
     const ContractQuotaTuning quota{};
     const SectorPressureTuning pressure_tuning{.escalation_interval_seconds = 30.0F};
+    const MiningDroneTuning mining_drone_tuning{};
     FlightInputMapper input_mapper;
     SemanticInputFrame latest_intent{};
 
@@ -492,11 +509,20 @@ int App::run() {
         CargoHudSnapshot& cargo_hud = account.registry().get<CargoHudSnapshot>(player);
         SectorPressureModel& pressure = account.registry().get<SectorPressureModel>(player);
         SectorPressureHudSnapshot& pressure_hud = account.registry().get<SectorPressureHudSnapshot>(player);
+        MiningDroneHudSnapshot& drone_hud = account.registry().get<MiningDroneHudSnapshot>(player);
         CollisionHudSnapshot& collision_hud = account.registry().get<CollisionHudSnapshot>(player);
         update_camera_anchor(camera, ship, sector, camera_tuning, timestep.tick_seconds());
         update_target_lock(target_lock, account.registry(), ship.position, ship.velocity, latest_intent, sector);
         mining_hud =
           update_mining_laser(account.registry(), target_lock, ship, latest_intent, sector, mining_laser, timestep.tick_seconds());
+        drone_hud = update_mining_drone(
+          account.registry().get<MiningDrone>(mining_drone),
+          account.registry(),
+          target_lock,
+          sector,
+          timestep.tick_seconds(),
+          mining_drone_tuning
+        );
         cargo_hud = update_cargo_manifest(cargo_manifest, account.registry(), quota);
         pressure_hud = update_sector_pressure(pressure, timestep.tick_seconds(), pressure_tuning);
         collision_hud = predict_ship_asteroid_collision(ship, account.registry(), sector);
@@ -508,10 +534,11 @@ int App::run() {
       const MiningHudSnapshot& mining_hud = account.registry().get<MiningHudSnapshot>(player);
       const CargoHudSnapshot& cargo_hud = account.registry().get<CargoHudSnapshot>(player);
       const SectorPressureHudSnapshot& pressure_hud = account.registry().get<SectorPressureHudSnapshot>(player);
+      const MiningDroneHudSnapshot& drone_hud = account.registry().get<MiningDroneHudSnapshot>(player);
       const CollisionHudSnapshot& collision_hud = account.registry().get<CollisionHudSnapshot>(player);
 
       if (hud_title_accumulator >= 0.25F) {
-        window.set_title(make_title(hud, camera, target_lock, mining_hud, cargo_hud, pressure_hud, collision_hud));
+        window.set_title(make_title(hud, camera, target_lock, mining_hud, cargo_hud, pressure_hud, drone_hud, collision_hud));
         hud_title_accumulator = 0.0F;
       }
 
@@ -571,6 +598,20 @@ int App::run() {
             tint_sprite(laser, 1.0F, 0.72F, 0.22F);
             sprites.push_back(laser);
           }
+          const MiningDrone& drone = account.registry().get<MiningDrone>(mining_drone);
+          SpriteDraw drone_sprite = make_world_sprite(
+            SpriteTexture::Drone,
+            drone.position,
+            camera.position,
+            sector,
+            renderer.width(),
+            renderer.height(),
+            42.0F
+          );
+          if (drone.phase == MiningDronePhase::Mining) {
+            tint_sprite(drone_sprite, 0.55F, 1.0F, 0.65F);
+          }
+          sprites.push_back(drone_sprite);
           sprites.push_back(make_world_sprite(
             SpriteTexture::Ship,
             ship.position,

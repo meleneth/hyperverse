@@ -99,6 +99,7 @@ add_library(
   src/camera.cpp
   src/cargo.cpp
   src/collision.cpp
+  src/drone.cpp
   src/fixed_timestep.cpp
   src/flight.cpp
   src/grand_central.cpp

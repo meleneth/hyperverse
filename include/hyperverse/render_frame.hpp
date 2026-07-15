@@ -25,6 +25,7 @@ enum class SpriteTexture {
   Rock,
   Reticle,
   Laser,
+  Drone,
 };
 
 struct SpriteDraw {
