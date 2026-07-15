@@ -95,6 +95,7 @@ endif()
 add_library(
   hyperverse_core
   src/app.cpp
+  src/camera.cpp
   src/fixed_timestep.cpp
   src/flight.cpp
   src/grand_central.cpp

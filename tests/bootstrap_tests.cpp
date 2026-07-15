@@ -8,6 +8,7 @@
 
 #include "hyperverse/fixed_timestep.hpp"
 #include "hyperverse/flight.hpp"
+#include "hyperverse/camera.hpp"
 #include "hyperverse/grand_central.hpp"
 #include "hyperverse/input.hpp"
 #include "hyperverse/sector.hpp"
@@ -113,6 +114,27 @@ TEST_CASE("flight HUD exposes speed load, wrap warning, and control mapping") {
   CHECK(snapshot.nearest_wrap_edge_distance == Catch::Approx(250.0F));
   CHECK(snapshot.wrap_warning);
   CHECK(snapshot.control_mapping == hyperverse::ControlMapping::Gamepad);
+}
+
+TEST_CASE("camera anchor lags across wrapped sector edges") {
+  const hyperverse::SectorTuning sector{.width = 9000.0F, .height = 9000.0F};
+  const hyperverse::CameraTuning tuning{
+    .position_lag_seconds = 1.0F,
+    .rotation_lag_seconds = 1.0F,
+    .velocity_lookahead_seconds = 0.0F,
+  };
+  hyperverse::CameraState camera{.position = {.x = 8950.0F, .y = 4500.0F}};
+  const hyperverse::ShipMotion ship{
+    .position = {.x = 50.0F, .y = 4500.0F},
+    .facing_radians = 1.0F,
+  };
+
+  hyperverse::update_camera_anchor(camera, ship, sector, tuning, 1.0F);
+
+  CHECK(camera.position.x < 50.0F);
+  CHECK(camera.position.y == Catch::Approx(4500.0F));
+  CHECK(camera.rotation_radians > 0.0F);
+  CHECK(camera.rotation_radians < ship.facing_radians);
 }
 
 TEST_CASE("grand central derives a minimal account context without exposing ownership") {

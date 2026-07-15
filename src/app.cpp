@@ -1,5 +1,6 @@
 #include "hyperverse/app.hpp"
 
+#include "hyperverse/camera.hpp"
 #include "hyperverse/fixed_timestep.hpp"
 #include "hyperverse/flight.hpp"
 #include "hyperverse/grand_central.hpp"
@@ -204,13 +205,13 @@ void log_gamepad_state() {
   SDL_free(gamepads);
 }
 
-[[nodiscard]] std::string make_title(const hyperverse::FlightHudSnapshot& hud) {
+[[nodiscard]] std::string make_title(const hyperverse::FlightHudSnapshot& hud, const hyperverse::CameraState& camera) {
   const char* mapping = hud.control_mapping == hyperverse::ControlMapping::Gamepad ? "gamepad" : "keyboard";
   std::ostringstream title;
   title << hyperverse::application_name() << " " << hyperverse::version() << " | pos " << std::fixed << std::setprecision(0)
         << hud.position.x << "," << hud.position.y << " | speed " << hud.speed << " (" << std::setprecision(0)
         << (hud.speed_fraction * 100.0F) << "%)"
-        << " | edge " << hud.nearest_wrap_edge_distance;
+        << " | cam " << camera.position.x << "," << camera.position.y << " | edge " << hud.nearest_wrap_edge_distance;
   if (hud.wrap_warning) {
     title << " WRAP";
   }
@@ -234,12 +235,14 @@ int App::run() {
     const entt::entity player = account.registry().create();
     auto& ship = account.registry().emplace<ShipMotion>(player);
     ship.position = {.x = 4500.0F, .y = 4500.0F};
+    CameraState camera{.position = ship.position};
 
     GamepadSlot gamepad;
     gamepad.open_first_available();
     FixedTimestep timestep{1.0F / 60.0F};
     const SectorTuning sector{};
     const FlightTuning flight{};
+    const CameraTuning camera_tuning{};
     SemanticInputFrame latest_intent{};
 
     std::cout << application_name() << " " << version() << "\n";
@@ -278,10 +281,11 @@ int App::run() {
       while (timestep.consume_tick()) {
         latest_intent = map_flight_intent(gamepad.sample());
         simulate_assisted_flight(ship, latest_intent, flight, sector, timestep.tick_seconds());
+        update_camera_anchor(camera, ship, sector, camera_tuning, timestep.tick_seconds());
       }
 
       if (hud_title_accumulator >= 0.25F) {
-        window.set_title(make_title(make_flight_hud_snapshot(ship, latest_intent, flight, sector)));
+        window.set_title(make_title(make_flight_hud_snapshot(ship, latest_intent, flight, sector), camera));
         hud_title_accumulator = 0.0F;
       }
 
