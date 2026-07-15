@@ -34,6 +34,10 @@ struct SpriteDraw {
   float half_width_ndc{0.05F};
   float half_height_ndc{0.05F};
   float rotation_radians{0.0F};
+  float tint_r{1.0F};
+  float tint_g{1.0F};
+  float tint_b{1.0F};
+  float tint_a{1.0F};
 };
 
 struct SpriteFrame {

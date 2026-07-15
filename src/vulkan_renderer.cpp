@@ -24,6 +24,10 @@ struct SpritePushConstants {
   float padding0{0.0F};
   float padding1{0.0F};
   float padding2{0.0F};
+  float tint_r{1.0F};
+  float tint_g{1.0F};
+  float tint_b{1.0F};
+  float tint_a{1.0F};
 };
 
 void check(VkResult result, const char* message) {
@@ -553,7 +557,7 @@ void VulkanRenderer::create_graphics_pipeline() {
   color_blending.pAttachments = &color_blend_attachment;
 
   VkPushConstantRange push_range{};
-  push_range.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+  push_range.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
   push_range.offset = 0;
   push_range.size = sizeof(SpritePushConstants);
 
@@ -796,6 +800,10 @@ void VulkanRenderer::record_command_buffer(std::uint32_t image_index, const Spri
       .half_width = sprite.half_width_ndc,
       .half_height = sprite.half_height_ndc,
       .rotation_radians = sprite.rotation_radians,
+      .tint_r = sprite.tint_r,
+      .tint_g = sprite.tint_g,
+      .tint_b = sprite.tint_b,
+      .tint_a = sprite.tint_a,
     };
     vkCmdBindDescriptorSets(
       command_buffer,
@@ -807,7 +815,14 @@ void VulkanRenderer::record_command_buffer(std::uint32_t image_index, const Spri
       0,
       nullptr
     );
-    vkCmdPushConstants(command_buffer, pipeline_layout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(SpritePushConstants), &push_constants);
+    vkCmdPushConstants(
+      command_buffer,
+      pipeline_layout_,
+      VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+      0,
+      sizeof(SpritePushConstants),
+      &push_constants
+    );
     vkCmdDraw(command_buffer, 6, 1, 0, 0);
   }
 

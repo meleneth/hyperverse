@@ -3,6 +3,7 @@
 layout(push_constant) uniform SpritePush {
   vec4 transform;
   vec4 rotation;
+  vec4 tint;
 } sprite;
 
 layout(location = 0) out vec2 out_uv;

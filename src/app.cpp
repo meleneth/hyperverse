@@ -291,6 +291,13 @@ void log_gamepad_state() {
   return facing_radians + (std::numbers::pi_v<float> * 0.5F);
 }
 
+void tint_sprite(hyperverse::SpriteDraw& sprite, float r, float g, float b, float a = 1.0F) {
+  sprite.tint_r = r;
+  sprite.tint_g = g;
+  sprite.tint_b = b;
+  sprite.tint_a = a;
+}
+
 [[nodiscard]] hyperverse::SpriteDraw make_world_sprite(
   hyperverse::SpriteTexture texture,
   hyperverse::Vec2 world_position,
@@ -453,16 +460,18 @@ int App::run() {
           if (has_locked_target(target_lock) && account.registry().valid(target_lock.target)) {
             const AsteroidBody& target = account.registry().get<AsteroidBody>(target_lock.target);
             if (mining_hud.beam_active) {
-              sprites.push_back(make_laser_sprite(
+              SpriteDraw laser = make_laser_sprite(
                 ship.position,
                 target.position,
                 camera.position,
                 sector,
                 renderer.width(),
                 renderer.height()
-              ));
+              );
+              tint_sprite(laser, 1.0F, 0.72F, 0.22F);
+              sprites.push_back(laser);
             }
-            sprites.push_back(make_world_sprite(
+            SpriteDraw reticle = make_world_sprite(
               SpriteTexture::Reticle,
               target.position,
               camera.position,
@@ -470,7 +479,13 @@ int App::run() {
               renderer.width(),
               renderer.height(),
               (target.radius * 0.55F) + 24.0F
-            ));
+            );
+            if (collision_hud.contact) {
+              tint_sprite(reticle, 1.0F, 0.20F, 0.15F);
+            } else if (collision_hud.warning) {
+              tint_sprite(reticle, 1.0F, 0.85F, 0.20F);
+            }
+            sprites.push_back(reticle);
           }
           sprites.push_back(make_world_sprite(
             SpriteTexture::Ship,
