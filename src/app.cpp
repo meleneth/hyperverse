@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <exception>
 #include <iomanip>
 #include <iostream>
@@ -311,6 +312,17 @@ void tint_sprite(hyperverse::SpriteDraw& sprite, float r, float g, float b, floa
   return make_world_sprite(texture, world_position, camera_position, sector, width, height, pixel_size, pixel_size, rotation_radians);
 }
 
+[[nodiscard]] float asteroid_sprite_size(const hyperverse::AsteroidBody& asteroid, const hyperverse::MiningResource* resource) {
+  constexpr float depleted_scale = 0.24F;
+  constexpr float fresh_scale = 0.45F;
+  if (resource == nullptr) {
+    return asteroid.radius * fresh_scale;
+  }
+
+  const float integrity_fraction = std::clamp(resource->integrity / 100.0F, 0.0F, 1.0F);
+  return asteroid.radius * (depleted_scale + ((fresh_scale - depleted_scale) * integrity_fraction));
+}
+
 [[nodiscard]] hyperverse::SpriteDraw make_laser_sprite(
   hyperverse::Vec2 from_world,
   hyperverse::Vec2 to_world,
@@ -446,7 +458,6 @@ int App::run() {
         .sprites = [&] {
           std::vector<SpriteDraw> sprites;
           for (auto [entity, asteroid] : account.registry().view<AsteroidBody>().each()) {
-            (void)entity;
             sprites.push_back(make_world_sprite(
               SpriteTexture::Rock,
               asteroid.position,
@@ -454,7 +465,7 @@ int App::run() {
               sector,
               renderer.width(),
               renderer.height(),
-              asteroid.radius * 0.45F
+              asteroid_sprite_size(asteroid, account.registry().try_get<MiningResource>(entity))
             ));
           }
           if (has_locked_target(target_lock) && account.registry().valid(target_lock.target)) {
