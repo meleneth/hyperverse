@@ -8,6 +8,7 @@
 #include "hyperverse/grand_central.hpp"
 #include "hyperverse/input.hpp"
 #include "hyperverse/mining.hpp"
+#include "hyperverse/pressure.hpp"
 #include "hyperverse/targeting.hpp"
 #include "hyperverse/version.hpp"
 #include "hyperverse/vulkan_renderer.hpp"
@@ -228,6 +229,7 @@ void log_gamepad_state() {
   const hyperverse::TargetLockModel& target_lock,
   const hyperverse::MiningHudSnapshot& mining,
   const hyperverse::CargoHudSnapshot& cargo,
+  const hyperverse::SectorPressureHudSnapshot& pressure,
   const hyperverse::CollisionHudSnapshot& collision
 ) {
   const char* mapping = hud.control_mapping == hyperverse::ControlMapping::Gamepad ? "gamepad" : "keyboard";
@@ -269,6 +271,11 @@ void log_gamepad_state() {
         << " payout x" << std::setprecision(2) << cargo.payout_multiplier;
   if (cargo.extraction_authorized) {
     title << " EXTRACT";
+  }
+  title << " | pressure L" << pressure.escalation_level << " " << (pressure.pressure_fraction * 100.0F) << "%"
+        << " next " << pressure.next_escalation_seconds << "s";
+  if (pressure.escalation_announced) {
+    title << " ESCALATION";
   }
   if (collision.contact) {
     title << " | COLLISION " << collision.impact_speed;
@@ -414,6 +421,8 @@ int App::run() {
     account.registry().emplace<MiningHudSnapshot>(player);
     account.registry().emplace<CargoManifest>(player);
     account.registry().emplace<CargoHudSnapshot>(player);
+    account.registry().emplace<SectorPressureModel>(player);
+    account.registry().emplace<SectorPressureHudSnapshot>(player);
     account.registry().emplace<CollisionHudSnapshot>(player);
 
     const entt::entity primary_asteroid = account.registry().create();
@@ -436,6 +445,7 @@ int App::run() {
     const CameraTuning camera_tuning{};
     const MiningLaserTuning mining_laser{};
     const ContractQuotaTuning quota{};
+    const SectorPressureTuning pressure_tuning{.escalation_interval_seconds = 30.0F};
     FlightInputMapper input_mapper;
     SemanticInputFrame latest_intent{};
 
@@ -480,12 +490,15 @@ int App::run() {
         MiningHudSnapshot& mining_hud = account.registry().get<MiningHudSnapshot>(player);
         CargoManifest& cargo_manifest = account.registry().get<CargoManifest>(player);
         CargoHudSnapshot& cargo_hud = account.registry().get<CargoHudSnapshot>(player);
+        SectorPressureModel& pressure = account.registry().get<SectorPressureModel>(player);
+        SectorPressureHudSnapshot& pressure_hud = account.registry().get<SectorPressureHudSnapshot>(player);
         CollisionHudSnapshot& collision_hud = account.registry().get<CollisionHudSnapshot>(player);
         update_camera_anchor(camera, ship, sector, camera_tuning, timestep.tick_seconds());
         update_target_lock(target_lock, account.registry(), ship.position, ship.velocity, latest_intent, sector);
         mining_hud =
           update_mining_laser(account.registry(), target_lock, ship, latest_intent, sector, mining_laser, timestep.tick_seconds());
         cargo_hud = update_cargo_manifest(cargo_manifest, account.registry(), quota);
+        pressure_hud = update_sector_pressure(pressure, timestep.tick_seconds(), pressure_tuning);
         collision_hud = predict_ship_asteroid_collision(ship, account.registry(), sector);
       }
 
@@ -494,10 +507,11 @@ int App::run() {
       const TargetLockModel& target_lock = account.registry().get<TargetLockModel>(player);
       const MiningHudSnapshot& mining_hud = account.registry().get<MiningHudSnapshot>(player);
       const CargoHudSnapshot& cargo_hud = account.registry().get<CargoHudSnapshot>(player);
+      const SectorPressureHudSnapshot& pressure_hud = account.registry().get<SectorPressureHudSnapshot>(player);
       const CollisionHudSnapshot& collision_hud = account.registry().get<CollisionHudSnapshot>(player);
 
       if (hud_title_accumulator >= 0.25F) {
-        window.set_title(make_title(hud, camera, target_lock, mining_hud, cargo_hud, collision_hud));
+        window.set_title(make_title(hud, camera, target_lock, mining_hud, cargo_hud, pressure_hud, collision_hud));
         hud_title_accumulator = 0.0F;
       }
 

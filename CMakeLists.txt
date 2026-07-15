@@ -104,6 +104,7 @@ add_library(
   src/grand_central.cpp
   src/input.cpp
   src/mining.cpp
+  src/pressure.cpp
   src/render_frame.cpp
   src/sector.cpp
   src/targeting.cpp
