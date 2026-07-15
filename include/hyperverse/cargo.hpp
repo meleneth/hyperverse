@@ -1,5 +1,6 @@
 #pragma once
 
+#include "hyperverse/input.hpp"
 #include "hyperverse/mining.hpp"
 #include "hyperverse/sector.hpp"
 
@@ -44,6 +45,22 @@ struct CargoHudSnapshot {
   bool extraction_authorized{false};
 };
 
+enum class CargoEscortPhase {
+  Mining,
+  Authorized,
+  EscortActive,
+};
+
+struct CargoEscortState {
+  CargoEscortPhase phase{CargoEscortPhase::Mining};
+};
+
+struct CargoEscortHudSnapshot {
+  CargoEscortPhase phase{CargoEscortPhase::Mining};
+  bool extraction_authorized{false};
+  bool cargo_train_active{false};
+};
+
 [[nodiscard]] CargoHudSnapshot update_cargo_manifest(
   CargoManifest& manifest,
   entt::registry& registry,
@@ -55,6 +72,12 @@ int sync_cargo_boxes(
   const CargoManifest& manifest,
   const ExtractionSite& extraction_site,
   const CargoBoxTuning& tuning = {}
+);
+
+[[nodiscard]] CargoEscortHudSnapshot update_cargo_escort_state(
+  CargoEscortState& escort,
+  const CargoHudSnapshot& cargo,
+  const SemanticInputFrame& input
 );
 
 }  // namespace hyperverse

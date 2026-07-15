@@ -230,6 +230,7 @@ void log_gamepad_state() {
   const hyperverse::TargetLockModel& target_lock,
   const hyperverse::MiningHudSnapshot& mining,
   const hyperverse::CargoHudSnapshot& cargo,
+  const hyperverse::CargoEscortHudSnapshot& escort,
   const hyperverse::SectorPressureHudSnapshot& pressure,
   const hyperverse::MiningDroneHudSnapshot& drone,
   const hyperverse::CollisionHudSnapshot& collision
@@ -271,7 +272,11 @@ void log_gamepad_state() {
   }
   title << " | cargo " << cargo.delivered_mass << "/" << cargo.required_mass << " boxes " << cargo.cargo_boxes
         << " payout x" << std::setprecision(2) << cargo.payout_multiplier;
-  if (cargo.extraction_authorized) {
+  if (escort.cargo_train_active) {
+    title << " TRAIN ACTIVE";
+  } else if (escort.phase == hyperverse::CargoEscortPhase::Authorized) {
+    title << " ESCORT ARMED";
+  } else if (cargo.extraction_authorized) {
     title << " EXTRACT";
   }
   title << " | pressure L" << pressure.escalation_level << " " << (pressure.pressure_fraction * 100.0F) << "%"
@@ -445,6 +450,8 @@ int App::run() {
     account.registry().emplace<MiningHudSnapshot>(player);
     account.registry().emplace<CargoManifest>(player);
     account.registry().emplace<CargoHudSnapshot>(player);
+    account.registry().emplace<CargoEscortState>(player);
+    account.registry().emplace<CargoEscortHudSnapshot>(player);
     account.registry().emplace<SectorPressureModel>(player);
     account.registry().emplace<SectorPressureHudSnapshot>(player);
     account.registry().emplace<MiningDroneHudSnapshot>(player);
@@ -524,6 +531,8 @@ int App::run() {
         MiningHudSnapshot& mining_hud = account.registry().get<MiningHudSnapshot>(player);
         CargoManifest& cargo_manifest = account.registry().get<CargoManifest>(player);
         CargoHudSnapshot& cargo_hud = account.registry().get<CargoHudSnapshot>(player);
+        CargoEscortState& cargo_escort = account.registry().get<CargoEscortState>(player);
+        CargoEscortHudSnapshot& escort_hud = account.registry().get<CargoEscortHudSnapshot>(player);
         SectorPressureModel& pressure = account.registry().get<SectorPressureModel>(player);
         SectorPressureHudSnapshot& pressure_hud = account.registry().get<SectorPressureHudSnapshot>(player);
         MiningDroneHudSnapshot& drone_hud = account.registry().get<MiningDroneHudSnapshot>(player);
@@ -542,6 +551,7 @@ int App::run() {
         );
         cargo_hud = update_cargo_manifest(cargo_manifest, account.registry(), quota);
         (void)sync_cargo_boxes(account.registry(), cargo_manifest, extraction_site, cargo_box_tuning);
+        escort_hud = update_cargo_escort_state(cargo_escort, cargo_hud, latest_intent);
         pressure_hud = update_sector_pressure(pressure, timestep.tick_seconds(), pressure_tuning);
         collision_hud = predict_ship_asteroid_collision(ship, account.registry(), sector);
       }
@@ -551,12 +561,13 @@ int App::run() {
       const TargetLockModel& target_lock = account.registry().get<TargetLockModel>(player);
       const MiningHudSnapshot& mining_hud = account.registry().get<MiningHudSnapshot>(player);
       const CargoHudSnapshot& cargo_hud = account.registry().get<CargoHudSnapshot>(player);
+      const CargoEscortHudSnapshot& escort_hud = account.registry().get<CargoEscortHudSnapshot>(player);
       const SectorPressureHudSnapshot& pressure_hud = account.registry().get<SectorPressureHudSnapshot>(player);
       const MiningDroneHudSnapshot& drone_hud = account.registry().get<MiningDroneHudSnapshot>(player);
       const CollisionHudSnapshot& collision_hud = account.registry().get<CollisionHudSnapshot>(player);
 
       if (hud_title_accumulator >= 0.25F) {
-        window.set_title(make_title(hud, camera, target_lock, mining_hud, cargo_hud, pressure_hud, drone_hud, collision_hud));
+        window.set_title(make_title(hud, camera, target_lock, mining_hud, cargo_hud, escort_hud, pressure_hud, drone_hud, collision_hud));
         hud_title_accumulator = 0.0F;
       }
 
@@ -674,7 +685,11 @@ int App::run() {
               renderer.height(),
               28.0F
             );
-            add_box_lines(lines, box_bounds, 0.4F, 1.0F, 0.52F);
+            if (escort_hud.cargo_train_active) {
+              add_box_lines(lines, box_bounds, 0.35F, 0.9F, 1.0F);
+            } else {
+              add_box_lines(lines, box_bounds, 0.4F, 1.0F, 0.52F);
+            }
           }
           return lines;
         }(),

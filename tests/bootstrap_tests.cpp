@@ -587,6 +587,39 @@ TEST_CASE("cargo boxes are created at the extraction site from manifest mass") {
   CHECK(saw_second_box);
 }
 
+TEST_CASE("cargo escort arms when quota is authorized") {
+  hyperverse::CargoEscortState escort;
+
+  const hyperverse::CargoEscortHudSnapshot hud = hyperverse::update_cargo_escort_state(
+    escort,
+    {.extraction_authorized = true},
+    {}
+  );
+
+  CHECK(escort.phase == hyperverse::CargoEscortPhase::Authorized);
+  CHECK(hud.phase == hyperverse::CargoEscortPhase::Authorized);
+  CHECK(hud.extraction_authorized);
+  CHECK_FALSE(hud.cargo_train_active);
+}
+
+TEST_CASE("cargo escort activates on confirm after authorization") {
+  hyperverse::CargoEscortState escort;
+
+  const hyperverse::CargoEscortHudSnapshot active = hyperverse::update_cargo_escort_state(
+    escort,
+    {.extraction_authorized = true},
+    {.confirm_requested = true}
+  );
+
+  CHECK(active.phase == hyperverse::CargoEscortPhase::EscortActive);
+  CHECK(active.cargo_train_active);
+
+  const hyperverse::CargoEscortHudSnapshot persistent = hyperverse::update_cargo_escort_state(escort, {}, {});
+
+  CHECK(persistent.phase == hyperverse::CargoEscortPhase::EscortActive);
+  CHECK(persistent.cargo_train_active);
+}
+
 TEST_CASE("mining drone acquires the locked asteroid as its priority") {
   entt::registry registry;
   const entt::entity asteroid = registry.create();

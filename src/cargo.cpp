@@ -68,4 +68,26 @@ int sync_cargo_boxes(
   return existing_boxes;
 }
 
+CargoEscortHudSnapshot update_cargo_escort_state(
+  CargoEscortState& escort,
+  const CargoHudSnapshot& cargo,
+  const SemanticInputFrame& input
+) {
+  if (escort.phase != CargoEscortPhase::EscortActive) {
+    if (!cargo.extraction_authorized) {
+      escort.phase = CargoEscortPhase::Mining;
+    } else if (input.confirm_requested) {
+      escort.phase = CargoEscortPhase::EscortActive;
+    } else {
+      escort.phase = CargoEscortPhase::Authorized;
+    }
+  }
+
+  return {
+    .phase = escort.phase,
+    .extraction_authorized = cargo.extraction_authorized,
+    .cargo_train_active = escort.phase == CargoEscortPhase::EscortActive,
+  };
+}
+
 }  // namespace hyperverse
