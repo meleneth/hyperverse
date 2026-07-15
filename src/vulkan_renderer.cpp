@@ -15,6 +15,17 @@
 
 namespace {
 
+struct SpritePushConstants {
+  float center_x{0.0F};
+  float center_y{0.0F};
+  float half_width{0.0F};
+  float half_height{0.0F};
+  float rotation_radians{0.0F};
+  float padding0{0.0F};
+  float padding1{0.0F};
+  float padding2{0.0F};
+};
+
 void check(VkResult result, const char* message) {
   if (result != VK_SUCCESS) {
     throw std::runtime_error(message);
@@ -544,7 +555,7 @@ void VulkanRenderer::create_graphics_pipeline() {
   VkPushConstantRange push_range{};
   push_range.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
   push_range.offset = 0;
-  push_range.size = sizeof(float) * 4U;
+  push_range.size = sizeof(SpritePushConstants);
 
   VkPipelineLayoutCreateInfo layout_info{};
   layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -608,6 +619,7 @@ void VulkanRenderer::create_texture_resources() {
     std::filesystem::path{"assets/sector7/sprites/ship.png"},
     std::filesystem::path{"assets/sector7/sprites/rock1.png"},
     std::filesystem::path{"assets/sector7/sprites/reticle.png"},
+    std::filesystem::path{"assets/sector7/sprites/laser.png"},
   };
 
   textures_.resize(paths.size());
@@ -778,7 +790,13 @@ void VulkanRenderer::record_command_buffer(std::uint32_t image_index, const Spri
       continue;
     }
 
-    const std::array push_constants{sprite.center_x_ndc, sprite.center_y_ndc, sprite.half_width_ndc, sprite.half_height_ndc};
+    const SpritePushConstants push_constants{
+      .center_x = sprite.center_x_ndc,
+      .center_y = sprite.center_y_ndc,
+      .half_width = sprite.half_width_ndc,
+      .half_height = sprite.half_height_ndc,
+      .rotation_radians = sprite.rotation_radians,
+    };
     vkCmdBindDescriptorSets(
       command_buffer,
       VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -789,7 +807,7 @@ void VulkanRenderer::record_command_buffer(std::uint32_t image_index, const Spri
       0,
       nullptr
     );
-    vkCmdPushConstants(command_buffer, pipeline_layout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(float) * 4U, push_constants.data());
+    vkCmdPushConstants(command_buffer, pipeline_layout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(SpritePushConstants), &push_constants);
     vkCmdDraw(command_buffer, 6, 1, 0, 0);
   }
 

@@ -1,8 +1,8 @@
 #version 450
 
 layout(push_constant) uniform SpritePush {
-  vec2 center;
-  vec2 half_size;
+  vec4 transform;
+  vec4 rotation;
 } sprite;
 
 layout(location = 0) out vec2 out_uv;
@@ -26,7 +26,11 @@ const vec2 uvs[6] = vec2[](
 );
 
 void main() {
-  vec2 position = sprite.center + (positions[gl_VertexIndex] * sprite.half_size);
+  float sine = sin(sprite.rotation.x);
+  float cosine = cos(sprite.rotation.x);
+  mat2 rotate = mat2(cosine, sine, -sine, cosine);
+  vec2 local = rotate * (positions[gl_VertexIndex] * sprite.transform.zw);
+  vec2 position = sprite.transform.xy + local;
   gl_Position = vec4(position, 0.0, 1.0);
   out_uv = uvs[gl_VertexIndex];
 }

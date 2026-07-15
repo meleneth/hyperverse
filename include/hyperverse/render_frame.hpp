@@ -24,6 +24,7 @@ enum class SpriteTexture {
   Ship,
   Rock,
   Reticle,
+  Laser,
 };
 
 struct SpriteDraw {
@@ -32,6 +33,7 @@ struct SpriteDraw {
   float center_y_ndc{0.0F};
   float half_width_ndc{0.05F};
   float half_height_ndc{0.05F};
+  float rotation_radians{0.0F};
 };
 
 struct SpriteFrame {

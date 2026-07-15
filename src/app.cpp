@@ -17,6 +17,7 @@
 #include <exception>
 #include <iomanip>
 #include <iostream>
+#include <numbers>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -259,7 +260,9 @@ void log_gamepad_state() {
   const hyperverse::SectorTuning& sector,
   std::uint32_t width,
   std::uint32_t height,
-  float pixel_size
+  float pixel_size,
+  float pixel_height,
+  float rotation_radians
 ) {
   constexpr float pixels_per_world_unit = 0.35F;
   constexpr float screen_anchor_y_fraction = 0.75F;
@@ -270,10 +273,53 @@ void log_gamepad_state() {
   return {
     .texture = texture,
     .center_x_ndc = ((screen_x / static_cast<float>(width)) * 2.0F) - 1.0F,
-    .center_y_ndc = 1.0F - ((screen_y / static_cast<float>(height)) * 2.0F),
+    .center_y_ndc = ((screen_y / static_cast<float>(height)) * 2.0F) - 1.0F,
     .half_width_ndc = pixel_size / static_cast<float>(width),
-    .half_height_ndc = pixel_size / static_cast<float>(height),
+    .half_height_ndc = pixel_height / static_cast<float>(height),
+    .rotation_radians = rotation_radians,
   };
+}
+
+[[nodiscard]] float ship_sprite_rotation(float facing_radians) {
+  return facing_radians + (std::numbers::pi_v<float> * 0.5F);
+}
+
+[[nodiscard]] hyperverse::SpriteDraw make_world_sprite(
+  hyperverse::SpriteTexture texture,
+  hyperverse::Vec2 world_position,
+  hyperverse::Vec2 camera_position,
+  const hyperverse::SectorTuning& sector,
+  std::uint32_t width,
+  std::uint32_t height,
+  float pixel_size,
+  float rotation_radians = 0.0F
+) {
+  return make_world_sprite(texture, world_position, camera_position, sector, width, height, pixel_size, pixel_size, rotation_radians);
+}
+
+[[nodiscard]] hyperverse::SpriteDraw make_laser_sprite(
+  hyperverse::Vec2 from_world,
+  hyperverse::Vec2 to_world,
+  hyperverse::Vec2 camera_position,
+  const hyperverse::SectorTuning& sector,
+  std::uint32_t width,
+  std::uint32_t height
+) {
+  const hyperverse::Vec2 delta = hyperverse::wrapped_delta(from_world, to_world, sector);
+  const hyperverse::Vec2 midpoint = hyperverse::wrap_position(from_world + (delta * 0.5F), sector);
+  constexpr float pixels_per_world_unit = 0.35F;
+  const float pixel_length = hyperverse::length(delta) * pixels_per_world_unit;
+  return make_world_sprite(
+    hyperverse::SpriteTexture::Laser,
+    midpoint,
+    camera_position,
+    sector,
+    width,
+    height,
+    std::max(24.0F, pixel_length),
+    18.0F,
+    std::atan2(delta.y, delta.x)
+  );
 }
 
 }  // namespace
@@ -292,7 +338,9 @@ int App::run() {
     const entt::entity player = account.registry().create();
     auto& ship = account.registry().emplace<ShipMotion>(player);
     ship.position = {.x = 4500.0F, .y = 4500.0F};
-    CameraState camera{.position = ship.position};
+    account.registry().emplace<CameraState>(player, CameraState{.position = ship.position});
+    account.registry().emplace<TargetLockModel>(player);
+    account.registry().emplace<MiningHudSnapshot>(player);
 
     const entt::entity primary_asteroid = account.registry().create();
     account.registry().emplace<AsteroidBody>(
@@ -306,9 +354,6 @@ int App::run() {
       AsteroidBody{.position = {.x = 3825.0F, .y = 5200.0F}, .radius = 150.0F, .scan_confidence = 0.58F}
     );
     account.registry().emplace<MiningResource>(secondary_asteroid);
-    TargetLockModel target_lock{};
-    MiningHudSnapshot mining_hud{};
-
     GamepadSlot gamepad;
     gamepad.open_first_available();
     FixedTimestep timestep{1.0F / 60.0F};
@@ -355,12 +400,18 @@ int App::run() {
       while (timestep.consume_tick()) {
         latest_intent = input_mapper.map(gamepad.sample());
         simulate_assisted_flight(ship, latest_intent, flight, sector, timestep.tick_seconds());
+        CameraState& camera = account.registry().get<CameraState>(player);
+        TargetLockModel& target_lock = account.registry().get<TargetLockModel>(player);
+        MiningHudSnapshot& mining_hud = account.registry().get<MiningHudSnapshot>(player);
         update_camera_anchor(camera, ship, sector, camera_tuning, timestep.tick_seconds());
         update_target_lock(target_lock, account.registry(), ship.position, ship.velocity, latest_intent, sector);
         mining_hud = update_mining_laser(account.registry(), target_lock, latest_intent, mining_laser, timestep.tick_seconds());
       }
 
       const FlightHudSnapshot hud = make_flight_hud_snapshot(ship, latest_intent, flight, sector);
+      const CameraState& camera = account.registry().get<CameraState>(player);
+      const TargetLockModel& target_lock = account.registry().get<TargetLockModel>(player);
+      const MiningHudSnapshot& mining_hud = account.registry().get<MiningHudSnapshot>(player);
 
       if (hud_title_accumulator >= 0.25F) {
         window.set_title(make_title(hud, camera, target_lock, mining_hud));
@@ -390,6 +441,16 @@ int App::run() {
           }
           if (has_locked_target(target_lock) && account.registry().valid(target_lock.target)) {
             const AsteroidBody& target = account.registry().get<AsteroidBody>(target_lock.target);
+            if (mining_hud.beam_active) {
+              sprites.push_back(make_laser_sprite(
+                ship.position,
+                target.position,
+                camera.position,
+                sector,
+                renderer.width(),
+                renderer.height()
+              ));
+            }
             sprites.push_back(make_world_sprite(
               SpriteTexture::Reticle,
               target.position,
@@ -407,7 +468,8 @@ int App::run() {
             sector,
             renderer.width(),
             renderer.height(),
-            56.0F
+            56.0F,
+            ship_sprite_rotation(ship.facing_radians)
           ));
           return sprites;
         }(),
