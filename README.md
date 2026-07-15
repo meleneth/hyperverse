@@ -50,6 +50,18 @@ The current local copy lives in `assets/sector7/sprites` with provenance notes i
 
 These assets are temporary implementation scaffolding, not a permanent visual constraint.
 
+## Current Prototype Controls
+
+- Move: `WASD` or left stick
+- Aim/facing assist: arrow keys or right stick
+- Cycle/lock asteroid target: `Tab` or right shoulder
+- Fire mining laser at locked asteroid: `F` or right trigger
+- Cancel/quit: `Escape` or east face button
+
+The current Vulkan prototype still uses clear-pass visual feedback rather than sprite drawing. The
+window title is the active HUD: it reports position, speed, camera anchor, edge warning, target
+distance, scan confidence, closing speed, rock integrity, heat, extracted ore, and laser range.
+
 ## Core Fantasy
 
 1. Enter a remote mining sector.
