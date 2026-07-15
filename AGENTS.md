@@ -38,7 +38,104 @@ Avoid creating broad subsystem scaffolding without an immediate playable consume
 
 Do not treat the event bus as persistent state.
 
-### 3. Controls are semantic
+### 3. GrandCentral and typed contexts
+
+Implement the same GrandCentral plus typed context architecture used by Fairlanes.
+
+`GrandCentral` is the application composition root and sole owner of global runtime state.
+
+It should own things such as:
+
+- the EnTT registry
+- random-number services
+- clocks and schedulers
+- top-level event buses
+- persistent world/account collections
+- logging infrastructure
+- top-level UI objects
+- the main simulation loop
+
+The critical rule is:
+
+> Only application startup code may directly know about `GrandCentral`.
+
+Do not pass it into systems, entities, widgets, or gameplay code. It may be a deliberate god object for ownership and orchestration, but it must never become a service locator.
+
+`GrandCentral` creates the initial top-level context, such as an `AccountCtx`, and all narrower access is derived from contexts after that.
+
+This separates:
+
+- centralized ownership
+- explicitly scoped access
+
+Contexts are small, cheap, copyable, non-owning capability objects.
+
+Internally they store pointers or references to existing state. Externally they expose reference-returning accessors, so normal code sees clean APIs rather than nullable dependencies.
+
+All common contexts should expose the shared world spine:
+
+```cpp
+registry()
+rng()
+log()
+```
+
+Then add only the authority required by that scope:
+
+```text
+AccountCtx
+  account()
+  party_context(...)
+
+PartyCtx
+  account()
+  party()
+  event_bus()
+  self()
+  entity_context(...)
+  build_context()
+
+EntityCtx
+  self()
+  entity_context(...)
+
+BuildCtx
+  // shared world services, but no bound entity
+
+AttackCtx
+  attacker()
+  defender()
+  damage()
+  entity_context(...)
+```
+
+Contexts should derive narrower contexts while preserving shared services and the correct scoped logger:
+
+```text
+GrandCentral
+  -> AccountCtx
+      -> PartyCtx
+          -> EntityCtx
+          -> BuildCtx
+          -> AttackCtx
+```
+
+Logging is part of the authority boundary. `ctx.log()` must resolve to the account, party, encounter, or other scope from which the context was created. It must not silently fall back to a global logger.
+
+Design rules:
+
+- Give each function the narrowest context type it actually needs.
+- Never pass `GrandCentral` below the composition root.
+- Never let contexts own the objects they reference.
+- Context lifetimes must remain shorter than the owning world state.
+- Prefer deriving a narrower context over manually passing several dependencies.
+- Do not create a generic grab-bag context.
+- Use a concept such as `WorldCoreCtx` for generic algorithms that need only the common `registry`, `rng`, and `log` capabilities.
+- Tests should construct minimal contexts directly without bootstrapping the entire application.
+
+The intended effect is dependency injection through typed authority: ownership remains centralized, while every subsystem explicitly declares how much of the world it is permitted to see.
+
+### 4. Controls are semantic
 
 Gameplay code must not ask for raw left-stick or right-stick values.
 
@@ -56,7 +153,7 @@ Input processing should produce semantic intent such as:
 
 The active control context or state machine decides how device input maps to intent.
 
-### 4. Prefer small state machines
+### 5. Prefer small state machines
 
 Do not create one global game state machine.
 
@@ -73,13 +170,13 @@ Expected separate machines include:
 
 Machines should communicate through explicit events and shared domain state.
 
-### 5. Fixed simulation
+### 6. Fixed simulation
 
 Use a fixed simulation timestep. Rendering may interpolate.
 
 Input snapshots should be sampled and converted into semantic intent once per simulation tick.
 
-### 6. Test behavior, not library trivia
+### 7. Test behavior, not library trivia
 
 Catch2 tests should cover:
 
@@ -94,7 +191,7 @@ Catch2 tests should cover:
 
 Do not write tests whose only purpose is proving that EnTT, Jolt, SDL3, or SML work.
 
-### 7. Keep the HUD data-driven
+### 8. Keep the HUD data-driven
 
 HUD widgets should consume stable read models or presentation snapshots.
 
@@ -113,13 +210,13 @@ All important hidden calculations should be available to HUD presentation, inclu
 - drone intent
 - current control mapping
 
-### 8. Make tuning cheap
+### 9. Make tuning cheap
 
 Camera lag, acceleration, braking, rotational assistance, tow limits, escalation timing, lock behavior, warning thresholds, and HUD animation timings must be data-configurable.
 
 Avoid hard-coding feel constants deep inside implementation logic.
 
-### 9. Keep commits intentional
+### 10. Keep commits intentional
 
 Each commit should represent one coherent behavior or infrastructure step.
 
@@ -134,7 +231,7 @@ Good examples:
 - add quota authorization HUD
 - add cargo tow stress model
 
-### 10. Definition of done
+### 11. Definition of done
 
 A feature is done when:
 
