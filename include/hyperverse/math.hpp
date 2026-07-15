@@ -37,6 +37,10 @@ struct Vec2 {
   return std::sqrt((value.x * value.x) + (value.y * value.y));
 }
 
+[[nodiscard]] constexpr float dot(Vec2 lhs, Vec2 rhs) {
+  return (lhs.x * rhs.x) + (lhs.y * rhs.y);
+}
+
 [[nodiscard]] inline Vec2 normalize_or_zero(Vec2 value) {
   const float magnitude = length(value);
   if (magnitude <= 0.0001F) {

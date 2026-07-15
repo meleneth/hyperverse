@@ -11,6 +11,7 @@ namespace hyperverse {
 
 struct AsteroidBody {
   Vec2 position{};
+  Vec2 velocity{};
   float radius{160.0F};
   float scan_confidence{0.25F};
 };
@@ -29,7 +30,10 @@ struct TargetLockModel {
   TargetLockPhase phase{TargetLockPhase::Unlocked};
   entt::entity target{entt::null};
   Vec2 relative_position{};
+  Vec2 relative_velocity{};
   float wrapped_distance{0.0F};
+  float closing_speed{0.0F};
+  float time_to_contact_seconds{0.0F};
   float scan_confidence{0.0F};
 };
 
@@ -39,6 +43,7 @@ void update_target_lock(
   TargetLockModel& lock,
   entt::registry& registry,
   Vec2 observer_position,
+  Vec2 observer_velocity,
   const SemanticInputFrame& input,
   const SectorTuning& sector,
   const TargetingTuning& tuning = {}

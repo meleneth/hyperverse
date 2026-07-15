@@ -224,7 +224,8 @@ void log_gamepad_state() {
   }
   if (hyperverse::has_locked_target(target_lock)) {
     title << " | target " << target_lock.wrapped_distance << " scan " << std::setprecision(0)
-          << (target_lock.scan_confidence * 100.0F) << "%";
+          << (target_lock.scan_confidence * 100.0F) << "%"
+          << " close " << target_lock.closing_speed;
   } else {
     title << " | target none";
   }
@@ -302,7 +303,7 @@ int App::run() {
         latest_intent = map_flight_intent(gamepad.sample());
         simulate_assisted_flight(ship, latest_intent, flight, sector, timestep.tick_seconds());
         update_camera_anchor(camera, ship, sector, camera_tuning, timestep.tick_seconds());
-        update_target_lock(target_lock, account.registry(), ship.position, latest_intent, sector);
+        update_target_lock(target_lock, account.registry(), ship.position, ship.velocity, latest_intent, sector);
       }
 
       const FlightHudSnapshot hud = make_flight_hud_snapshot(ship, latest_intent, flight, sector);
