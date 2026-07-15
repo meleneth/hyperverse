@@ -20,7 +20,7 @@ Copied contents:
 - `sprites/reticle.png`
 - `sprites/rock1.png` through `sprites/rock6.png`
 - `sprites/laser.png`
-- `sprites/beamw.png`
+- `sprites/beamw.png` - weak particle cannon beam, not the mining laser
 - `sprites/particle.png`
 - `sprites/smoke.png`
 - `sprites/explosion.png`
