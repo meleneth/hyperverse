@@ -101,6 +101,7 @@ add_library(
   src/grand_central.cpp
   src/input.cpp
   src/sector.cpp
+  src/targeting.cpp
   src/version.cpp
   src/vulkan_renderer.cpp
 )

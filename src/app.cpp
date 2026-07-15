@@ -5,6 +5,7 @@
 #include "hyperverse/flight.hpp"
 #include "hyperverse/grand_central.hpp"
 #include "hyperverse/input.hpp"
+#include "hyperverse/targeting.hpp"
 #include "hyperverse/version.hpp"
 #include "hyperverse/vulkan_renderer.hpp"
 
@@ -142,6 +143,7 @@ public:
       raw.aim_axis.y -= key_down(SDL_SCANCODE_UP) ? 1.0F : 0.0F;
       raw.confirm = key_down(SDL_SCANCODE_SPACE);
       raw.cancel = key_down(SDL_SCANCODE_ESCAPE);
+      raw.target_cycle = key_down(SDL_SCANCODE_TAB);
     }
 
     if (gamepad_ != nullptr) {
@@ -156,6 +158,7 @@ public:
       };
       raw.confirm = raw.confirm || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_SOUTH);
       raw.cancel = raw.cancel || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_EAST);
+      raw.target_cycle = raw.target_cycle || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
     }
 
     return raw;
@@ -205,7 +208,11 @@ void log_gamepad_state() {
   SDL_free(gamepads);
 }
 
-[[nodiscard]] std::string make_title(const hyperverse::FlightHudSnapshot& hud, const hyperverse::CameraState& camera) {
+[[nodiscard]] std::string make_title(
+  const hyperverse::FlightHudSnapshot& hud,
+  const hyperverse::CameraState& camera,
+  const hyperverse::TargetLockModel& target_lock
+) {
   const char* mapping = hud.control_mapping == hyperverse::ControlMapping::Gamepad ? "gamepad" : "keyboard";
   std::ostringstream title;
   title << hyperverse::application_name() << " " << hyperverse::version() << " | pos " << std::fixed << std::setprecision(0)
@@ -214,6 +221,12 @@ void log_gamepad_state() {
         << " | cam " << camera.position.x << "," << camera.position.y << " | edge " << hud.nearest_wrap_edge_distance;
   if (hud.wrap_warning) {
     title << " WRAP";
+  }
+  if (hyperverse::has_locked_target(target_lock)) {
+    title << " | target " << target_lock.wrapped_distance << " scan " << std::setprecision(0)
+          << (target_lock.scan_confidence * 100.0F) << "%";
+  } else {
+    title << " | target none";
   }
   title << " | " << mapping;
   return title.str();
@@ -236,6 +249,13 @@ int App::run() {
     auto& ship = account.registry().emplace<ShipMotion>(player);
     ship.position = {.x = 4500.0F, .y = 4500.0F};
     CameraState camera{.position = ship.position};
+
+    const entt::entity asteroid = account.registry().create();
+    account.registry().emplace<AsteroidBody>(
+      asteroid,
+      AsteroidBody{.position = {.x = 5650.0F, .y = 3850.0F}, .radius = 220.0F, .scan_confidence = 0.34F}
+    );
+    TargetLockModel target_lock{};
 
     GamepadSlot gamepad;
     gamepad.open_first_available();
@@ -282,10 +302,11 @@ int App::run() {
         latest_intent = map_flight_intent(gamepad.sample());
         simulate_assisted_flight(ship, latest_intent, flight, sector, timestep.tick_seconds());
         update_camera_anchor(camera, ship, sector, camera_tuning, timestep.tick_seconds());
+        update_target_lock(target_lock, account.registry(), ship.position, latest_intent, sector);
       }
 
       if (hud_title_accumulator >= 0.25F) {
-        window.set_title(make_title(make_flight_hud_snapshot(ship, latest_intent, flight, sector), camera));
+        window.set_title(make_title(make_flight_hud_snapshot(ship, latest_intent, flight, sector), camera, target_lock));
         hud_title_accumulator = 0.0F;
       }
 

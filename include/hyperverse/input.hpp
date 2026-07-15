@@ -14,6 +14,7 @@ struct RawInputFrame {
   Vec2 aim_axis{};
   bool confirm{false};
   bool cancel{false};
+  bool target_cycle{false};
   ControlMapping control_mapping{ControlMapping::Keyboard};
 };
 
@@ -22,6 +23,7 @@ struct SemanticInputFrame {
   Vec2 primary_aim{};
   bool confirm_requested{false};
   bool cancel_requested{false};
+  bool target_cycle_requested{false};
   ControlMapping control_mapping{ControlMapping::Keyboard};
 };
 
