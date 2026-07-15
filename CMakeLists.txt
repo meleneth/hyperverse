@@ -130,6 +130,7 @@ hyperverse_enable_project_warnings(hyperverse)
 
 install(TARGETS hyperverse RUNTIME DESTINATION bin)
 install(DIRECTORY include/ DESTINATION include)
+install(DIRECTORY assets/ DESTINATION share/hyperverse/assets)
 
 if(HYPERVERSE_BUILD_TESTS)
   include(CTest)

@@ -45,6 +45,9 @@ Initial placeholder art should reuse sprites from:
 
 Repository default branch: `master`.
 
+The current local copy lives in `assets/sector7/sprites` with provenance notes in
+`assets/sector7/README.md`.
+
 These assets are temporary implementation scaffolding, not a permanent visual constraint.
 
 ## Core Fantasy
