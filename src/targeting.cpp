@@ -37,12 +37,17 @@ void refresh_lock(
   entt::registry& registry,
   hyperverse::Vec2 observer_position,
   const hyperverse::SectorTuning& sector,
-  float lock_range
+  float lock_range,
+  entt::entity ignored = entt::null
 ) {
   entt::entity nearest = entt::null;
   float nearest_distance = std::numeric_limits<float>::max();
 
   for (auto [entity, asteroid] : registry.view<hyperverse::AsteroidBody>().each()) {
+    if (entity == ignored) {
+      continue;
+    }
+
     const float distance = hyperverse::wrapped_distance(observer_position, asteroid.position, sector);
     if (distance <= lock_range && distance < nearest_distance) {
       nearest = entity;
@@ -79,6 +84,13 @@ void update_target_lock(
     if (!registry.valid(lock.target) || !registry.all_of<AsteroidBody>(lock.target)) {
       clear_lock(lock);
       return;
+    }
+
+    if (input.target_cycle_requested) {
+      const entt::entity next_target = nearest_asteroid(registry, observer_position, sector, tuning.lock_range, lock.target);
+      if (next_target != entt::null) {
+        lock.target = next_target;
+      }
     }
 
     refresh_lock(lock, registry.get<AsteroidBody>(lock.target), observer_position, observer_velocity, sector);

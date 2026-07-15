@@ -197,6 +197,25 @@ TEST_CASE("target lock cancels and breaks after release range") {
   CHECK_FALSE(hyperverse::has_locked_target(lock));
 }
 
+TEST_CASE("target lock cycles to another asteroid in range") {
+  entt::registry registry;
+  const entt::entity first = registry.create();
+  registry.emplace<hyperverse::AsteroidBody>(first, hyperverse::AsteroidBody{.position = {.x = 200.0F, .y = 100.0F}});
+  const entt::entity second = registry.create();
+  registry.emplace<hyperverse::AsteroidBody>(second, hyperverse::AsteroidBody{.position = {.x = 260.0F, .y = 100.0F}});
+
+  hyperverse::TargetLockModel lock{};
+  const hyperverse::SectorTuning sector{.width = 9000.0F, .height = 9000.0F};
+  const hyperverse::TargetingTuning tuning{.lock_range = 500.0F, .release_range = 650.0F};
+
+  hyperverse::update_target_lock(lock, registry, {.x = 100.0F, .y = 100.0F}, {}, {.target_cycle_requested = true}, sector, tuning);
+  CHECK(lock.target == first);
+
+  hyperverse::update_target_lock(lock, registry, {.x = 100.0F, .y = 100.0F}, {}, {.target_cycle_requested = true}, sector, tuning);
+  CHECK(lock.target == second);
+  CHECK(lock.wrapped_distance == Catch::Approx(160.0F));
+}
+
 TEST_CASE("Vulkan clear color exposes critical flight state") {
   const hyperverse::RenderColor idle = hyperverse::make_clear_color({});
   const hyperverse::RenderColor fast = hyperverse::make_clear_color({.speed_fraction = 1.0F});
