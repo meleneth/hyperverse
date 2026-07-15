@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <numbers>
 
 namespace {
@@ -18,6 +19,10 @@ namespace {
 
 [[nodiscard]] float angle_of(hyperverse::Vec2 value) {
   return std::atan2(value.y, value.x);
+}
+
+[[nodiscard]] float nearest_wrap_edge_distance(hyperverse::Vec2 position, const hyperverse::SectorTuning& sector) {
+  return std::min({position.x, sector.width - position.x, position.y, sector.height - position.y});
 }
 
 }  // namespace
@@ -47,13 +52,27 @@ void simulate_assisted_flight(
   }
 }
 
-FlightHudSnapshot make_flight_hud_snapshot(const ShipMotion& ship, const SemanticInputFrame& input) {
+FlightHudSnapshot make_flight_hud_snapshot(
+  const ShipMotion& ship,
+  const SemanticInputFrame& input,
+  const FlightTuning& flight,
+  const SectorTuning& sector,
+  const FlightHudTuning& hud
+) {
+  const float speed = length(ship.velocity);
+  const float max_speed = std::max(flight.max_speed, std::numeric_limits<float>::epsilon());
+  const float nearest_edge = nearest_wrap_edge_distance(ship.position, sector);
+
   return {
     .position = ship.position,
     .velocity = ship.velocity,
-    .speed = length(ship.velocity),
+    .speed = speed,
+    .speed_fraction = std::clamp(speed / max_speed, 0.0F, 1.0F),
     .facing_radians = ship.facing_radians,
     .desired_movement = input.desired_movement,
+    .nearest_wrap_edge_distance = nearest_edge,
+    .wrap_warning = nearest_edge <= hud.wrap_warning_distance,
+    .control_mapping = input.control_mapping,
   };
 }
 

@@ -22,6 +22,7 @@ SemanticInputFrame map_flight_intent(const RawInputFrame& raw, const InputTuning
     .primary_aim = clamp_length(apply_deadzone(raw.aim_axis, tuning.deadzone), 1.0F),
     .confirm_requested = raw.confirm,
     .cancel_requested = raw.cancel,
+    .control_mapping = raw.control_mapping,
   };
 }
 

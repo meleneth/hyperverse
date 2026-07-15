@@ -144,6 +144,7 @@ public:
     }
 
     if (gamepad_ != nullptr) {
+      raw.control_mapping = hyperverse::ControlMapping::Gamepad;
       raw.movement_axis = {
         .x = axis(SDL_GAMEPAD_AXIS_LEFTX),
         .y = axis(SDL_GAMEPAD_AXIS_LEFTY),
@@ -204,9 +205,16 @@ void log_gamepad_state() {
 }
 
 [[nodiscard]] std::string make_title(const hyperverse::FlightHudSnapshot& hud) {
+  const char* mapping = hud.control_mapping == hyperverse::ControlMapping::Gamepad ? "gamepad" : "keyboard";
   std::ostringstream title;
   title << hyperverse::application_name() << " " << hyperverse::version() << " | pos " << std::fixed << std::setprecision(0)
-        << hud.position.x << "," << hud.position.y << " | speed " << hud.speed;
+        << hud.position.x << "," << hud.position.y << " | speed " << hud.speed << " (" << std::setprecision(0)
+        << (hud.speed_fraction * 100.0F) << "%)"
+        << " | edge " << hud.nearest_wrap_edge_distance;
+  if (hud.wrap_warning) {
+    title << " WRAP";
+  }
+  title << " | " << mapping;
   return title.str();
 }
 
@@ -273,7 +281,7 @@ int App::run() {
       }
 
       if (hud_title_accumulator >= 0.25F) {
-        window.set_title(make_title(make_flight_hud_snapshot(ship, latest_intent)));
+        window.set_title(make_title(make_flight_hud_snapshot(ship, latest_intent, flight, sector)));
         hud_title_accumulator = 0.0F;
       }
 

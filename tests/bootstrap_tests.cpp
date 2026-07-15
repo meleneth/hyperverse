@@ -42,9 +42,14 @@ TEST_CASE("flight input maps raw devices into semantic movement intent") {
   CHECK(idle.desired_movement.y == Catch::Approx(0.0F));
 
   const hyperverse::SemanticInputFrame moving =
-    hyperverse::map_flight_intent({.movement_axis = {.x = 1.0F, .y = 1.0F}, .confirm = true});
+    hyperverse::map_flight_intent({
+      .movement_axis = {.x = 1.0F, .y = 1.0F},
+      .confirm = true,
+      .control_mapping = hyperverse::ControlMapping::Gamepad,
+    });
   CHECK(hyperverse::length(moving.desired_movement) == Catch::Approx(1.0F));
   CHECK(moving.confirm_requested);
+  CHECK(moving.control_mapping == hyperverse::ControlMapping::Gamepad);
 }
 
 TEST_CASE("wrapped sector distance uses the shortest edge crossing") {
@@ -86,6 +91,28 @@ TEST_CASE("fixed timestep consumes deterministic simulation ticks") {
   CHECK(timestep.consume_tick());
   CHECK_FALSE(timestep.consume_tick());
   CHECK(timestep.alpha() == Catch::Approx(0.96F));
+}
+
+TEST_CASE("flight HUD exposes speed load, wrap warning, and control mapping") {
+  const hyperverse::SectorTuning sector{.width = 9000.0F, .height = 9000.0F};
+  const hyperverse::FlightTuning flight{.max_speed = 100.0F};
+  const hyperverse::FlightHudTuning hud{.wrap_warning_distance = 500.0F};
+  const hyperverse::ShipMotion ship{
+    .position = {.x = 8750.0F, .y = 4400.0F},
+    .velocity = {.x = 75.0F, .y = 0.0F},
+  };
+  const hyperverse::SemanticInputFrame input{
+    .desired_movement = {.x = 1.0F, .y = 0.0F},
+    .control_mapping = hyperverse::ControlMapping::Gamepad,
+  };
+
+  const hyperverse::FlightHudSnapshot snapshot = hyperverse::make_flight_hud_snapshot(ship, input, flight, sector, hud);
+
+  CHECK(snapshot.speed == Catch::Approx(75.0F));
+  CHECK(snapshot.speed_fraction == Catch::Approx(0.75F));
+  CHECK(snapshot.nearest_wrap_edge_distance == Catch::Approx(250.0F));
+  CHECK(snapshot.wrap_warning);
+  CHECK(snapshot.control_mapping == hyperverse::ControlMapping::Gamepad);
 }
 
 TEST_CASE("grand central derives a minimal account context without exposing ownership") {
