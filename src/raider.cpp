@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <numbers>
 
 namespace hyperverse {
 
@@ -41,6 +42,9 @@ namespace {
   if (raider.role == RaiderRole::CargoThief) {
     return RaiderTask::StealCargo;
   }
+  if (raider.task == RaiderTask::FullAggression) {
+    return RaiderTask::FullAggression;
+  }
   if (escort.phase == CargoEscortPhase::Extracting || escort.phase == CargoEscortPhase::Complete) {
     return RaiderTask::FullAggression;
   }
@@ -48,6 +52,21 @@ namespace {
     return RaiderTask::CoverThief;
   }
   return RaiderTask::HarassPlayer;
+}
+
+void spawn_combat_raider(entt::registry& registry, Vec2 position, RaiderTask task, float integrity) {
+  const entt::entity raider = registry.create();
+  registry.emplace<RaiderShip>(
+    raider,
+    RaiderShip{
+      .position = position,
+      .role = RaiderRole::Combat,
+      .task = task,
+      .integrity = integrity,
+      .max_integrity = integrity,
+    }
+  );
+  registry.emplace<ParticleCannonModel>(raider);
 }
 
 }  // namespace
@@ -67,19 +86,33 @@ void spawn_gate_combat_raiders(
   for (int index = 0; index < spawn_count; ++index) {
     const float offset_angle = base_angle + ((static_cast<float>(index) - ((static_cast<float>(spawn_count) - 1.0F) * 0.5F)) * 0.55F);
     const Vec2 offset{.x = std::cos(offset_angle) * 720.0F, .y = std::sin(offset_angle) * 720.0F};
-    const entt::entity raider = registry.create();
-    registry.emplace<RaiderShip>(
-      raider,
-      RaiderShip{
-        .position = wrap_position(gate_position + offset, sector),
-        .role = RaiderRole::Combat,
-        .task = RaiderTask::FullAggression,
-        .integrity = 90.0F,
-        .max_integrity = 90.0F,
-      }
-    );
-    registry.emplace<ParticleCannonModel>(raider);
+    spawn_combat_raider(registry, wrap_position(gate_position + offset, sector), RaiderTask::FullAggression, 90.0F);
   }
+}
+
+int spawn_pressure_raiders(
+  entt::registry& registry,
+  Vec2 player_position,
+  const SectorTuning& sector,
+  int threat_level
+) {
+  if (threat_level <= 0) {
+    return 0;
+  }
+
+  const int spawn_count = std::clamp(1 + (threat_level / 2), 1, 5);
+  const RaiderTask task = threat_level >= 5 ? RaiderTask::FullAggression : RaiderTask::HarassPlayer;
+  const float integrity = static_cast<float>(70 + (threat_level * 6));
+  const float radius = 1200.0F + (static_cast<float>(threat_level) * 90.0F);
+  const float base_angle = static_cast<float>(threat_level) * 0.73F;
+
+  for (int index = 0; index < spawn_count; ++index) {
+    const float angle = base_angle + ((static_cast<float>(index) / static_cast<float>(spawn_count)) * std::numbers::pi_v<float> * 2.0F);
+    const Vec2 offset{.x = std::cos(angle) * radius, .y = std::sin(angle) * radius};
+    spawn_combat_raider(registry, wrap_position(player_position + offset, sector), task, integrity);
+  }
+
+  return spawn_count;
 }
 
 RaiderHudSnapshot update_raider_threat(

@@ -186,6 +186,46 @@ TEST_CASE("gate combat raiders spawn as player attackers with particle cannons")
   CHECK(combat_raiders == 3);
 }
 
+TEST_CASE("pressure escalation spawns harassment raiders around the player") {
+  entt::registry registry;
+
+  const int spawned = hyperverse::spawn_pressure_raiders(
+    registry,
+    {.x = 4500.0F, .y = 4500.0F},
+    {.width = 9000.0F, .height = 9000.0F},
+    2
+  );
+
+  CHECK(spawned == 2);
+  int raiders = 0;
+  for (auto [entity, raider] : registry.view<hyperverse::RaiderShip>().each()) {
+    CHECK(registry.all_of<hyperverse::ParticleCannonModel>(entity));
+    CHECK(raider.role == hyperverse::RaiderRole::Combat);
+    CHECK(raider.task == hyperverse::RaiderTask::HarassPlayer);
+    CHECK(raider.integrity == Catch::Approx(82.0F));
+    ++raiders;
+  }
+  CHECK(raiders == spawned);
+}
+
+TEST_CASE("high pressure spawns full aggression raiders") {
+  entt::registry registry;
+
+  const int spawned = hyperverse::spawn_pressure_raiders(
+    registry,
+    {.x = 4500.0F, .y = 4500.0F},
+    {.width = 9000.0F, .height = 9000.0F},
+    6
+  );
+
+  CHECK(spawned == 4);
+  for (auto [entity, raider] : registry.view<hyperverse::RaiderShip>().each()) {
+    (void)entity;
+    CHECK(raider.task == hyperverse::RaiderTask::FullAggression);
+    CHECK(raider.integrity == Catch::Approx(106.0F));
+  }
+}
+
 TEST_CASE("combat raiders switch to cover when a thief is stealing cargo") {
   entt::registry registry;
   const entt::entity thief_entity = registry.create();

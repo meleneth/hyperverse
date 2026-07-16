@@ -169,6 +169,8 @@ Escalation should affect:
 - contract modifiers
 - HUD warning intensity
 
+Current threat escalation spawns combat raiders around the player. Lower threat contacts harass the player; high threat contacts enter full aggression. The spawn count rises with threat level and is capped for the current slice.
+
 If the player stays indefinitely, local space eventually tears open and consumes the ship. This terminal state prevents survival from becoming an infinite optimization problem.
 
 ## Raiders

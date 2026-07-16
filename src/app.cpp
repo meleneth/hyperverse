@@ -264,7 +264,8 @@ int App::run(AccountCtx& account) {
         const int previous_pressure_level = pressure.escalation_level;
         pressure_hud = update_sector_pressure(pressure, timestep.tick_seconds(), pressure_tuning);
         if (pressure.escalation_level > previous_pressure_level) {
-          push_hud_notice(hud_notice, "THREAT LEVEL INCREASED");
+          const int spawned_raiders = spawn_pressure_raiders(account.registry(), ship.position, sector, pressure.escalation_level);
+          push_hud_notice(hud_notice, spawned_raiders > 0 ? "RAIDER CONTACTS INBOUND" : "THREAT LEVEL INCREASED");
         }
         if (pressure_hud.universe_tear_open) {
           push_hud_notice(hud_notice, "SPACE TEAR CONSUMING YOU");

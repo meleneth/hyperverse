@@ -58,6 +58,13 @@ void spawn_gate_combat_raiders(
   int count = 3
 );
 
+int spawn_pressure_raiders(
+  entt::registry& registry,
+  Vec2 player_position,
+  const SectorTuning& sector,
+  int threat_level
+);
+
 struct RaiderHudSnapshot {
   entt::entity target_box{entt::null};
   RaiderPhase phase{RaiderPhase::Idle};
