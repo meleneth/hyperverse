@@ -18,11 +18,17 @@ enum class RaiderPhase {
   Escaped,
 };
 
+enum class RaiderRole {
+  CargoThief,
+  Combat,
+};
+
 struct RaiderShip {
   Vec2 position{};
   Vec2 velocity{};
   entt::entity target_box{entt::null};
   RaiderPhase phase{RaiderPhase::Idle};
+  RaiderRole role{RaiderRole::CargoThief};
   float disruption_seconds{0.0F};
   float integrity{120.0F};
   float max_integrity{120.0F};
@@ -33,7 +39,16 @@ struct RaiderTuning {
   float disruption_range{70.0F};
   float disruption_seconds{0.5F};
   float escape_distance{3200.0F};
+  float combat_standoff{900.0F};
 };
+
+void spawn_gate_combat_raiders(
+  entt::registry& registry,
+  Vec2 gate_position,
+  Vec2 player_position,
+  const SectorTuning& sector,
+  int count = 3
+);
 
 struct RaiderHudSnapshot {
   entt::entity target_box{entt::null};

@@ -1,8 +1,10 @@
 #include "hyperverse/sdl_platform.hpp"
 
 #include "hyperverse/version.hpp"
+#include "png_rgba.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -25,6 +27,21 @@ Window::Window() {
   if (window_ == nullptr) {
     throw std::runtime_error(std::string{"SDL_CreateWindow failed: "} + SDL_GetError());
   }
+
+  const SpriteAlphaMask icon = load_png_rgba("assets/sector7/sprites/ship.png");
+  SDL_Surface* icon_surface = SDL_CreateSurfaceFrom(
+    static_cast<int>(icon.width),
+    static_cast<int>(icon.height),
+    SDL_PIXELFORMAT_RGBA32,
+    const_cast<std::uint8_t*>(icon.rgba.data()),
+    static_cast<int>(icon.width * 4U)
+  );
+  if (icon_surface != nullptr) {
+    (void)SDL_SetWindowIcon(window_, icon_surface);
+    SDL_DestroySurface(icon_surface);
+  }
+
+  (void)SDL_SetWindowFullscreen(window_, true);
 }
 
 Window::~Window() {

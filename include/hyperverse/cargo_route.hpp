@@ -18,6 +18,8 @@ struct CargoEscortRouteHudSnapshot {
   bool gate_reached{false};
 };
 
+[[nodiscard]] CargoEscortRoute extraction_route_from_gathering(Vec2 gathering_position, const SectorTuning& sector);
+
 [[nodiscard]] CargoEscortRouteHudSnapshot update_cargo_escort_route(
   const CargoEscortState& escort,
   const CargoEscortRoute& route,

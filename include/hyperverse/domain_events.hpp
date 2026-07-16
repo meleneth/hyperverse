@@ -14,6 +14,12 @@ enum class DomainEventType {
   AsteroidFragmented,
   AsteroidConsumed,
   DroneTargetReleased,
+  ContractAccepted,
+  CargoEscortStarted,
+  CargoArrivedAtGate,
+  CargoBoxExtracted,
+  CargoExtractionComplete,
+  ContractRoundCompleted,
 };
 
 struct DomainEvent {

@@ -1,6 +1,9 @@
 #include "hyperverse/raider.hpp"
 
+#include "hyperverse/projectile.hpp"
+
 #include <algorithm>
+#include <cmath>
 #include <limits>
 
 namespace hyperverse {
@@ -23,6 +26,35 @@ namespace {
 
 }  // namespace
 
+void spawn_gate_combat_raiders(
+  entt::registry& registry,
+  Vec2 gate_position,
+  Vec2 player_position,
+  const SectorTuning& sector,
+  int count
+) {
+  const int spawn_count = std::max(0, count);
+  const Vec2 away_from_player = normalize_or_zero(wrapped_delta(player_position, gate_position, sector));
+  const Vec2 base_direction = length(away_from_player) > 0.0F ? away_from_player : Vec2{.x = 1.0F, .y = 0.0F};
+  const float base_angle = std::atan2(base_direction.y, base_direction.x);
+
+  for (int index = 0; index < spawn_count; ++index) {
+    const float offset_angle = base_angle + ((static_cast<float>(index) - ((static_cast<float>(spawn_count) - 1.0F) * 0.5F)) * 0.55F);
+    const Vec2 offset{.x = std::cos(offset_angle) * 720.0F, .y = std::sin(offset_angle) * 720.0F};
+    const entt::entity raider = registry.create();
+    registry.emplace<RaiderShip>(
+      raider,
+      RaiderShip{
+        .position = wrap_position(gate_position + offset, sector),
+        .role = RaiderRole::Combat,
+        .integrity = 90.0F,
+        .max_integrity = 90.0F,
+      }
+    );
+    registry.emplace<ParticleCannonModel>(raider);
+  }
+}
+
 RaiderHudSnapshot update_raider_threat(
   RaiderShip& raider,
   entt::registry& registry,
@@ -38,6 +70,24 @@ RaiderHudSnapshot update_raider_threat(
     raider.target_box = entt::null;
     raider.disruption_seconds = 0.0F;
     return {};
+  }
+
+  if (raider.role == RaiderRole::Combat) {
+    const Vec2 to_player = wrapped_delta(raider.position, ship.position, sector);
+    const float player_distance = length(to_player);
+    if (player_distance > tuning.combat_standoff) {
+      raider.phase = RaiderPhase::Approaching;
+      raider.velocity = normalize_or_zero(to_player) * tuning.max_speed;
+      raider.position = wrap_position(raider.position + (raider.velocity * dt_seconds), sector);
+    } else {
+      raider.phase = RaiderPhase::Disrupting;
+      raider.velocity = {};
+    }
+    return {
+      .phase = raider.phase,
+      .target_distance = player_distance,
+      .active = true,
+    };
   }
 
   if (escort.phase != CargoEscortPhase::EscortActive) {

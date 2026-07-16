@@ -77,7 +77,12 @@ state.
 - Large asteroids have two break levels. The first break creates medium pieces, the second creates small pieces, and further depletion consumes the final fragment.
 - Kinetic particle impacts transfer velocity into asteroid mass. Getting in front of a moving rock and firing back into its path is the intended way to slow it before mining.
 - Mining drones cannot work the largest asteroid tier. The player must break big rocks into medium or small pieces before drones can safely mine them.
+- Mined cargo starts at the gathering site. The extraction gate is derived as the furthest wrapped-sector point from that gathering site.
+- During escort, cargo follows the player as a train. Once the train reaches the extraction gate, cargo breaks off from player-follow and locks to the gate.
+- Gate extraction processes cargo boxes sequentially at roughly five seconds per box. A round is not complete until extraction finishes.
+- Reaching the extraction gate spawns combat raiders that prioritize killing the player over stealing cargo.
 - Asteroid damage, fragmentation, consumption, particle impacts, and drone target release are event-visible gameplay facts. New behavior should prefer event responders over hidden direct call chains.
+- GrandCentral owns the EventPP bus and context objects expose it. App still contains too much orchestration and should keep shrinking toward platform setup plus GrandCentral startup.
 
 ## Core Fantasy
 

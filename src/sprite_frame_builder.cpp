@@ -433,8 +433,12 @@ SpriteFrame build_sprite_frame(
     }
     frame.sprites.push_back(drone_sprite);
   }
-  const RaiderShip& raider = account.registry().get<RaiderShip>(raider_entity);
-  if (raider_hud.active) {
+  (void)raider_entity;
+  for (auto [entity, raider] : account.registry().view<RaiderShip>().each()) {
+    (void)entity;
+    if (raider.integrity <= 0.0F || (raider.role == RaiderRole::CargoThief && !raider_hud.active)) {
+      continue;
+    }
     SpriteDraw raider_sprite = make_world_sprite(
       SpriteTexture::Drone,
       raider.position,
@@ -445,7 +449,9 @@ SpriteFrame build_sprite_frame(
       46.0F,
       ship_sprite_rotation(std::atan2(raider.velocity.y, raider.velocity.x))
     );
-    if (raider.phase == RaiderPhase::Disrupting) {
+    if (raider.role == RaiderRole::Combat) {
+      tint_sprite(raider_sprite, 0.95F, 0.18F, 0.14F);
+    } else if (raider.phase == RaiderPhase::Disrupting) {
       tint_sprite(raider_sprite, 0.86F, 0.32F, 0.12F);
     } else {
       tint_sprite(raider_sprite, 0.55F, 0.34F, 0.16F);
@@ -588,6 +594,9 @@ SpriteFrame build_sprite_frame(
   }
   for (auto [entity, box] : account.registry().view<CargoBox>().each()) {
     (void)entity;
+    if (box.state == CargoBoxState::Extracted) {
+      continue;
+    }
     const SpriteDraw box_bounds = make_world_sprite(SpriteTexture::Reticle, box.position, camera.position, sector, width, height, 28.0F);
     if (escort_hud.cargo_train_active) {
       if (box.state == CargoBoxState::Lost) {

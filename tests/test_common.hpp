@@ -18,6 +18,7 @@
 #include "hyperverse/collision.hpp"
 #include "hyperverse/drone.hpp"
 #include "hyperverse/input.hpp"
+#include "hyperverse/game_session.hpp"
 #include "hyperverse/mining.hpp"
 #include "hyperverse/pressure.hpp"
 #include "hyperverse/projectile.hpp"

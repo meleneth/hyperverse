@@ -103,6 +103,7 @@ add_library(
   src/camera.cpp
   src/cargo_box.cpp
   src/cargo_escort.cpp
+  src/cargo_extraction.cpp
   src/cargo_manifest.cpp
   src/cargo_route.cpp
   src/cargo_train.cpp
@@ -111,6 +112,7 @@ add_library(
   src/fixed_timestep.cpp
   src/flight.cpp
   src/game_context.cpp
+  src/game_session.cpp
   src/grand_central.cpp
   src/hud_notice.cpp
   src/input.cpp
@@ -199,6 +201,7 @@ if(HYPERVERSE_BUILD_TESTS)
     tests/drone_tests.cpp
     tests/fixed_timestep_tests.cpp
     tests/flight_tests.cpp
+    tests/game_session_tests.cpp
     tests/hud_notice_tests.cpp
     tests/input_tests.cpp
     tests/mining_tests.cpp

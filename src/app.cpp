@@ -3,6 +3,7 @@
 #include "hyperverse/camera.hpp"
 #include "hyperverse/cargo_box.hpp"
 #include "hyperverse/cargo_escort.hpp"
+#include "hyperverse/cargo_extraction.hpp"
 #include "hyperverse/cargo_manifest.hpp"
 #include "hyperverse/cargo_route.hpp"
 #include "hyperverse/cargo_train.hpp"
@@ -10,6 +11,7 @@
 #include "hyperverse/drone.hpp"
 #include "hyperverse/fixed_timestep.hpp"
 #include "hyperverse/flight.hpp"
+#include "hyperverse/game_session.hpp"
 #include "hyperverse/hud_notice.hpp"
 #include "hyperverse/input.hpp"
 #include "hyperverse/mining.hpp"
@@ -32,6 +34,7 @@
 #include <exception>
 #include <iostream>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace hyperverse {
@@ -55,9 +58,10 @@ int App::run(AccountCtx& account) {
     const CameraTuning camera_tuning{};
     const MiningLaserTuning mining_laser{};
     const ContractQuotaTuning quota{};
-    const ExtractionSite extraction_site{.position = {.x = 4300.0F, .y = 4300.0F}};
+    const ExtractionSite gathering_site{.position = {.x = 4300.0F, .y = 4300.0F}};
     const CargoBoxTuning cargo_box_tuning{.box_mass = quota.cargo_box_mass};
-    const CargoEscortRoute escort_route{.gate_position = {.x = 7600.0F, .y = 1600.0F}};
+    const CargoEscortRoute escort_route = extraction_route_from_gathering(gathering_site.position, sector);
+    const CargoExtractionTuning cargo_extraction_tuning{};
     const SectorPressureTuning pressure_tuning{.escalation_interval_seconds = 60.0F};
     const MiningDroneTuning mining_drone_tuning{};
     const ParticleCannonTuning particle_cannon_tuning{};
@@ -70,6 +74,11 @@ int App::run(AccountCtx& account) {
     };
     FlightInputMapper input_mapper;
     SemanticInputFrame latest_intent{};
+    GameSessionModel game_session{};
+    install_game_session_event_handlers(game_session, account.event_bus());
+    account.event_bus().appendListener(DomainEventType::CargoArrivedAtGate, [&account, &ship, sector](const DomainEvent& event) {
+      spawn_gate_combat_raiders(account.registry(), event.position, ship.position, sector, 3);
+    });
 
     std::cout << application_name() << " " << version() << "\n";
     window.set_title(std::string{application_name()} + " " + std::string{version()});
@@ -168,25 +177,45 @@ int App::run(AccountCtx& account) {
         }
 
         cargo_hud = update_cargo_manifest(cargo_manifest, account.registry(), quota);
-        escort_hud = update_cargo_escort_state(cargo_escort, cargo_hud, latest_intent);
+        escort_hud = update_cargo_escort_state(cargo_escort, cargo_hud, latest_intent, &account.event_bus());
         if (escort_hud.cargo_train_active && hud_notice.message.empty()) {
           push_hud_notice(hud_notice, "GET TO THE TRANSPORT GATE NOW");
         }
-        if (!escort_hud.cargo_train_active && escort_hud.phase != CargoEscortPhase::Complete) {
-          (void)sync_cargo_boxes(account.registry(), cargo_manifest, extraction_site, cargo_box_tuning);
+        if (escort_hud.phase == CargoEscortPhase::Mining || escort_hud.phase == CargoEscortPhase::Authorized) {
+          (void)sync_cargo_boxes(account.registry(), cargo_manifest, gathering_site, cargo_box_tuning);
         }
         route_hud = update_cargo_escort_route(cargo_escort, escort_route, ship, sector);
-        escort_hud = update_cargo_escort_arrival(cargo_escort, cargo_hud, route_hud);
+        escort_hud = update_cargo_escort_arrival(cargo_escort, cargo_hud, route_hud, &account.event_bus());
         train_hud = update_cargo_train(account.registry(), cargo_escort, ship, sector, timestep.tick_seconds());
-        raider_hud = update_raider_threat(
-          account.registry().get<RaiderShip>(entities.raider),
+        const CargoExtractionHudSnapshot extraction_hud = update_cargo_extraction(
           account.registry(),
           cargo_escort,
-          ship,
+          escort_route,
           sector,
           timestep.tick_seconds(),
-          raider_tuning
+          &account.event_bus(),
+          cargo_extraction_tuning
         );
+        (void)extraction_hud;
+        raider_hud = {};
+        std::vector<std::pair<entt::entity, RaiderHudSnapshot>> active_raiders;
+        for (auto [raider_entity, raider] : account.registry().view<RaiderShip>().each()) {
+          RaiderHudSnapshot current_raider = update_raider_threat(
+            raider,
+            account.registry(),
+            cargo_escort,
+            ship,
+            sector,
+            timestep.tick_seconds(),
+            raider_tuning
+          );
+          if (current_raider.active) {
+            active_raiders.emplace_back(raider_entity, current_raider);
+            if (!raider_hud.active || raider.role == RaiderRole::CargoThief) {
+              raider_hud = current_raider;
+            }
+          }
+        }
         if (raider_hud.active && hud_notice.message != "CONVOY UNDER ATTACK") {
           push_hud_notice(hud_notice, "CONVOY UNDER ATTACK");
         }
@@ -205,12 +234,14 @@ int App::run(AccountCtx& account) {
           WeaponTrigger{.aim = latest_intent.primary_aim, .active = latest_intent.particle_fire_active},
           particle_cannon_tuning
         );
-        update_raider_particle_cannon(
-          WeaponCtx{tick_ctx.entity_context(entities.raider)},
-          tick_ctx.entity_context(player),
-          WeaponTrigger{.active = raider_hud.active},
-          particle_cannon_tuning
-        );
+        for (const auto& [raider_entity, current_raider] : active_raiders) {
+          update_raider_particle_cannon(
+            WeaponCtx{tick_ctx.entity_context(raider_entity)},
+            tick_ctx.entity_context(player),
+            WeaponTrigger{.active = current_raider.active},
+            particle_cannon_tuning
+          );
+        }
         particle_hud = update_particle_projectiles(ProjectileSimCtx{tick_ctx, player}, particle_cannon_tuning);
         account.event_bus().process();
         pressure_hud = update_sector_pressure(pressure, timestep.tick_seconds(), pressure_tuning);

@@ -163,3 +163,23 @@ TEST_CASE("raider escape marks stolen cargo as lost") {
   CHECK(registry.get<hyperverse::CargoBox>(box_entity).state == hyperverse::CargoBoxState::Lost);
   CHECK((raider.target_box == entt::null));
 }
+
+TEST_CASE("gate combat raiders spawn as player attackers with particle cannons") {
+  entt::registry registry;
+  hyperverse::spawn_gate_combat_raiders(
+    registry,
+    {.x = 1000.0F, .y = 1000.0F},
+    {.x = 800.0F, .y = 1000.0F},
+    {.width = 9000.0F, .height = 9000.0F},
+    3
+  );
+
+  int combat_raiders = 0;
+  for (auto [entity, raider] : registry.view<hyperverse::RaiderShip>().each()) {
+    CHECK(raider.role == hyperverse::RaiderRole::Combat);
+    CHECK(registry.all_of<hyperverse::ParticleCannonModel>(entity));
+    ++combat_raiders;
+  }
+
+  CHECK(combat_raiders == 3);
+}

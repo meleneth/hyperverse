@@ -13,6 +13,9 @@ struct ExtractionSite {
 
 enum class CargoBoxState {
   Linked,
+  GateBound,
+  Extracting,
+  Extracted,
   Stolen,
   Lost,
 };
@@ -24,6 +27,7 @@ struct CargoBox {
   int index{0};
   OreTier tier{OreTier::Common};
   CargoBoxState state{CargoBoxState::Linked};
+  float extraction_seconds{0.0F};
 };
 
 struct CargoBoxTuning {
