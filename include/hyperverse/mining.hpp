@@ -17,6 +17,8 @@ enum class OreTier {
   Anomalous,
 };
 
+inline constexpr int OreTierCount = 5;
+
 struct OreTint {
   float r{0.78F};
   float g{0.80F};

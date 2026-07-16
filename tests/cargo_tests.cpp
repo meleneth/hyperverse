@@ -41,6 +41,29 @@ TEST_CASE("cargo manifest authorizes extraction and calculates over-quota bonus"
   CHECK(cargo.quota_fraction == Catch::Approx(1.0F));
 }
 
+TEST_CASE("cargo manifest calculates cash and score by ore tier") {
+  entt::registry registry;
+  const entt::entity common = registry.create();
+  const entt::entity rare = registry.create();
+  registry.emplace<hyperverse::MiningResource>(common, hyperverse::MiningResource{.tier = hyperverse::OreTier::Common, .extracted_mass = 10.0F});
+  registry.emplace<hyperverse::MiningResource>(rare, hyperverse::MiningResource{.tier = hyperverse::OreTier::Rare, .extracted_mass = 4.0F});
+  hyperverse::CargoManifest manifest;
+
+  const hyperverse::CargoHudSnapshot cargo = hyperverse::update_cargo_manifest(
+    manifest,
+    registry,
+    {
+      .cash_per_mass = {1.0F, 2.0F, 5.0F, 12.0F, 30.0F},
+      .score_per_cash = 10.0F,
+    }
+  );
+
+  CHECK(cargo.cash == Catch::Approx(30.0F));
+  CHECK(cargo.score == 300);
+  CHECK(manifest.delivered_mass_by_tier[static_cast<std::size_t>(hyperverse::OreTier::Common)] == Catch::Approx(10.0F));
+  CHECK(manifest.delivered_mass_by_tier[static_cast<std::size_t>(hyperverse::OreTier::Rare)] == Catch::Approx(4.0F));
+}
+
 TEST_CASE("cargo boxes are created at the extraction site from manifest mass") {
   entt::registry registry;
   const entt::entity asteroid = registry.create();
@@ -70,6 +93,38 @@ TEST_CASE("cargo boxes are created at the extraction site from manifest mass") {
   }
   CHECK(counted_boxes == 3);
   CHECK(saw_second_box);
+}
+
+TEST_CASE("cargo boxes inherit ore color tiers from extracted mass buckets") {
+  entt::registry registry;
+  const entt::entity common = registry.create();
+  const entt::entity rare = registry.create();
+  registry.emplace<hyperverse::MiningResource>(common, hyperverse::MiningResource{.tier = hyperverse::OreTier::Common, .extracted_mass = 10.0F});
+  registry.emplace<hyperverse::MiningResource>(rare, hyperverse::MiningResource{.tier = hyperverse::OreTier::Rare, .extracted_mass = 20.0F});
+  hyperverse::CargoManifest manifest;
+  (void)hyperverse::update_cargo_manifest(manifest, registry, {.cargo_box_mass = 10.0F});
+
+  (void)hyperverse::sync_cargo_boxes(
+    registry,
+    manifest,
+    {.position = {.x = 1000.0F, .y = 2000.0F}},
+    {.box_mass = 10.0F, .box_spacing = 50.0F}
+  );
+
+  int common_boxes = 0;
+  int rare_boxes = 0;
+  for (auto [entity, box] : registry.view<hyperverse::CargoBox>().each()) {
+    (void)entity;
+    if (box.tier == hyperverse::OreTier::Common) {
+      ++common_boxes;
+    }
+    if (box.tier == hyperverse::OreTier::Rare) {
+      ++rare_boxes;
+    }
+  }
+
+  CHECK(common_boxes == 1);
+  CHECK(rare_boxes == 2);
 }
 
 TEST_CASE("cargo escort arms when quota is authorized") {

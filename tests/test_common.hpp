@@ -21,6 +21,7 @@
 #include "hyperverse/pressure.hpp"
 #include "hyperverse/projectile.hpp"
 #include "hyperverse/raider.hpp"
+#include "hyperverse/radar_hud.hpp"
 #include "hyperverse/render_frame.hpp"
 #include "hyperverse/sector.hpp"
 #include "hyperverse/ship_status.hpp"

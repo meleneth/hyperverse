@@ -13,6 +13,7 @@
 #include "hyperverse/pressure.hpp"
 #include "hyperverse/projectile.hpp"
 #include "hyperverse/raider.hpp"
+#include "hyperverse/radar_hud.hpp"
 #include "hyperverse/ship_status.hpp"
 #include "hyperverse/targeting.hpp"
 
@@ -65,6 +66,7 @@ VerticalSliceEntities seed_vertical_slice(AccountCtx& account) {
   account.registry().emplace<SectorPressureModel>(entities.player);
   account.registry().emplace<SectorPressureHudSnapshot>(entities.player);
   account.registry().emplace<MiningDroneHudSnapshot>(entities.player);
+  account.registry().emplace<RadarHudModel>(entities.player);
   account.registry().emplace<ParticleCannonModel>(entities.player);
   account.registry().emplace<ParticleCannonHudSnapshot>(entities.player);
   account.event_bus().appendListener(DomainEventType::ParticleImpact, [&account, player = entities.player](const DomainEvent&) {

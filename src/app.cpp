@@ -16,6 +16,7 @@
 #include "hyperverse/pressure.hpp"
 #include "hyperverse/projectile.hpp"
 #include "hyperverse/raider.hpp"
+#include "hyperverse/radar_hud.hpp"
 #include "hyperverse/sdl_platform.hpp"
 #include "hyperverse/ship_status.hpp"
 #include "hyperverse/sprite_frame_builder.hpp"
@@ -26,6 +27,7 @@
 
 #include <SDL3/SDL.h>
 
+#include <algorithm>
 #include <chrono>
 #include <exception>
 #include <iostream>
@@ -59,6 +61,12 @@ int App::run(AccountCtx& account) {
     const MiningDroneTuning mining_drone_tuning{};
     const ParticleCannonTuning particle_cannon_tuning{};
     const RaiderTuning raider_tuning{};
+    const RadarHudTuning radar_tuning{
+      .max_targets = 6,
+      .update_interval_seconds = 0.25F,
+      .reveal_seconds = 0.5F,
+      .range_world = (static_cast<float>(std::min(renderer.width(), renderer.height())) * 0.5F) / 0.35F,
+    };
     FlightInputMapper input_mapper;
     SemanticInputFrame latest_intent{};
 
@@ -115,12 +123,14 @@ int App::run(AccountCtx& account) {
         SectorPressureModel& pressure = account.registry().get<SectorPressureModel>(player);
         SectorPressureHudSnapshot& pressure_hud = account.registry().get<SectorPressureHudSnapshot>(player);
         MiningDroneHudSnapshot& drone_hud = account.registry().get<MiningDroneHudSnapshot>(player);
+        RadarHudModel& radar_model = account.registry().get<RadarHudModel>(player);
         ParticleCannonHudSnapshot& particle_hud = account.registry().get<ParticleCannonHudSnapshot>(player);
         RaiderHudSnapshot& raider_hud = account.registry().get<RaiderHudSnapshot>(player);
         CargoRecoveryHudSnapshot& recovery_hud = account.registry().get<CargoRecoveryHudSnapshot>(player);
         CollisionHudSnapshot& collision_hud = account.registry().get<CollisionHudSnapshot>(player);
 
         update_camera_anchor(camera, ship, sector, camera_tuning, timestep.tick_seconds());
+        update_radar_hud(radar_model, account.registry(), ship, sector, timestep.tick_seconds(), radar_tuning);
         update_ship_status(ship_health, round_timer, timestep.tick_seconds());
         update_hud_notice(hud_notice, timestep.tick_seconds());
         update_target_lock(target_lock, account.registry(), ship.position, ship.velocity, latest_intent, sector);

@@ -13,10 +13,12 @@
 #include "hyperverse/pressure.hpp"
 #include "hyperverse/projectile.hpp"
 #include "hyperverse/raider.hpp"
+#include "hyperverse/radar_hud.hpp"
 #include "hyperverse/ship_status.hpp"
 #include "hyperverse/targeting.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <numbers>
 #include <string>
@@ -56,13 +58,30 @@ constexpr float ScreenAnchorYFraction = 0.75F;
          sprite.center_y_ndc + sprite.half_height_ndc >= -1.0F && sprite.center_y_ndc - sprite.half_height_ndc <= 1.0F;
 }
 
-[[nodiscard]] float hud_radar_radius_world(std::uint32_t width, std::uint32_t height) {
-  const float half_small_viewport = static_cast<float>(std::min(width, height)) * 0.5F;
-  return half_small_viewport / PixelsPerWorldUnit;
+[[nodiscard]] const char* ore_tier_code(hyperverse::OreTier tier) {
+  switch (tier) {
+    case hyperverse::OreTier::Common:
+      return "COM";
+    case hyperverse::OreTier::Industrial:
+      return "IND";
+    case hyperverse::OreTier::Rare:
+      return "RAR";
+    case hyperverse::OreTier::Exotic:
+      return "EXO";
+    case hyperverse::OreTier::Anomalous:
+      return "ANO";
+  }
+  return "ORE";
 }
 
 [[nodiscard]] float ship_sprite_rotation(float facing_radians) {
   return facing_radians + (std::numbers::pi_v<float> * 0.5F);
+}
+
+[[nodiscard]] hyperverse::SpriteDraw scaled_bounds(hyperverse::SpriteDraw bounds, float scale) {
+  bounds.half_width_ndc *= scale;
+  bounds.half_height_ndc *= scale;
+  return bounds;
 }
 
 void tint_sprite(hyperverse::SpriteDraw& sprite, float r, float g, float b, float a = 1.0F) {
@@ -280,6 +299,7 @@ SpriteFrame build_sprite_frame(
   const CargoEscortRouteHudSnapshot& route_hud = account.registry().get<CargoEscortRouteHudSnapshot>(player);
   const SectorPressureHudSnapshot& pressure_hud = account.registry().get<SectorPressureHudSnapshot>(player);
   const MiningDroneHudSnapshot& drone_hud = account.registry().get<MiningDroneHudSnapshot>(player);
+  const RadarHudModel& radar_model = account.registry().get<RadarHudModel>(player);
   const ParticleCannonHudSnapshot& particle_hud = account.registry().get<ParticleCannonHudSnapshot>(player);
   const RaiderHudSnapshot& raider_hud = account.registry().get<RaiderHudSnapshot>(player);
   const CargoRecoveryHudSnapshot& recovery_hud = account.registry().get<CargoRecoveryHudSnapshot>(player);
@@ -349,7 +369,7 @@ SpriteFrame build_sprite_frame(
   for (entt::entity drone_entity : mining_drones) {
     const MiningDrone& drone = account.registry().get<MiningDrone>(drone_entity);
     SpriteDraw drone_sprite =
-      make_world_sprite(SpriteTexture::Drone, drone.position, camera.position, sector, width, height, 42.0F, ship_sprite_rotation(drone.facing_radians));
+      make_world_sprite(SpriteTexture::Drone, drone.position, camera.position, sector, width, height, 28.0F, ship_sprite_rotation(drone.facing_radians));
     if (drone.phase == MiningDronePhase::Mining) {
       tint_sprite(drone_sprite, 0.55F, 1.0F, 0.65F);
     }
@@ -358,23 +378,41 @@ SpriteFrame build_sprite_frame(
   const RaiderShip& raider = account.registry().get<RaiderShip>(raider_entity);
   if (raider_hud.active) {
     SpriteDraw raider_sprite = make_world_sprite(
-      SpriteTexture::Raider,
+      SpriteTexture::Drone,
       raider.position,
       camera.position,
       sector,
       width,
       height,
-      52.0F,
+      46.0F,
       ship_sprite_rotation(std::atan2(raider.velocity.y, raider.velocity.x))
     );
     if (raider.phase == RaiderPhase::Disrupting) {
-      tint_sprite(raider_sprite, 1.0F, 0.24F, 0.18F);
+      tint_sprite(raider_sprite, 0.86F, 0.32F, 0.12F);
+    } else {
+      tint_sprite(raider_sprite, 0.55F, 0.34F, 0.16F);
     }
     frame.sprites.push_back(raider_sprite);
   }
   frame.sprites.push_back(make_world_sprite(SpriteTexture::Ship, ship.position, camera.position, sector, width, height, 56.0F, ship_sprite_rotation(ship.facing_radians)));
   if (!hud_notice.message.empty()) {
     add_hud_text(frame.sprites, hud_notice.message, -0.40F, 0.96F, 0.04F, 1.0F, 0.88F, 0.24F);
+  }
+  add_hud_text(frame.sprites, "MIN", -0.96F, 0.985F, 0.028F, 0.78F, 0.92F, 1.0F);
+  std::array<bool, OreTierCount> spawned_tiers{};
+  for (auto [entity, resource] : account.registry().view<MiningResource>().each()) {
+    (void)entity;
+    spawned_tiers[static_cast<std::size_t>(resource.tier)] = true;
+  }
+  float legend_x = -0.86F;
+  for (int tier_index = 0; tier_index < OreTierCount; ++tier_index) {
+    if (!spawned_tiers[static_cast<std::size_t>(tier_index)]) {
+      continue;
+    }
+    const OreTier tier = static_cast<OreTier>(tier_index);
+    const OreTint tint = ore_tint(tier);
+    add_hud_text(frame.sprites, ore_tier_code(tier), legend_x, 0.985F, 0.028F, tint.r, tint.g, tint.b);
+    legend_x += 0.068F;
   }
   add_hud_text(frame.sprites, "SPD " + std::to_string(static_cast<int>(hud.speed)), -0.96F, 0.92F, 0.045F);
   add_hud_text(frame.sprites, "SHD", -0.96F, 0.52F, 0.033F, 0.45F, 0.85F, 1.0F);
@@ -387,6 +425,8 @@ SpriteFrame build_sprite_frame(
   add_hud_text(frame.sprites, "POS " + std::to_string(static_cast<int>(ship.position.x)) + " " + std::to_string(static_cast<int>(ship.position.y)), -0.96F, 0.68F, 0.035F);
   add_hud_text(frame.sprites, "ORE " + std::to_string(static_cast<int>(cargo_hud.delivered_mass)), -0.96F, 0.86F, 0.045F, 0.72F, 1.0F, 0.72F);
   add_hud_text(frame.sprites, "BOX " + std::to_string(cargo_hud.cargo_boxes), -0.96F, 0.80F, 0.045F, 0.72F, 1.0F, 0.72F);
+  add_hud_text(frame.sprites, "CSH " + std::to_string(static_cast<int>(cargo_hud.cash)), -0.96F, 0.31F, 0.033F, 0.86F, 1.0F, 0.52F);
+  add_hud_text(frame.sprites, "SCR " + std::to_string(cargo_hud.score), -0.96F, 0.26F, 0.033F, 0.86F, 1.0F, 0.52F);
   add_hud_text(frame.sprites, "PRS " + std::to_string(pressure_hud.escalation_level), -0.96F, 0.74F, 0.045F, 1.0F, 0.82F, 0.42F);
   add_hud_text(frame.sprites, "PCT " + std::to_string(static_cast<int>(pressure_hud.pressure_fraction * 100.0F)), -0.96F, 0.63F, 0.035F, 1.0F, 0.82F, 0.42F);
   if (has_locked_target(target_lock)) {
@@ -424,18 +464,19 @@ SpriteFrame build_sprite_frame(
     add_hud_text(frame.sprites, "IMP " + std::to_string(static_cast<int>(collision_hud.time_to_contact_seconds)), 0.48F, 0.58F, 0.04F, 1.0F, 0.85F, 0.2F);
   }
 
-  const float radar_radius_world = hud_radar_radius_world(width, height);
-  for (auto [entity, asteroid] : account.registry().view<AsteroidBody>().each()) {
-    (void)entity;
-    if (wrapped_distance(ship.position, asteroid.position, sector) > radar_radius_world) {
+  for (const RadarTrackedTarget& tracked : radar_model.tracked_targets) {
+    if (!account.registry().valid(tracked.target) || !account.registry().all_of<AsteroidBody>(tracked.target)) {
       continue;
     }
+    const AsteroidBody& asteroid = account.registry().get<AsteroidBody>(tracked.target);
     const SpriteDraw radar_bounds =
       make_world_sprite(SpriteTexture::Reticle, asteroid.position, camera.position, sector, width, height, (asteroid.radius * 0.48F) + 18.0F);
     if (!sprite_overlaps_screen(radar_bounds)) {
       continue;
     }
-    add_box_lines(frame.lines, radar_bounds, 0.22F, 0.86F, 1.0F, 0.42F);
+    const float reveal_fraction = std::clamp(tracked.reveal_seconds / 0.5F, 0.0F, 1.0F);
+    const float eased = reveal_fraction * reveal_fraction * (3.0F - (2.0F * reveal_fraction));
+    add_box_lines(frame.lines, scaled_bounds(radar_bounds, std::max(0.02F, eased)), 0.22F, 0.86F, 1.0F, 0.42F);
   }
   if (has_locked_target(target_lock) && account.registry().valid(target_lock.target)) {
     const AsteroidBody& target = account.registry().get<AsteroidBody>(target_lock.target);
@@ -467,10 +508,12 @@ SpriteFrame build_sprite_frame(
       } else if (box.state == CargoBoxState::Stolen) {
         add_box_lines(frame.lines, box_bounds, 1.0F, 0.2F, 0.15F);
       } else {
-        add_box_lines(frame.lines, box_bounds, 0.35F, 0.9F, 1.0F);
+        const OreTint tint = ore_tint(box.tier);
+        add_box_lines(frame.lines, box_bounds, tint.r, tint.g, tint.b);
       }
     } else {
-      add_box_lines(frame.lines, box_bounds, 0.4F, 1.0F, 0.52F);
+      const OreTint tint = ore_tint(box.tier);
+      add_box_lines(frame.lines, box_bounds, tint.r, tint.g, tint.b);
     }
   }
   if (escort_hud.cargo_train_active) {

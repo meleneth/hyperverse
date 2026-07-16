@@ -22,6 +22,7 @@ struct CargoBox {
   Vec2 velocity{};
   float mass{0.0F};
   int index{0};
+  OreTier tier{OreTier::Common};
   CargoBoxState state{CargoBoxState::Linked};
 };
 

@@ -36,6 +36,7 @@ struct MiningDroneTuning {
   float integrity_damage_per_second{5.0F};
   float extraction_per_second{3.5F};
   float work_angle_rotation_radians_per_second{0.18F};
+  float facing_dead_stick_speed{24.0F};
 };
 
 struct MiningDroneHudSnapshot {

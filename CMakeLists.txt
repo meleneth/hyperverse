@@ -119,6 +119,7 @@ add_library(
   src/pressure.cpp
   src/projectile.cpp
   src/raider.cpp
+  src/radar_hud.cpp
   src/render_frame.cpp
   src/sector.cpp
   src/scoped_log.cpp
@@ -203,6 +204,7 @@ if(HYPERVERSE_BUILD_TESTS)
     tests/pressure_tests.cpp
     tests/projectile_tests.cpp
     tests/raider_tests.cpp
+    tests/radar_hud_tests.cpp
     tests/render_frame_tests.cpp
     tests/sector_tests.cpp
     tests/ship_status_tests.cpp

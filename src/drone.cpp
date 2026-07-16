@@ -25,6 +25,12 @@ constexpr float TauRadians = 6.28318530718F;
   return wrap_position(ship.position - (forward * trail_offset) + (right * side_offset), sector);
 }
 
+void update_facing_from_velocity(MiningDrone& drone, float dead_stick_speed) {
+  if (length(drone.velocity) >= dead_stick_speed) {
+    drone.facing_radians = std::atan2(drone.velocity.y, drone.velocity.x);
+  }
+}
+
 }  // namespace
 
 MiningDroneHudSnapshot update_mining_drone(
@@ -56,11 +62,11 @@ MiningDroneHudSnapshot update_mining_drone(
     hud.target_distance = length(to_formation);
     if (hud.target_distance > tuning.arrival_tolerance) {
       drone.velocity = normalize_or_zero(to_formation) * tuning.max_speed;
-      drone.facing_radians = std::atan2(drone.velocity.y, drone.velocity.x);
+      update_facing_from_velocity(drone, tuning.facing_dead_stick_speed);
       drone.position = wrap_position(drone.position + (drone.velocity * dt_seconds), sector);
     } else {
       drone.velocity = ship.velocity;
-      drone.facing_radians = ship.facing_radians;
+      update_facing_from_velocity(drone, tuning.facing_dead_stick_speed);
     }
     hud.phase = drone.phase;
     return hud;
@@ -77,7 +83,7 @@ MiningDroneHudSnapshot update_mining_drone(
   if (length(to_work_position) > tuning.arrival_tolerance) {
     drone.phase = MiningDronePhase::Travelling;
     drone.velocity = normalize_or_zero(to_work_position) * tuning.max_speed;
-    drone.facing_radians = std::atan2(drone.velocity.y, drone.velocity.x);
+    update_facing_from_velocity(drone, tuning.facing_dead_stick_speed);
     drone.position = wrap_position(drone.position + (drone.velocity * dt_seconds), sector);
   } else {
     drone.phase = MiningDronePhase::Mining;
