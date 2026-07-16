@@ -13,10 +13,13 @@ TEST_CASE("sector pressure escalates on a tunable interval") {
   const hyperverse::SectorPressureHudSnapshot before = hyperverse::update_sector_pressure(pressure, 9.0F, tuning);
   CHECK(before.escalation_level == 0);
   CHECK(before.next_escalation_seconds == Catch::Approx(1.0F));
+  CHECK(before.escalation_progress_fraction == Catch::Approx(0.9F));
   CHECK_FALSE(before.escalation_announced);
 
   const hyperverse::SectorPressureHudSnapshot after = hyperverse::update_sector_pressure(pressure, 1.0F, tuning);
   CHECK(after.escalation_level == 1);
+  CHECK(after.next_escalation_seconds == Catch::Approx(10.0F));
+  CHECK(after.escalation_progress_fraction == Catch::Approx(0.0F));
   CHECK(after.pressure_fraction == Catch::Approx(0.25F));
   CHECK(after.escalation_announced);
 }

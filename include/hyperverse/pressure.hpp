@@ -19,6 +19,7 @@ struct SectorPressureHudSnapshot {
   float elapsed_seconds{0.0F};
   float next_escalation_seconds{0.0F};
   float pressure_fraction{0.0F};
+  float escalation_progress_fraction{0.0F};
   bool escalation_announced{false};
 };
 

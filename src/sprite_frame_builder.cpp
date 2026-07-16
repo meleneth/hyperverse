@@ -210,6 +210,28 @@ void add_face_button_legend(std::vector<hyperverse::SpriteDraw>& sprites, const 
   }
 }
 
+void add_urgency_hud(
+  std::vector<hyperverse::SpriteDraw>& sprites,
+  std::vector<hyperverse::LineDraw>& lines,
+  const hyperverse::RoundTimer& round_timer,
+  const hyperverse::SectorPressureHudSnapshot& pressure_hud
+) {
+  const int round_remaining = static_cast<int>(std::ceil(std::max(0.0F, round_timer.duration_seconds - round_timer.elapsed_seconds)));
+  const int next_threat = static_cast<int>(std::ceil(std::max(0.0F, pressure_hud.next_escalation_seconds)));
+  add_hud_text(sprites, "ROUND " + std::to_string(round_remaining), -0.20F, -0.955F, 0.034F, 0.92F, 1.0F, 0.72F);
+  add_hud_text(
+    sprites,
+    "THREAT " + std::to_string(pressure_hud.escalation_level) + " NEXT " + std::to_string(next_threat),
+    -0.26F,
+    -0.912F,
+    0.03F,
+    1.0F,
+    0.74F,
+    0.32F
+  );
+  add_hud_bar(lines, -0.26F, -0.872F, 0.52F, pressure_hud.escalation_progress_fraction, 1.0F, 0.48F, 0.2F);
+}
+
 void add_composition_line(
   std::vector<hyperverse::SpriteDraw>& sprites,
   std::string_view name,
@@ -530,6 +552,7 @@ SpriteFrame build_sprite_frame(
     add_gathering_edge_indicator(frame.sprites, frame.lines, ship.position, gathering_site->position, sector, width, height);
   }
 
+  add_urgency_hud(frame.sprites, frame.lines, round_timer, pressure_hud);
   add_face_button_legend(frame.sprites, input);
   add_hud_text(frame.sprites, "MINERALS", -0.96F, -0.955F, 0.026F, 0.78F, 0.92F, 1.0F);
   std::array<float, 7> mineral_mass{};

@@ -261,7 +261,11 @@ int App::run(AccountCtx& account) {
         }
         particle_hud = update_particle_projectiles(ProjectileSimCtx{tick_ctx, player}, particle_cannon_tuning);
         account.event_bus().process();
+        const int previous_pressure_level = pressure.escalation_level;
         pressure_hud = update_sector_pressure(pressure, timestep.tick_seconds(), pressure_tuning);
+        if (pressure.escalation_level > previous_pressure_level) {
+          push_hud_notice(hud_notice, "THREAT LEVEL INCREASED");
+        }
         collision_hud = predict_ship_asteroid_collision(ship, account.registry(), sector);
       }
 

@@ -71,12 +71,14 @@ eight mining drones until progression is defined. The HUD reports position, spee
 target mass, ore rarity value, mineral composition, extracted ore, cargo quota, sector pressure,
 drone state, collision warnings, escort state, raider disruption, stolen cargo escape, and recovery
 state. The upper-right HUD face-button legend shows the current face-button meanings and changes
-when the tool trigger is held.
+when the tool trigger is held. The top-center urgency HUD shows round time remaining, current
+threat level, next threat countdown, and a progress bar toward the next escalation.
 
 ## Current Gameplay Considerations
 
 - Ore value is tiered and color-coded by rarity. Cheap bulk ore is intentionally much less important than premium rare, exotic, and anomalous material.
 - Asteroid mass and structural damage are separate. Damage means "how close this rock is to breaking up"; extraction means "how much useful mass has been removed."
+- Round timer and threat escalation are primary pressure systems. Threat level advances on the development one-minute cadence and is visible as a countdown/progress bar.
 - Large asteroids have two break levels. Breakup creates recoverable component chunks from the parent mineral distribution, with some material deliberately lost when the parent has several meaningful components.
 - Kinetic particle impacts transfer velocity into asteroid mass. Glancing kinetic hits also impart rotational velocity from impact angle, so spinning rocks become a real hazard.
 - The harpoon latches to locked asteroids, pulls the ship toward the rock's surface motion, and applies full-engine-power velocity matching to help slow a rock for drone harvesting. Boosting detaches the harpoon.

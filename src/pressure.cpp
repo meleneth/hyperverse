@@ -24,11 +24,13 @@ SectorPressureHudSnapshot update_sector_pressure(
   }
 
   const float next_boundary = static_cast<float>(pressure.escalation_level + 1) * interval;
+  const float level_elapsed = pressure.elapsed_seconds - (static_cast<float>(pressure.escalation_level) * interval);
   return {
     .escalation_level = pressure.escalation_level,
     .elapsed_seconds = pressure.elapsed_seconds,
     .next_escalation_seconds = std::max(0.0F, next_boundary - pressure.elapsed_seconds),
     .pressure_fraction = std::clamp(static_cast<float>(pressure.escalation_level) * tuning.pressure_per_level, 0.0F, 1.0F),
+    .escalation_progress_fraction = std::clamp(level_elapsed / interval, 0.0F, 1.0F),
     .escalation_announced = pressure.announcement_seconds_remaining > 0.0F,
   };
 }
