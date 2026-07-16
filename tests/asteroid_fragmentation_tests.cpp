@@ -18,6 +18,7 @@ namespace {
       .scan_confidence = 0.5F,
     }
   );
+  registry.emplace<hyperverse::AsteroidMass>(asteroid, hyperverse::AsteroidMass{.initial_mass = 240.0F, .remaining_mass = 160.0F});
   registry.emplace<hyperverse::MiningResource>(asteroid, hyperverse::MiningResource{.tier = hyperverse::OreTier::Rare});
   registry.emplace<hyperverse::MineralComposition>(asteroid, hyperverse::mineral_composition_for_tier(hyperverse::OreTier::Rare));
   return asteroid;
@@ -43,6 +44,7 @@ TEST_CASE("laser fragmentation keeps child vectors nearly coherent") {
     CHECK(body.velocity.x == Catch::Approx(50.0F));
     CHECK(body.velocity.y > -5.0F);
     CHECK(body.velocity.y < 20.0F);
+    CHECK(registry.get<hyperverse::AsteroidMass>(fragment).remaining_mass == Catch::Approx(40.0F));
     CHECK(registry.get<hyperverse::MiningResource>(fragment).tier == hyperverse::OreTier::Rare);
     CHECK(registry.all_of<hyperverse::MineralComposition>(fragment));
   }

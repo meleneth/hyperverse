@@ -1,5 +1,6 @@
 #include "hyperverse/projectile.hpp"
 
+#include "hyperverse/asteroid_mass.hpp"
 #include "jolt_shape_queries.hpp"
 
 #include <boost/sml.hpp>
@@ -65,8 +66,16 @@ void replay_phase(sml::sm<ParticleCannonMachine>& machine, ParticleCannonPhase p
   return false;
 }
 
-void apply_projectile_damage(AsteroidBody& asteroid, MiningResource& resource, const ParticleShot& projectile, const ParticleCannonTuning& tuning) {
+void apply_projectile_damage(
+  entt::registry& registry,
+  entt::entity asteroid_entity,
+  AsteroidBody& asteroid,
+  MiningResource& resource,
+  const ParticleShot& projectile,
+  const ParticleCannonTuning& tuning
+) {
   resource.integrity = std::max(0.0F, resource.integrity - projectile.damage);
+  sync_asteroid_mass_to_integrity(registry, asteroid_entity, resource.integrity / 100.0F);
   const float remaining_fraction = std::clamp(resource.integrity / 100.0F, tuning.asteroid_min_radius_fraction, 1.0F);
   asteroid.radius = std::max(MinimumPlayableAsteroidRadius, asteroid.base_radius * remaining_fraction);
 }
@@ -257,7 +266,7 @@ ParticleCannonHudSnapshot update_particle_projectiles(
               asteroid.radius,
               relative_position
             )) {
-          apply_projectile_damage(asteroid, resource, projectile, tuning);
+          apply_projectile_damage(registry, asteroid_entity, asteroid, resource, projectile, tuning);
           ctx.event_bus().enqueue(
             DomainEventType::ParticleImpact,
             DomainEvent{

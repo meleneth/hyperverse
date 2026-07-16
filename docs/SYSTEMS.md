@@ -158,6 +158,8 @@ Candidate drone roles:
 
 Endgame may support approximately 8 drones, but this is a tuning target rather than a fixed promise.
 
+Drone movement speed, acceleration/formation response, mining efficiency, extraction efficiency, and travel-to-work behavior should become upgradeable equipment axes. Current builds start with strong values so the slice shows the intended high-end feel first.
+
 Initial implementation should begin with 2 drones:
 
 - one mining drone

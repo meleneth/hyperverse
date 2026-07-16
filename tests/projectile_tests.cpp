@@ -95,6 +95,7 @@ TEST_CASE("particle cannon damages and shrinks asteroids on Jolt overlap") {
     hyperverse::AsteroidBody{.position = {.x = 120.0F, .y = 100.0F}, .radius = 80.0F, .base_radius = 80.0F}
   );
   account.registry().emplace<hyperverse::MiningResource>(asteroid);
+  account.registry().emplace<hyperverse::AsteroidMass>(asteroid, hyperverse::AsteroidMass{.initial_mass = 80.0F, .remaining_mass = 80.0F});
   const entt::entity particle = account.registry().create();
   account.registry().emplace<hyperverse::ParticleShot>(
     particle,
@@ -110,6 +111,7 @@ TEST_CASE("particle cannon damages and shrinks asteroids on Jolt overlap") {
   CHECK(hud.impacts == 0);
   CHECK(event_hud.impacts == 1);
   CHECK(account.registry().get<hyperverse::MiningResource>(asteroid).integrity == Catch::Approx(75.0F));
+  CHECK(account.registry().get<hyperverse::AsteroidMass>(asteroid).remaining_mass == Catch::Approx(60.0F));
   CHECK(account.registry().get<hyperverse::AsteroidBody>(asteroid).radius == Catch::Approx(75.0F));
   CHECK(particle_count(account.registry()) == 0);
 }

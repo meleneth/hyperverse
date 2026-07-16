@@ -9,6 +9,7 @@
 #include <eventpp/eventqueue.h>
 
 #include "hyperverse/account_context.hpp"
+#include "hyperverse/asteroid_mass.hpp"
 #include "hyperverse/fixed_timestep.hpp"
 #include "hyperverse/flight.hpp"
 #include "hyperverse/hud_notice.hpp"

@@ -23,7 +23,7 @@ struct RadarHudModel {
 };
 
 struct RadarHudTuning {
-  int max_targets{6};
+  int max_targets{10};
   float update_interval_seconds{0.25F};
   float reveal_seconds{0.5F};
   float range_world{0.0F};

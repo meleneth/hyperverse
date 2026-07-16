@@ -115,7 +115,8 @@ RawInputFrame GamepadSlot::sample() const {
     };
     raw.confirm = raw.confirm || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_SOUTH);
     raw.cancel = raw.cancel || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_EAST);
-    raw.target_cycle = raw.target_cycle || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
+    raw.target_cycle = raw.target_cycle || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER) ||
+                       SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
     raw.particle_fire = raw.particle_fire || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_WEST);
     raw.tool_intensity = std::max(raw.tool_intensity, trigger(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER));
   }

@@ -99,6 +99,7 @@ add_library(
   src/account_state.cpp
   src/app.cpp
   src/asteroid_fragmentation.cpp
+  src/asteroid_mass.cpp
   src/camera.cpp
   src/cargo_box.cpp
   src/cargo_escort.cpp

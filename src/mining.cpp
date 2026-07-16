@@ -1,6 +1,7 @@
 #include "hyperverse/mining.hpp"
 
 #include "hyperverse/asteroid_fragmentation.hpp"
+#include "hyperverse/asteroid_mass.hpp"
 #include "jolt_shape_queries.hpp"
 
 #include <algorithm>
@@ -105,6 +106,23 @@ MineralComposition mineral_composition_for_tier(OreTier tier) {
   return {};
 }
 
+const char* ore_tier_name(OreTier tier) {
+  switch (tier) {
+    case OreTier::Common:
+      return "COMMON";
+    case OreTier::Industrial:
+      return "INDUSTRIAL";
+    case OreTier::Rare:
+      return "RARE";
+    case OreTier::Exotic:
+      return "EXOTIC";
+    case OreTier::Anomalous:
+      return "ANOMALOUS";
+  }
+
+  return "UNKNOWN";
+}
+
 OreTint ore_tint(OreTier tier) {
   return ore_tint(mineral_composition_for_tier(tier));
 }
@@ -182,6 +200,7 @@ MiningHudSnapshot update_mining_laser(
   }
 
   const float remaining_fraction = std::clamp(resource.integrity / 100.0F, AsteroidMinimumRadiusFraction, 1.0F);
+  sync_asteroid_mass_to_integrity(registry, target.entity, resource.integrity / 100.0F);
   asteroid.radius = std::max(MinimumPlayableAsteroidRadius, asteroid.base_radius * remaining_fraction);
   if (resource.integrity <= 0.0F) {
     populate_hud_from_resource(hud, resource, tuning);

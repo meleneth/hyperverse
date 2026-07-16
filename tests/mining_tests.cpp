@@ -63,6 +63,7 @@ TEST_CASE("mining laser reduces asteroid collision mass as integrity drops") {
     hyperverse::AsteroidBody{.position = {.x = 350.0F, .y = 100.0F}, .radius = 80.0F, .base_radius = 80.0F}
   );
   registry.emplace<hyperverse::MiningResource>(asteroid);
+  registry.emplace<hyperverse::AsteroidMass>(asteroid, hyperverse::AsteroidMass{.initial_mass = 80.0F, .remaining_mass = 80.0F});
 
   (void)hyperverse::update_mining_laser(
     registry,
@@ -75,6 +76,7 @@ TEST_CASE("mining laser reduces asteroid collision mass as integrity drops") {
   );
 
   CHECK(registry.get<hyperverse::AsteroidBody>(asteroid).radius == Catch::Approx(75.0F));
+  CHECK(registry.get<hyperverse::AsteroidMass>(asteroid).remaining_mass == Catch::Approx(40.0F));
 }
 
 TEST_CASE("mining depletion keeps asteroids at one sixth of base radius") {

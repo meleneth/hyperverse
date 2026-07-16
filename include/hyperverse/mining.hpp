@@ -46,6 +46,7 @@ struct MiningResource {
 };
 
 [[nodiscard]] MineralComposition mineral_composition_for_tier(OreTier tier);
+[[nodiscard]] const char* ore_tier_name(OreTier tier);
 [[nodiscard]] OreTint ore_tint(OreTier tier);
 [[nodiscard]] OreTint ore_tint(const MineralComposition& composition);
 

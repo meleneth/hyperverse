@@ -1,5 +1,6 @@
 #include "hyperverse/sprite_frame_builder.hpp"
 
+#include "hyperverse/asteroid_mass.hpp"
 #include "hyperverse/camera.hpp"
 #include "hyperverse/cargo_box.hpp"
 #include "hyperverse/cargo_escort.hpp"
@@ -22,6 +23,7 @@
 #include <cmath>
 #include <numbers>
 #include <string>
+#include <string_view>
 
 namespace {
 
@@ -56,22 +58,6 @@ constexpr float ScreenAnchorYFraction = 0.75F;
 [[nodiscard]] bool sprite_overlaps_screen(const hyperverse::SpriteDraw& sprite) {
   return sprite.center_x_ndc + sprite.half_width_ndc >= -1.0F && sprite.center_x_ndc - sprite.half_width_ndc <= 1.0F &&
          sprite.center_y_ndc + sprite.half_height_ndc >= -1.0F && sprite.center_y_ndc - sprite.half_height_ndc <= 1.0F;
-}
-
-[[nodiscard]] const char* ore_tier_code(hyperverse::OreTier tier) {
-  switch (tier) {
-    case hyperverse::OreTier::Common:
-      return "COM";
-    case hyperverse::OreTier::Industrial:
-      return "IND";
-    case hyperverse::OreTier::Rare:
-      return "RAR";
-    case hyperverse::OreTier::Exotic:
-      return "EXO";
-    case hyperverse::OreTier::Anomalous:
-      return "ANO";
-  }
-  return "ORE";
 }
 
 [[nodiscard]] float ship_sprite_rotation(float facing_radians) {
@@ -195,6 +181,73 @@ void add_hud_bar(
   const float clamped = std::clamp(fraction, 0.0F, 1.0F);
   lines.push_back({.start_x_ndc = left_ndc, .start_y_ndc = y_ndc, .end_x_ndc = left_ndc + width_ndc, .end_y_ndc = y_ndc, .r = 0.16F, .g = 0.20F, .b = 0.24F, .a = 0.88F});
   lines.push_back({.start_x_ndc = left_ndc, .start_y_ndc = y_ndc, .end_x_ndc = left_ndc + (width_ndc * clamped), .end_y_ndc = y_ndc, .r = r, .g = g, .b = b, .a = 1.0F});
+}
+
+void add_composition_line(
+  std::vector<hyperverse::SpriteDraw>& sprites,
+  std::string_view name,
+  float fraction,
+  float left_ndc,
+  float top_ndc
+) {
+  if (fraction <= 0.005F) {
+    return;
+  }
+  add_hud_text(
+    sprites,
+    std::string{name} + " " + std::to_string(static_cast<int>(std::round(fraction * 100.0F))),
+    left_ndc,
+    top_ndc,
+    0.026F,
+    0.78F,
+    0.95F,
+    1.0F
+  );
+}
+
+void add_target_inspection_panel(
+  std::vector<hyperverse::SpriteDraw>& sprites,
+  std::vector<hyperverse::LineDraw>& lines,
+  const hyperverse::AsteroidMass* mass,
+  const hyperverse::MiningResource* resource,
+  const hyperverse::MineralComposition* composition
+) {
+  constexpr float left = -0.30F;
+  constexpr float top = 0.88F;
+  constexpr float width = 0.60F;
+  constexpr float height = 0.30F;
+  add_box_lines(
+    lines,
+    hyperverse::SpriteDraw{
+      .center_x_ndc = left + (width * 0.5F),
+      .center_y_ndc = top - (height * 0.5F),
+      .half_width_ndc = width * 0.5F,
+      .half_height_ndc = height * 0.5F,
+    },
+    0.32F,
+    0.88F,
+    1.0F,
+    0.72F
+  );
+
+  const float remaining_mass = mass != nullptr ? mass->remaining_mass : 0.0F;
+  const int estimated_mass = static_cast<int>(std::round(remaining_mass));
+  add_hud_text(sprites, "TARGET ROCK", left + 0.03F, top - 0.03F, 0.032F, 0.78F, 0.95F, 1.0F);
+  add_hud_text(sprites, "MASS " + std::to_string(estimated_mass), left + 0.03F, top - 0.075F, 0.028F, 0.88F, 1.0F, 0.72F);
+  if (resource != nullptr) {
+    add_hud_text(sprites, std::string{"CLASS "} + ore_tier_name(resource->tier), left + 0.31F, top - 0.075F, 0.026F, 0.88F, 1.0F, 0.72F);
+  }
+
+  if (composition == nullptr) {
+    return;
+  }
+  add_composition_line(sprites, "SILICATE", composition->silicate, left + 0.03F, top - 0.12F);
+  add_composition_line(sprites, "FERRITE", composition->ferrite, left + 0.03F, top - 0.152F);
+  add_composition_line(sprites, "NICKEL", composition->nickel, left + 0.03F, top - 0.184F);
+  add_composition_line(sprites, "COBALT", composition->cobalt, left + 0.03F, top - 0.216F);
+  add_composition_line(sprites, "IRIDIUM", composition->iridium, left + 0.31F, top - 0.12F);
+  add_composition_line(sprites, "EXOTIC CRYSTAL", composition->exotic_crystal, left + 0.31F, top - 0.152F);
+  add_composition_line(sprites, "ANOMALOUS MATTER", composition->anomalous_matter, left + 0.31F, top - 0.184F);
 }
 
 void add_world_link_line(
@@ -398,21 +451,43 @@ SpriteFrame build_sprite_frame(
   if (!hud_notice.message.empty()) {
     add_hud_text(frame.sprites, hud_notice.message, -0.40F, 0.96F, 0.04F, 1.0F, 0.88F, 0.24F);
   }
-  add_hud_text(frame.sprites, "MIN", -0.96F, 0.985F, 0.028F, 0.78F, 0.92F, 1.0F);
-  std::array<bool, OreTierCount> spawned_tiers{};
-  for (auto [entity, resource] : account.registry().view<MiningResource>().each()) {
+  add_hud_text(frame.sprites, "MINERALS", -0.96F, 0.985F, 0.026F, 0.78F, 0.92F, 1.0F);
+  std::array<bool, 7> spawned_minerals{};
+  for (auto [entity, composition] : account.registry().view<MineralComposition>().each()) {
     (void)entity;
-    spawned_tiers[static_cast<std::size_t>(resource.tier)] = true;
+    spawned_minerals[0] = spawned_minerals[0] || composition.silicate > 0.005F;
+    spawned_minerals[1] = spawned_minerals[1] || composition.ferrite > 0.005F;
+    spawned_minerals[2] = spawned_minerals[2] || composition.nickel > 0.005F;
+    spawned_minerals[3] = spawned_minerals[3] || composition.cobalt > 0.005F;
+    spawned_minerals[4] = spawned_minerals[4] || composition.iridium > 0.005F;
+    spawned_minerals[5] = spawned_minerals[5] || composition.exotic_crystal > 0.005F;
+    spawned_minerals[6] = spawned_minerals[6] || composition.anomalous_matter > 0.005F;
   }
-  float legend_x = -0.86F;
-  for (int tier_index = 0; tier_index < OreTierCount; ++tier_index) {
-    if (!spawned_tiers[static_cast<std::size_t>(tier_index)]) {
+  float legend_y = 0.952F;
+  constexpr std::array<std::string_view, 7> names{
+    "SILICATE",
+    "FERRITE",
+    "NICKEL",
+    "COBALT",
+    "IRIDIUM",
+    "EXOTIC CRYSTAL",
+    "ANOMALOUS MATTER",
+  };
+  constexpr std::array<OreTint, 7> tints{
+    OreTint{.r = 0.68F, .g = 0.82F, .b = 0.72F},
+    OreTint{.r = 0.92F, .g = 0.66F, .b = 0.50F},
+    OreTint{.r = 0.70F, .g = 0.78F, .b = 0.92F},
+    OreTint{.r = 0.58F, .g = 0.82F, .b = 1.0F},
+    OreTint{.r = 0.94F, .g = 0.78F, .b = 1.0F},
+    OreTint{.r = 1.0F, .g = 0.46F, .b = 0.92F},
+    OreTint{.r = 0.36F, .g = 1.0F, .b = 0.74F},
+  };
+  for (std::size_t index = 0; index < spawned_minerals.size(); ++index) {
+    if (!spawned_minerals[index]) {
       continue;
     }
-    const OreTier tier = static_cast<OreTier>(tier_index);
-    const OreTint tint = ore_tint(tier);
-    add_hud_text(frame.sprites, ore_tier_code(tier), legend_x, 0.985F, 0.028F, tint.r, tint.g, tint.b);
-    legend_x += 0.068F;
+    add_hud_text(frame.sprites, names[index], -0.96F, legend_y, 0.021F, tints[index].r, tints[index].g, tints[index].b);
+    legend_y -= 0.027F;
   }
   add_hud_text(frame.sprites, "SPD " + std::to_string(static_cast<int>(hud.speed)), -0.96F, 0.92F, 0.045F);
   add_hud_text(frame.sprites, "SHD", -0.96F, 0.52F, 0.033F, 0.45F, 0.85F, 1.0F);
@@ -480,6 +555,13 @@ SpriteFrame build_sprite_frame(
   }
   if (has_locked_target(target_lock) && account.registry().valid(target_lock.target)) {
     const AsteroidBody& target = account.registry().get<AsteroidBody>(target_lock.target);
+    add_target_inspection_panel(
+      frame.sprites,
+      frame.lines,
+      account.registry().try_get<AsteroidMass>(target_lock.target),
+      account.registry().try_get<MiningResource>(target_lock.target),
+      account.registry().try_get<MineralComposition>(target_lock.target)
+    );
     const SpriteDraw reticle_bounds =
       make_world_sprite(SpriteTexture::Reticle, target.position, camera.position, sector, width, height, (target.radius * 0.55F) + 24.0F);
     if (collision_hud.contact) {

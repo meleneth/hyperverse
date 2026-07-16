@@ -27,7 +27,7 @@ struct MiningDrone {
 };
 
 struct MiningDroneTuning {
-  float max_speed{520.0F};
+  float max_speed{760.0F};
   float mining_range{220.0F};
   float work_standoff{320.0F};
   float formation_trail_distance{280.0F};

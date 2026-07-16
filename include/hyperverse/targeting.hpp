@@ -7,6 +7,8 @@
 #include <entt/entity/entity.hpp>
 #include <entt/entity/registry.hpp>
 
+#include <span>
+
 namespace hyperverse {
 
 class AccountCtx;
@@ -51,7 +53,8 @@ void update_target_lock(
   Vec2 observer_velocity,
   const SemanticInputFrame& input,
   const SectorTuning& sector,
-  const TargetingTuning& tuning = {}
+  const TargetingTuning& tuning = {},
+  std::span<const entt::entity> tracked_targets = {}
 );
 
 void update_asteroid_motion(AccountCtx& ctx, const SectorTuning& sector, float dt_seconds);

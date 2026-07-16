@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <span>
 
 namespace {
 
@@ -61,6 +62,37 @@ void refresh_lock(
   return nearest;
 }
 
+[[nodiscard]] entt::entity next_tracked_target(
+  entt::registry& registry,
+  std::span<const entt::entity> tracked_targets,
+  entt::entity current_target
+) {
+  if (tracked_targets.empty()) {
+    return entt::null;
+  }
+
+  auto valid_tracked = [&registry](entt::entity target) {
+    return target != entt::null && registry.valid(target) && registry.all_of<hyperverse::AsteroidBody>(target);
+  };
+
+  const auto current = std::ranges::find(tracked_targets, current_target);
+  if (current != tracked_targets.end()) {
+    for (auto candidate = std::next(current); candidate != tracked_targets.end(); ++candidate) {
+      if (valid_tracked(*candidate)) {
+        return *candidate;
+      }
+    }
+  }
+
+  for (entt::entity candidate : tracked_targets) {
+    if (candidate != current_target && valid_tracked(candidate)) {
+      return candidate;
+    }
+  }
+
+  return entt::null;
+}
+
 }  // namespace
 
 namespace hyperverse {
@@ -76,7 +108,8 @@ void update_target_lock(
   Vec2 observer_velocity,
   const SemanticInputFrame& input,
   const SectorTuning& sector,
-  const TargetingTuning& tuning
+  const TargetingTuning& tuning,
+  std::span<const entt::entity> tracked_targets
 ) {
   if (input.cancel_requested) {
     clear_lock(lock);
@@ -90,7 +123,10 @@ void update_target_lock(
     }
 
     if (input.target_cycle_requested) {
-      const entt::entity next_target = nearest_asteroid(registry, observer_position, sector, tuning.lock_range, lock.target);
+      entt::entity next_target = next_tracked_target(registry, tracked_targets, lock.target);
+      if (next_target == entt::null) {
+        next_target = nearest_asteroid(registry, observer_position, sector, tuning.lock_range, lock.target);
+      }
       if (next_target != entt::null) {
         lock.target = next_target;
       }
@@ -107,7 +143,10 @@ void update_target_lock(
     return;
   }
 
-  const entt::entity target = nearest_asteroid(registry, observer_position, sector, tuning.lock_range);
+  entt::entity target = next_tracked_target(registry, tracked_targets, entt::null);
+  if (target == entt::null) {
+    target = nearest_asteroid(registry, observer_position, sector, tuning.lock_range);
+  }
   if (target == entt::null) {
     return;
   }

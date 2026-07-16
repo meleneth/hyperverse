@@ -77,6 +77,42 @@ TEST_CASE("target lock cycles to another asteroid in range") {
   CHECK(lock.wrapped_distance == Catch::Approx(160.0F));
 }
 
+TEST_CASE("target lock cycles through HUD tracked target order") {
+  entt::registry registry;
+  const entt::entity first = registry.create();
+  registry.emplace<hyperverse::AsteroidBody>(first, hyperverse::AsteroidBody{.position = {.x = 300.0F, .y = 100.0F}});
+  const entt::entity second = registry.create();
+  registry.emplace<hyperverse::AsteroidBody>(second, hyperverse::AsteroidBody{.position = {.x = 120.0F, .y = 100.0F}});
+  const entt::entity third = registry.create();
+  registry.emplace<hyperverse::AsteroidBody>(third, hyperverse::AsteroidBody{.position = {.x = 180.0F, .y = 100.0F}});
+  const std::vector<entt::entity> tracked{first, third, second};
+
+  hyperverse::TargetLockModel lock{};
+  const hyperverse::SectorTuning sector{.width = 9000.0F, .height = 9000.0F};
+  const hyperverse::TargetingTuning tuning{.lock_range = 500.0F, .release_range = 650.0F};
+
+  hyperverse::update_target_lock(lock, registry, {.x = 100.0F, .y = 100.0F}, {}, {.target_cycle_requested = true}, sector, tuning, tracked);
+  CHECK(lock.target == first);
+
+  hyperverse::update_target_lock(lock, registry, {.x = 100.0F, .y = 100.0F}, {}, {.target_cycle_requested = true}, sector, tuning, tracked);
+  CHECK(lock.target == third);
+
+  hyperverse::update_target_lock(lock, registry, {.x = 100.0F, .y = 100.0F}, {}, {.target_cycle_requested = true}, sector, tuning, tracked);
+  CHECK(lock.target == second);
+}
+
+TEST_CASE("asteroid mass initializes from radius and follows integrity") {
+  entt::registry registry;
+  const entt::entity asteroid = registry.create();
+  registry.emplace<hyperverse::AsteroidMass>(asteroid, hyperverse::asteroid_mass_from_radius(240.0F));
+
+  hyperverse::sync_asteroid_mass_to_integrity(registry, asteroid, 0.25F);
+
+  const hyperverse::AsteroidMass& mass = registry.get<hyperverse::AsteroidMass>(asteroid);
+  CHECK(mass.initial_mass == Catch::Approx(720.0F));
+  CHECK(mass.remaining_mass == Catch::Approx(180.0F));
+}
+
 TEST_CASE("asteroid motion is integrated through the physics step") {
   TestAccountWorld world;
   hyperverse::AccountCtx account = world.account_context();

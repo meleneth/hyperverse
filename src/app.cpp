@@ -32,6 +32,7 @@
 #include <exception>
 #include <iostream>
 #include <string>
+#include <vector>
 
 namespace hyperverse {
 
@@ -62,10 +63,10 @@ int App::run(AccountCtx& account) {
     const ParticleCannonTuning particle_cannon_tuning{};
     const RaiderTuning raider_tuning{};
     const RadarHudTuning radar_tuning{
-      .max_targets = 6,
+      .max_targets = 10,
       .update_interval_seconds = 0.25F,
       .reveal_seconds = 0.5F,
-      .range_world = (static_cast<float>(std::min(renderer.width(), renderer.height())) * 0.5F) / 0.35F,
+      .range_world = (static_cast<float>(std::min(renderer.width(), renderer.height())) * 0.75F) / 0.35F,
     };
     FlightInputMapper input_mapper;
     SemanticInputFrame latest_intent{};
@@ -131,9 +132,14 @@ int App::run(AccountCtx& account) {
 
         update_camera_anchor(camera, ship, sector, camera_tuning, timestep.tick_seconds());
         update_radar_hud(radar_model, account.registry(), ship, sector, timestep.tick_seconds(), radar_tuning);
+        std::vector<entt::entity> tracked_targets;
+        tracked_targets.reserve(radar_model.tracked_targets.size());
+        for (const RadarTrackedTarget& tracked : radar_model.tracked_targets) {
+          tracked_targets.push_back(tracked.target);
+        }
         update_ship_status(ship_health, round_timer, timestep.tick_seconds());
         update_hud_notice(hud_notice, timestep.tick_seconds());
-        update_target_lock(target_lock, account.registry(), ship.position, ship.velocity, latest_intent, sector);
+        update_target_lock(target_lock, account.registry(), ship.position, ship.velocity, latest_intent, sector, {}, tracked_targets);
         mining_hud =
           update_mining_laser(account.registry(), target_lock, ship, latest_intent, sector, mining_laser, timestep.tick_seconds());
 

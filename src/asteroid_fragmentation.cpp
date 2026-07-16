@@ -1,5 +1,6 @@
 #include "hyperverse/asteroid_fragmentation.hpp"
 
+#include "hyperverse/asteroid_mass.hpp"
 #include "hyperverse/mining.hpp"
 
 #include <algorithm>
@@ -71,6 +72,7 @@ std::vector<entt::entity> fragment_asteroid(
   const AsteroidBody parent = registry.get<AsteroidBody>(asteroid);
   const MiningResource* parent_resource = registry.try_get<MiningResource>(asteroid);
   const MineralComposition* parent_composition = registry.try_get<MineralComposition>(asteroid);
+  const AsteroidMass* parent_mass = registry.try_get<AsteroidMass>(asteroid);
   const float child_radius = std::max(8.0F, parent.radius / std::sqrt(static_cast<float>(request.pieces)));
   if (child_radius < MinimumPlayableAsteroidRadius) {
     registry.destroy(asteroid);
@@ -97,6 +99,8 @@ std::vector<entt::entity> fragment_asteroid(
         .scan_confidence = parent.scan_confidence,
       }
     );
+    const float child_mass = parent_mass != nullptr ? parent_mass->remaining_mass / static_cast<float>(request.pieces) : child_radius;
+    registry.emplace<AsteroidMass>(fragment, AsteroidMass{.initial_mass = child_mass, .remaining_mass = child_mass});
     if (parent_resource != nullptr) {
       registry.emplace<MiningResource>(
         fragment,
