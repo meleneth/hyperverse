@@ -58,6 +58,33 @@ TEST_CASE("mining drone extracts material when in range") {
   CHECK(drone.extracted_mass == Catch::Approx(6.0F));
 }
 
+TEST_CASE("mining drones ignore largest asteroid break tier") {
+  entt::registry registry;
+  const entt::entity asteroid = registry.create();
+  registry.emplace<hyperverse::AsteroidBody>(
+    asteroid,
+    hyperverse::AsteroidBody{.position = {.x = 500.0F, .y = 100.0F}, .radius = 480.0F}
+  );
+  registry.emplace<hyperverse::AsteroidFragmentation>(asteroid, hyperverse::AsteroidFragmentation{.remaining_breaks = 2});
+  registry.emplace<hyperverse::MiningResource>(asteroid);
+  hyperverse::MiningDrone drone{.position = {.x = 100.0F, .y = 100.0F}};
+  const hyperverse::ShipMotion ship{.position = {.x = 100.0F, .y = 100.0F}};
+
+  const hyperverse::MiningDroneHudSnapshot hud = hyperverse::update_mining_drone(
+    drone,
+    registry,
+    {.phase = hyperverse::TargetLockPhase::Locked, .target = asteroid},
+    ship,
+    {.width = 9000.0F, .height = 9000.0F},
+    0.5F,
+    {.max_speed = 100.0F}
+  );
+
+  CHECK_FALSE(registry.valid(drone.target));
+  CHECK_FALSE(registry.valid(hud.target));
+  CHECK(drone.phase == hyperverse::MiningDronePhase::Idle);
+}
+
 TEST_CASE("mining drones use separate work angles around an asteroid") {
   entt::registry registry;
   const entt::entity asteroid = registry.create();

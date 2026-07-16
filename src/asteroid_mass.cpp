@@ -15,12 +15,15 @@ AsteroidMass asteroid_mass_from_radius(float radius) {
   return {.initial_mass = mass, .remaining_mass = mass};
 }
 
-void sync_asteroid_mass_to_integrity(entt::registry& registry, entt::entity asteroid, float integrity_fraction) {
+float extract_asteroid_mass(entt::registry& registry, entt::entity asteroid, float requested_mass) {
+  const float clamped_request = std::max(0.0F, requested_mass);
   AsteroidMass* mass = registry.try_get<AsteroidMass>(asteroid);
   if (mass == nullptr) {
-    return;
+    return clamped_request;
   }
-  mass->remaining_mass = std::clamp(mass->initial_mass * std::clamp(integrity_fraction, 0.0F, 1.0F), 0.0F, mass->initial_mass);
+  const float extracted = std::min(mass->remaining_mass, clamped_request);
+  mass->remaining_mass -= extracted;
+  return extracted;
 }
 
 }  // namespace hyperverse

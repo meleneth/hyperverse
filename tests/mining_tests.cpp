@@ -55,7 +55,7 @@ TEST_CASE("mining laser extracts material from locked asteroid in range") {
   CHECK(cooling.target_heat == Catch::Approx(20.0F));
 }
 
-TEST_CASE("mining laser reduces asteroid collision mass as integrity drops") {
+TEST_CASE("mining laser extracts asteroid mass without shrinking collision body") {
   entt::registry registry;
   const entt::entity asteroid = registry.create();
   registry.emplace<hyperverse::AsteroidBody>(
@@ -75,11 +75,11 @@ TEST_CASE("mining laser reduces asteroid collision mass as integrity drops") {
     2.0F
   );
 
-  CHECK(registry.get<hyperverse::AsteroidBody>(asteroid).radius == Catch::Approx(75.0F));
-  CHECK(registry.get<hyperverse::AsteroidMass>(asteroid).remaining_mass == Catch::Approx(40.0F));
+  CHECK(registry.get<hyperverse::AsteroidBody>(asteroid).radius == Catch::Approx(80.0F));
+  CHECK(registry.get<hyperverse::AsteroidMass>(asteroid).remaining_mass == Catch::Approx(64.0F));
 }
 
-TEST_CASE("mining depletion keeps asteroids at one sixth of base radius") {
+TEST_CASE("mining structural damage does not shrink asteroids before breakup") {
   entt::registry registry;
   const entt::entity asteroid = registry.create();
   registry.emplace<hyperverse::AsteroidBody>(
@@ -99,7 +99,7 @@ TEST_CASE("mining depletion keeps asteroids at one sixth of base radius") {
     1.0F
   );
 
-  CHECK(registry.get<hyperverse::AsteroidBody>(asteroid).radius == Catch::Approx(200.0F));
+  CHECK(registry.get<hyperverse::AsteroidBody>(asteroid).radius == Catch::Approx(1200.0F));
 }
 
 TEST_CASE("mining depletion breaks an asteroid into laser-coherent fragments") {

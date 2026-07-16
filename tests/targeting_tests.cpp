@@ -101,16 +101,17 @@ TEST_CASE("target lock cycles through HUD tracked target order") {
   CHECK(lock.target == second);
 }
 
-TEST_CASE("asteroid mass initializes from radius and follows integrity") {
+TEST_CASE("asteroid mass initializes from radius and is reduced by extraction") {
   entt::registry registry;
   const entt::entity asteroid = registry.create();
   registry.emplace<hyperverse::AsteroidMass>(asteroid, hyperverse::asteroid_mass_from_radius(240.0F));
 
-  hyperverse::sync_asteroid_mass_to_integrity(registry, asteroid, 0.25F);
+  const float extracted = hyperverse::extract_asteroid_mass(registry, asteroid, 180.0F);
 
   const hyperverse::AsteroidMass& mass = registry.get<hyperverse::AsteroidMass>(asteroid);
+  CHECK(extracted == Catch::Approx(180.0F));
   CHECK(mass.initial_mass == Catch::Approx(720.0F));
-  CHECK(mass.remaining_mass == Catch::Approx(180.0F));
+  CHECK(mass.remaining_mass == Catch::Approx(540.0F));
 }
 
 TEST_CASE("asteroid motion is integrated through the physics step") {

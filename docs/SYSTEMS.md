@@ -70,16 +70,20 @@ Locking is not itself mining.
 
 ## Mining
 
-Asteroids start as large moving bodies with an explicit mass model and two levels of fragmentation.
+Asteroids start as large moving bodies with an explicit mass model, separate structural break progress, and two levels of fragmentation.
 
 Lifecycle:
 
 - a seeded asteroid starts with two remaining break levels
 - the first depletion/impact breakup creates medium fragments with one remaining break level
 - the second breakup creates small mineable fragments with zero remaining break levels
-- further depletion consumes the fragment instead of creating more pieces
+- structural damage moves the current rock toward breakup
+- extraction removes remaining mass and creates value
+- further depletion of a zero-break fragment consumes it instead of creating more pieces
 
 Kinetic particle impacts apply projectile velocity into the asteroid mass, so firing from ahead of a moving rock can slow it down. Laser, kinetic, and explosive breakup patterns remain separate tuning/behavior paths.
+
+Mining drones are not allowed to mine the largest asteroid tier. The player must first break large rocks into the two smaller size ranges before drones can work them.
 
 Ore value is tiered and color-coded. The intended mining decision is not "extract every kilogram"; it is "identify and extract the premium material before spending time on cheap bulk."
 

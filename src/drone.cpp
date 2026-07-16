@@ -1,5 +1,8 @@
 #include "hyperverse/drone.hpp"
 
+#include "hyperverse/asteroid_fragmentation.hpp"
+#include "hyperverse/asteroid_mass.hpp"
+
 #include <algorithm>
 #include <cmath>
 
@@ -9,8 +12,14 @@ namespace {
 constexpr float TauRadians = 6.28318530718F;
 
 [[nodiscard]] bool valid_mining_target(entt::registry& registry, entt::entity target) {
-  return target != entt::null && registry.valid(target) && registry.all_of<AsteroidBody, MiningResource>(target) &&
-         registry.get<MiningResource>(target).integrity > 0.0F;
+  if (
+    target == entt::null || !registry.valid(target) || !registry.all_of<AsteroidBody, MiningResource>(target) ||
+    registry.get<MiningResource>(target).integrity <= 0.0F
+  ) {
+    return false;
+  }
+  const AsteroidFragmentation* fragmentation = registry.try_get<AsteroidFragmentation>(target);
+  return fragmentation == nullptr || fragmentation->remaining_breaks <= 1;
 }
 
 void emit_target_released(DomainEventBus* event_bus, entt::entity drone_entity, entt::entity target, Vec2 position) {
@@ -114,8 +123,9 @@ MiningDroneHudSnapshot update_mining_drone(
     drone.phase = MiningDronePhase::Mining;
     drone.velocity = {};
     resource.integrity = std::max(0.0F, resource.integrity - (tuning.integrity_damage_per_second * scaled_dt));
-    resource.extracted_mass += tuning.extraction_per_second * scaled_dt;
-    drone.extracted_mass += tuning.extraction_per_second * scaled_dt;
+    const float extracted_mass = extract_asteroid_mass(registry, drone.target, tuning.extraction_per_second * scaled_dt);
+    resource.extracted_mass += extracted_mass;
+    drone.extracted_mass += extracted_mass;
   }
 
   hud.phase = drone.phase;

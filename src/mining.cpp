@@ -11,8 +11,6 @@
 namespace hyperverse {
 namespace {
 
-constexpr float AsteroidMinimumRadiusFraction = 1.0F / 6.0F;
-
 struct MiningTarget {
   entt::entity entity{entt::null};
   float distance{0.0F};
@@ -183,7 +181,7 @@ MiningHudSnapshot update_mining_laser(
     hud.beam_active = true;
     const float scaled_dt = hud.beam_intensity * dt_seconds;
     resource.integrity = std::max(0.0F, resource.integrity - (tuning.integrity_damage_per_second * scaled_dt));
-    resource.extracted_mass += tuning.extraction_per_second * scaled_dt;
+    resource.extracted_mass += extract_asteroid_mass(registry, target.entity, tuning.extraction_per_second * scaled_dt);
     resource.heat = std::min(100.0F, resource.heat + (tuning.heat_per_second * scaled_dt));
     resource.structural_stress = std::min(100.0F, resource.structural_stress + (tuning.stress_per_second * scaled_dt));
     resource.volatile_pressure = std::min(100.0F, resource.volatile_pressure + (tuning.pressure_per_second * scaled_dt));
@@ -207,9 +205,6 @@ MiningHudSnapshot update_mining_laser(
     }
   }
 
-  const float remaining_fraction = std::clamp(resource.integrity / 100.0F, AsteroidMinimumRadiusFraction, 1.0F);
-  sync_asteroid_mass_to_integrity(registry, target.entity, resource.integrity / 100.0F);
-  asteroid.radius = std::max(MinimumPlayableAsteroidRadius, asteroid.base_radius * remaining_fraction);
   if (resource.integrity <= 0.0F) {
     populate_hud_from_resource(hud, resource, tuning);
     (void)fragment_asteroid(

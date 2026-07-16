@@ -44,7 +44,6 @@ struct ParticleCannonTuning {
   float muzzle_forward_offset{46.0F};
   float muzzle_side_offset{14.0F};
   float raider_fire_range{1800.0F};
-  float asteroid_min_radius_fraction{1.0F / 6.0F};
   float asteroid_kinetic_impulse_scale{0.18F};
   AsteroidImpactKind impact_kind{AsteroidImpactKind::Kinetic};
 };

@@ -63,10 +63,21 @@ These assets are temporary implementation scaffolding, not a permanent visual co
 The current Vulkan prototype draws Sector7-derived sprites, hardware-uploaded textures, line HUD
 brackets, text glyph HUD, mining beams, particle cannon shots, cargo boxes, active cargo train links,
 an escort gate route, and an active escort raider. Ship and asteroid motion are stepped through
-Jolt. Asteroids vary in size, velocity, rotation, mass, and ore tint; nearby rocks get electric-blue
-radar brackets. The prototype starts with eight mining drones until progression is defined. The HUD
-reports position, speed, target state, extracted ore, cargo quota, sector pressure, drone state,
-collision warnings, escort state, raider disruption, stolen cargo escape, and recovery state.
+Jolt. Asteroids vary in size, velocity, rotation, explicit mass, structural break progress, and
+color-coded ore rarity; nearby rocks get electric-blue radar brackets. The prototype starts with
+eight mining drones until progression is defined. The HUD reports position, speed, target state,
+target mass, ore rarity value, mineral composition, extracted ore, cargo quota, sector pressure,
+drone state, collision warnings, escort state, raider disruption, stolen cargo escape, and recovery
+state.
+
+## Current Gameplay Considerations
+
+- Ore value is tiered and color-coded by rarity. Cheap bulk ore is intentionally much less important than premium rare, exotic, and anomalous material.
+- Asteroid mass and structural damage are separate. Damage means "how close this rock is to breaking up"; extraction means "how much useful mass has been removed."
+- Large asteroids have two break levels. The first break creates medium pieces, the second creates small pieces, and further depletion consumes the final fragment.
+- Kinetic particle impacts transfer velocity into asteroid mass. Getting in front of a moving rock and firing back into its path is the intended way to slow it before mining.
+- Mining drones cannot work the largest asteroid tier. The player must break big rocks into medium or small pieces before drones can safely mine them.
+- Asteroid damage, fragmentation, consumption, particle impacts, and drone target release are event-visible gameplay facts. New behavior should prefer event responders over hidden direct call chains.
 
 ## Core Fantasy
 

@@ -78,7 +78,7 @@ TEST_CASE("held particle fire uses a four hertz FSM cadence") {
   CHECK(account.registry().get<hyperverse::ParticleCannonModel>(player).phase == hyperverse::ParticleCannonPhase::Cooling);
 }
 
-TEST_CASE("particle cannon damages and shrinks asteroids on Jolt overlap") {
+TEST_CASE("particle cannon damages asteroid structure without removing mass") {
   TestAccountWorld world;
   hyperverse::AccountCtx account = world.account_context();
   const entt::entity asteroid = account.registry().create();
@@ -121,8 +121,8 @@ TEST_CASE("particle cannon damages and shrinks asteroids on Jolt overlap") {
   CHECK(event_hud.impacts == 1);
   CHECK(asteroid_damage_events == 1);
   CHECK(account.registry().get<hyperverse::MiningResource>(asteroid).integrity == Catch::Approx(75.0F));
-  CHECK(account.registry().get<hyperverse::AsteroidMass>(asteroid).remaining_mass == Catch::Approx(60.0F));
-  CHECK(account.registry().get<hyperverse::AsteroidBody>(asteroid).radius == Catch::Approx(75.0F));
+  CHECK(account.registry().get<hyperverse::AsteroidMass>(asteroid).remaining_mass == Catch::Approx(80.0F));
+  CHECK(account.registry().get<hyperverse::AsteroidBody>(asteroid).radius == Catch::Approx(80.0F));
   CHECK(particle_count(account.registry()) == 0);
 }
 

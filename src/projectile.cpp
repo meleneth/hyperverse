@@ -80,9 +80,6 @@ void apply_projectile_damage(
     const float impulse_mass = std::max(mass != nullptr ? mass->remaining_mass : asteroid.radius, 1.0F);
     asteroid.velocity += projectile.velocity * ((projectile.damage * tuning.asteroid_kinetic_impulse_scale) / impulse_mass);
   }
-  sync_asteroid_mass_to_integrity(registry, asteroid_entity, resource.integrity / 100.0F);
-  const float remaining_fraction = std::clamp(resource.integrity / 100.0F, tuning.asteroid_min_radius_fraction, 1.0F);
-  asteroid.radius = std::max(MinimumPlayableAsteroidRadius, asteroid.base_radius * remaining_fraction);
 }
 
 void fragment_depleted_asteroid(

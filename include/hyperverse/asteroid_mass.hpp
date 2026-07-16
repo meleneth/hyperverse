@@ -11,6 +11,6 @@ struct AsteroidMass {
 };
 
 [[nodiscard]] AsteroidMass asteroid_mass_from_radius(float radius);
-void sync_asteroid_mass_to_integrity(entt::registry& registry, entt::entity asteroid, float integrity_fraction);
+float extract_asteroid_mass(entt::registry& registry, entt::entity asteroid, float requested_mass);
 
 }  // namespace hyperverse

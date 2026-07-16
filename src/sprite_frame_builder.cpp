@@ -301,15 +301,9 @@ void add_world_link_line(
   return make_world_sprite(texture, world_position, camera_position, sector, width, height, pixel_size, pixel_size, rotation_radians);
 }
 
-[[nodiscard]] float asteroid_sprite_size(const hyperverse::AsteroidBody& asteroid, const hyperverse::MiningResource* resource) {
-  constexpr float depleted_scale = 0.24F;
+[[nodiscard]] float asteroid_sprite_size(const hyperverse::AsteroidBody& asteroid) {
   constexpr float fresh_scale = 0.45F;
-  if (resource == nullptr) {
-    return asteroid.radius * fresh_scale;
-  }
-
-  const float integrity_fraction = std::clamp(resource->integrity / 100.0F, 0.0F, 1.0F);
-  return asteroid.radius * (depleted_scale + ((fresh_scale - depleted_scale) * integrity_fraction));
+  return asteroid.radius * fresh_scale;
 }
 
 [[nodiscard]] hyperverse::SpriteDraw make_laser_sprite(
@@ -387,7 +381,7 @@ SpriteFrame build_sprite_frame(
       sector,
       width,
       height,
-      asteroid_sprite_size(asteroid, account.registry().try_get<MiningResource>(entity)),
+      asteroid_sprite_size(asteroid),
       asteroid.rotation_radians
     );
     if (const MiningResource* resource = account.registry().try_get<MiningResource>(entity); resource != nullptr) {
