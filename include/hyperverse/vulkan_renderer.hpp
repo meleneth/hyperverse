@@ -32,6 +32,8 @@ private:
   void pick_physical_device();
   void create_logical_device();
   void create_swapchain(SDL_Window& window);
+  void recreate_swapchain();
+  void cleanup_swapchain();
   void create_image_views();
   void create_render_pass();
   void create_descriptor_set_layout();
@@ -57,6 +59,7 @@ private:
   [[nodiscard]] VkExtent2D choose_extent(SDL_Window& window, const VkSurfaceCapabilitiesKHR& capabilities) const;
 
   VkInstance instance_{VK_NULL_HANDLE};
+  SDL_Window* window_{nullptr};
   VkSurfaceKHR surface_{VK_NULL_HANDLE};
   VkPhysicalDevice physical_device_{VK_NULL_HANDLE};
   VkDevice device_{VK_NULL_HANDLE};

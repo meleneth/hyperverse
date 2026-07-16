@@ -33,6 +33,9 @@
 
 namespace {
 
+constexpr float PixelsPerWorldUnit = 0.35F;
+constexpr float ScreenAnchorYFraction = 0.75F;
+
 class SdlRuntime {
 public:
   SdlRuntime() {
@@ -348,11 +351,9 @@ void log_gamepad_state() {
   float pixel_height,
   float rotation_radians
 ) {
-  constexpr float pixels_per_world_unit = 0.35F;
-  constexpr float screen_anchor_y_fraction = 0.75F;
-  const hyperverse::Vec2 relative = hyperverse::wrapped_delta(camera_position, world_position, sector) * pixels_per_world_unit;
+  const hyperverse::Vec2 relative = hyperverse::wrapped_delta(camera_position, world_position, sector) * PixelsPerWorldUnit;
   const float screen_x = (static_cast<float>(width) * 0.5F) + relative.x;
-  const float screen_y = (static_cast<float>(height) * screen_anchor_y_fraction) + relative.y;
+  const float screen_y = (static_cast<float>(height) * ScreenAnchorYFraction) + relative.y;
 
   return {
     .texture = texture,
@@ -362,6 +363,16 @@ void log_gamepad_state() {
     .half_height_ndc = pixel_height / static_cast<float>(height),
     .rotation_radians = rotation_radians,
   };
+}
+
+[[nodiscard]] bool sprite_overlaps_screen(const hyperverse::SpriteDraw& sprite) {
+  return sprite.center_x_ndc + sprite.half_width_ndc >= -1.0F && sprite.center_x_ndc - sprite.half_width_ndc <= 1.0F &&
+         sprite.center_y_ndc + sprite.half_height_ndc >= -1.0F && sprite.center_y_ndc - sprite.half_height_ndc <= 1.0F;
+}
+
+[[nodiscard]] float hud_radar_radius_world(std::uint32_t width, std::uint32_t height) {
+  const float half_small_viewport = static_cast<float>(std::min(width, height)) * 0.5F;
+  return half_small_viewport / PixelsPerWorldUnit;
 }
 
 [[nodiscard]] float ship_sprite_rotation(float facing_radians) {
@@ -908,7 +919,7 @@ int App::run() {
         }(),
         .lines = [&] {
           std::vector<LineDraw> lines;
-          constexpr float radar_radius_world = 1800.0F;
+          const float radar_radius_world = hud_radar_radius_world(renderer.width(), renderer.height());
           for (auto [entity, asteroid] : account.registry().view<AsteroidBody>().each()) {
             (void)entity;
             if (wrapped_distance(ship.position, asteroid.position, sector) > radar_radius_world) {
@@ -923,6 +934,9 @@ int App::run() {
               renderer.height(),
               (asteroid.radius * 0.48F) + 18.0F
             );
+            if (!sprite_overlaps_screen(radar_bounds)) {
+              continue;
+            }
             add_box_lines(lines, radar_bounds, 0.22F, 0.86F, 1.0F, 0.42F);
           }
           if (has_locked_target(target_lock) && account.registry().valid(target_lock.target)) {

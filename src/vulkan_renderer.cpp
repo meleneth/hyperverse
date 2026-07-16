@@ -187,6 +187,7 @@ struct LoadedPng {
 namespace hyperverse {
 
 VulkanRenderer::VulkanRenderer(SDL_Window& window) {
+  window_ = &window;
   create_instance(window);
   create_surface(window);
   pick_physical_device();
@@ -219,6 +220,7 @@ VulkanRenderer::~VulkanRenderer() {
   if (image_available_ != VK_NULL_HANDLE) {
     vkDestroySemaphore(device_, image_available_, nullptr);
   }
+  cleanup_swapchain();
   if (command_pool_ != VK_NULL_HANDLE) {
     vkDestroyCommandPool(device_, command_pool_, nullptr);
   }
@@ -283,15 +285,19 @@ void VulkanRenderer::draw_frame(const VulkanFrameSnapshot& frame) {
 
 void VulkanRenderer::draw_frame(const SpriteFrame& frame) {
   check(vkWaitForFences(device_, 1, &in_flight_, VK_TRUE, std::numeric_limits<std::uint64_t>::max()), "wait fence");
-  check(vkResetFences(device_, 1, &in_flight_), "reset fence");
 
   std::uint32_t image_index = 0;
   VkResult acquire_result =
     vkAcquireNextImageKHR(device_, swapchain_, std::numeric_limits<std::uint64_t>::max(), image_available_, VK_NULL_HANDLE, &image_index);
+  if (acquire_result == VK_ERROR_OUT_OF_DATE_KHR) {
+    recreate_swapchain();
+    return;
+  }
   if (acquire_result != VK_SUCCESS && acquire_result != VK_SUBOPTIMAL_KHR) {
     throw std::runtime_error("failed to acquire swapchain image");
   }
 
+  check(vkResetFences(device_, 1, &in_flight_), "reset fence");
   record_command_buffer(image_index, frame);
 
   VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -316,7 +322,11 @@ void VulkanRenderer::draw_frame(const SpriteFrame& frame) {
   present_info.pImageIndices = &image_index;
 
   VkResult present_result = vkQueuePresentKHR(graphics_queue_, &present_info);
-  if (present_result != VK_SUCCESS && present_result != VK_SUBOPTIMAL_KHR) {
+  if (present_result == VK_ERROR_OUT_OF_DATE_KHR || present_result == VK_SUBOPTIMAL_KHR) {
+    recreate_swapchain();
+    return;
+  }
+  if (present_result != VK_SUCCESS) {
     throw std::runtime_error("failed to present swapchain image");
   }
 }
@@ -458,6 +468,71 @@ void VulkanRenderer::create_swapchain(SDL_Window& window) {
 
   swapchain_format_ = surface_format.format;
   swapchain_extent_ = extent;
+}
+
+void VulkanRenderer::recreate_swapchain() {
+  if (window_ == nullptr) {
+    throw std::runtime_error("renderer has no window for swapchain recreation");
+  }
+
+  int width = 0;
+  int height = 0;
+  if (!SDL_GetWindowSizeInPixels(window_, &width, &height)) {
+    throw std::runtime_error(std::string{"SDL_GetWindowSizeInPixels failed: "} + SDL_GetError());
+  }
+  if (width <= 0 || height <= 0) {
+    return;
+  }
+
+  vkDeviceWaitIdle(device_);
+  cleanup_swapchain();
+  create_swapchain(*window_);
+  create_image_views();
+  create_render_pass();
+  create_graphics_pipeline();
+  create_line_pipeline();
+  create_framebuffers();
+  create_command_buffers();
+}
+
+void VulkanRenderer::cleanup_swapchain() {
+  if (!command_buffers_.empty()) {
+    vkFreeCommandBuffers(device_, command_pool_, static_cast<std::uint32_t>(command_buffers_.size()), command_buffers_.data());
+    command_buffers_.clear();
+  }
+  for (VkFramebuffer framebuffer : framebuffers_) {
+    vkDestroyFramebuffer(device_, framebuffer, nullptr);
+  }
+  framebuffers_.clear();
+  if (graphics_pipeline_ != VK_NULL_HANDLE) {
+    vkDestroyPipeline(device_, graphics_pipeline_, nullptr);
+    graphics_pipeline_ = VK_NULL_HANDLE;
+  }
+  if (line_pipeline_ != VK_NULL_HANDLE) {
+    vkDestroyPipeline(device_, line_pipeline_, nullptr);
+    line_pipeline_ = VK_NULL_HANDLE;
+  }
+  if (pipeline_layout_ != VK_NULL_HANDLE) {
+    vkDestroyPipelineLayout(device_, pipeline_layout_, nullptr);
+    pipeline_layout_ = VK_NULL_HANDLE;
+  }
+  if (line_pipeline_layout_ != VK_NULL_HANDLE) {
+    vkDestroyPipelineLayout(device_, line_pipeline_layout_, nullptr);
+    line_pipeline_layout_ = VK_NULL_HANDLE;
+  }
+  if (render_pass_ != VK_NULL_HANDLE) {
+    vkDestroyRenderPass(device_, render_pass_, nullptr);
+    render_pass_ = VK_NULL_HANDLE;
+  }
+  for (VkImageView image_view : swapchain_image_views_) {
+    vkDestroyImageView(device_, image_view, nullptr);
+  }
+  swapchain_image_views_.clear();
+  swapchain_images_.clear();
+  if (swapchain_ != VK_NULL_HANDLE) {
+    vkDestroySwapchainKHR(device_, swapchain_, nullptr);
+    swapchain_ = VK_NULL_HANDLE;
+  }
 }
 
 void VulkanRenderer::create_image_views() {
