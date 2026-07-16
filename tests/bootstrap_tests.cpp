@@ -16,12 +16,14 @@
 #include "hyperverse/input.hpp"
 #include "hyperverse/mining.hpp"
 #include "hyperverse/pressure.hpp"
+#include "hyperverse/projectile.hpp"
 #include "hyperverse/raider.hpp"
 #include "hyperverse/render_frame.hpp"
 #include "hyperverse/sector.hpp"
 #include "hyperverse/targeting.hpp"
 
 #include <sstream>
+#include <iterator>
 #include <string>
 
 TEST_CASE("project metadata is available") {
@@ -55,12 +57,14 @@ TEST_CASE("flight input maps raw devices into semantic movement intent") {
       .movement_axis = {.x = 1.0F, .y = 1.0F},
       .confirm = true,
       .target_cycle = true,
+      .particle_fire = true,
       .tool_intensity = 0.5F,
       .control_mapping = hyperverse::ControlMapping::Gamepad,
     });
   CHECK(hyperverse::length(moving.desired_movement) == Catch::Approx(1.0F));
   CHECK(moving.confirm_requested);
   CHECK(moving.target_cycle_requested);
+  CHECK(moving.particle_fire_requested);
   CHECK(moving.tool_intensity == Catch::Approx(0.5F));
   CHECK(moving.control_mapping == hyperverse::ControlMapping::Gamepad);
 }
@@ -77,6 +81,11 @@ TEST_CASE("stateful flight input mapper emits button requests on rising edges") 
   CHECK_FALSE(held.target_cycle_requested);
   CHECK_FALSE(released.target_cycle_requested);
   CHECK(pressed_again.target_cycle_requested);
+
+  const hyperverse::SemanticInputFrame fired = mapper.map({.particle_fire = true});
+  const hyperverse::SemanticInputFrame held_fire = mapper.map({.particle_fire = true});
+  CHECK(fired.particle_fire_requested);
+  CHECK_FALSE(held_fire.particle_fire_requested);
 }
 
 TEST_CASE("wrapped sector distance uses the shortest edge crossing") {
@@ -273,6 +282,28 @@ TEST_CASE("target lock cycles to another asteroid in range") {
   CHECK(lock.wrapped_distance == Catch::Approx(160.0F));
 }
 
+TEST_CASE("asteroid motion is integrated through the physics step") {
+  entt::registry registry;
+  const entt::entity asteroid = registry.create();
+  registry.emplace<hyperverse::AsteroidBody>(
+    asteroid,
+    hyperverse::AsteroidBody{
+      .position = {.x = 100.0F, .y = 100.0F},
+      .velocity = {.x = 25.0F, .y = 0.0F},
+      .radius = 40.0F,
+      .base_radius = 40.0F,
+      .angular_velocity = 2.0F,
+    }
+  );
+
+  hyperverse::update_asteroid_motion(registry, {.width = 9000.0F, .height = 9000.0F}, 1.0F);
+
+  const hyperverse::AsteroidBody& moved = registry.get<hyperverse::AsteroidBody>(asteroid);
+  CHECK(moved.position.x == Catch::Approx(125.0F));
+  CHECK(moved.position.y == Catch::Approx(100.0F));
+  CHECK(moved.rotation_radians == Catch::Approx(2.0F));
+}
+
 TEST_CASE("Vulkan clear color stays stable now that sprites expose state") {
   const hyperverse::RenderColor idle = hyperverse::make_clear_color({});
   const hyperverse::RenderColor fast = hyperverse::make_clear_color({.speed_fraction = 1.0F});
@@ -388,6 +419,82 @@ TEST_CASE("mining laser extracts material from locked asteroid in range") {
   );
   CHECK_FALSE(cooling.beam_active);
   CHECK(cooling.target_heat == Catch::Approx(20.0F));
+}
+
+TEST_CASE("mining laser reduces asteroid collision mass as integrity drops") {
+  entt::registry registry;
+  const entt::entity asteroid = registry.create();
+  registry.emplace<hyperverse::AsteroidBody>(
+    asteroid,
+    hyperverse::AsteroidBody{.position = {.x = 350.0F, .y = 100.0F}, .radius = 80.0F, .base_radius = 80.0F}
+  );
+  registry.emplace<hyperverse::MiningResource>(asteroid);
+
+  (void)hyperverse::update_mining_laser(
+    registry,
+    {.phase = hyperverse::TargetLockPhase::Locked, .target = asteroid, .wrapped_distance = 250.0F},
+    {.position = {.x = 100.0F, .y = 100.0F}},
+    {.tool_intensity = 1.0F},
+    {.width = 9000.0F, .height = 9000.0F},
+    {.range = 500.0F, .integrity_damage_per_second = 25.0F},
+    2.0F
+  );
+
+  CHECK(registry.get<hyperverse::AsteroidBody>(asteroid).radius == Catch::Approx(40.0F));
+}
+
+TEST_CASE("ore tiers expose distinct asteroid tint colors") {
+  const hyperverse::OreTint common = hyperverse::ore_tint(hyperverse::OreTier::Common);
+  const hyperverse::OreTint rare = hyperverse::ore_tint(hyperverse::OreTier::Rare);
+  const hyperverse::OreTint exotic = hyperverse::ore_tint(hyperverse::OreTier::Exotic);
+  const hyperverse::OreTint anomalous = hyperverse::ore_tint(hyperverse::OreTier::Anomalous);
+
+  CHECK(rare.b > common.b);
+  CHECK(exotic.r == Catch::Approx(1.0F));
+  CHECK(exotic.g < common.g);
+  CHECK(anomalous.g == Catch::Approx(1.0F));
+}
+
+TEST_CASE("particle cannon spawns a shot from semantic fire") {
+  entt::registry registry;
+
+  const hyperverse::ParticleCannonHudSnapshot hud = hyperverse::update_particle_cannon(
+    registry,
+    {.position = {.x = 100.0F, .y = 100.0F}, .facing_radians = 0.0F},
+    {.particle_fire_requested = true},
+    {.width = 9000.0F, .height = 9000.0F},
+    0.0F,
+    {.projectile_speed = 100.0F}
+  );
+
+  CHECK(hud.active_particles == 1);
+  CHECK(std::distance(registry.view<hyperverse::ParticleShot>().begin(), registry.view<hyperverse::ParticleShot>().end()) == 1);
+}
+
+TEST_CASE("particle cannon damages and shrinks asteroids on Jolt overlap") {
+  entt::registry registry;
+  const entt::entity asteroid = registry.create();
+  registry.emplace<hyperverse::AsteroidBody>(
+    asteroid,
+    hyperverse::AsteroidBody{.position = {.x = 120.0F, .y = 100.0F}, .radius = 80.0F, .base_radius = 80.0F}
+  );
+  registry.emplace<hyperverse::MiningResource>(asteroid);
+  const entt::entity particle = registry.create();
+  registry.emplace<hyperverse::ParticleShot>(particle, hyperverse::ParticleShot{.position = {.x = 110.0F, .y = 100.0F}});
+
+  const hyperverse::ParticleCannonHudSnapshot hud = hyperverse::update_particle_cannon(
+    registry,
+    {.position = {.x = 100.0F, .y = 100.0F}},
+    {},
+    {.width = 9000.0F, .height = 9000.0F},
+    0.0F,
+    {.projectile_radius = 10.0F, .damage = 25.0F}
+  );
+
+  CHECK(hud.impacts == 1);
+  CHECK(registry.get<hyperverse::MiningResource>(asteroid).integrity == Catch::Approx(75.0F));
+  CHECK(registry.get<hyperverse::AsteroidBody>(asteroid).radius == Catch::Approx(60.0F));
+  CHECK(std::distance(registry.view<hyperverse::ParticleShot>().begin(), registry.view<hyperverse::ParticleShot>().end()) == 0);
 }
 
 TEST_CASE("mining laser can acquire an asteroid from aim without a target lock") {

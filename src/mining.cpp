@@ -99,6 +99,23 @@ void populate_hud_from_resource(MiningHudSnapshot& hud, const MiningResource& re
 
 }  // namespace
 
+OreTint ore_tint(OreTier tier) {
+  switch (tier) {
+    case OreTier::Common:
+      return {.r = 0.76F, .g = 0.78F, .b = 0.80F};
+    case OreTier::Industrial:
+      return {.r = 0.95F, .g = 0.74F, .b = 0.38F};
+    case OreTier::Rare:
+      return {.r = 0.35F, .g = 0.92F, .b = 1.0F};
+    case OreTier::Exotic:
+      return {.r = 1.0F, .g = 0.35F, .b = 0.92F};
+    case OreTier::Anomalous:
+      return {.r = 0.42F, .g = 1.0F, .b = 0.36F};
+  }
+
+  return {};
+}
+
 MiningHudSnapshot update_mining_laser(
   entt::registry& registry,
   const TargetLockModel& target_lock,
@@ -115,7 +132,7 @@ MiningHudSnapshot update_mining_laser(
     return hud;
   }
 
-  const AsteroidBody& asteroid = registry.get<AsteroidBody>(target.entity);
+  AsteroidBody& asteroid = registry.get<AsteroidBody>(target.entity);
   MiningResource& resource = registry.get<MiningResource>(target.entity);
   hud.target = target.entity;
   hud.target_in_range = target.distance <= tuning.range;
@@ -149,6 +166,8 @@ MiningHudSnapshot update_mining_laser(
     }
   }
 
+  const float remaining_fraction = std::clamp(resource.integrity / 100.0F, 0.18F, 1.0F);
+  asteroid.radius = std::max(12.0F, asteroid.base_radius * remaining_fraction);
   populate_hud_from_resource(hud, resource, tuning);
   return hud;
 }

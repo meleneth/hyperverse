@@ -1,6 +1,7 @@
 #include "hyperverse/drone.hpp"
 
 #include <algorithm>
+#include <cmath>
 
 namespace hyperverse {
 namespace {
@@ -43,6 +44,7 @@ MiningDroneHudSnapshot update_mining_drone(
   if (distance > tuning.mining_range) {
     drone.phase = MiningDronePhase::Travelling;
     drone.velocity = normalize_or_zero(to_target) * tuning.max_speed;
+    drone.facing_radians = std::atan2(drone.velocity.y, drone.velocity.x);
     drone.position = wrap_position(drone.position + (drone.velocity * dt_seconds), sector);
   } else {
     drone.phase = MiningDronePhase::Mining;

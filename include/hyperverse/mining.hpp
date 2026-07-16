@@ -9,7 +9,22 @@
 
 namespace hyperverse {
 
+enum class OreTier {
+  Common,
+  Industrial,
+  Rare,
+  Exotic,
+  Anomalous,
+};
+
+struct OreTint {
+  float r{0.78F};
+  float g{0.80F};
+  float b{0.82F};
+};
+
 struct MiningResource {
+  OreTier tier{OreTier::Common};
   float integrity{100.0F};
   float heat{0.0F};
   float structural_stress{0.0F};
@@ -17,6 +32,8 @@ struct MiningResource {
   float extracted_mass{0.0F};
   bool venting{false};
 };
+
+[[nodiscard]] OreTint ore_tint(OreTier tier);
 
 struct MiningLaserTuning {
   float range{1250.0F};

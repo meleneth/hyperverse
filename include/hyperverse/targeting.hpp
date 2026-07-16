@@ -13,6 +13,9 @@ struct AsteroidBody {
   Vec2 position{};
   Vec2 velocity{};
   float radius{160.0F};
+  float base_radius{160.0F};
+  float rotation_radians{0.0F};
+  float angular_velocity{0.0F};
   float scan_confidence{0.25F};
 };
 
@@ -48,5 +51,7 @@ void update_target_lock(
   const SectorTuning& sector,
   const TargetingTuning& tuning = {}
 );
+
+void update_asteroid_motion(entt::registry& registry, const SectorTuning& sector, float dt_seconds);
 
 }  // namespace hyperverse

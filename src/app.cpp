@@ -10,6 +10,7 @@
 #include "hyperverse/input.hpp"
 #include "hyperverse/mining.hpp"
 #include "hyperverse/pressure.hpp"
+#include "hyperverse/projectile.hpp"
 #include "hyperverse/raider.hpp"
 #include "hyperverse/targeting.hpp"
 #include "hyperverse/version.hpp"
@@ -27,6 +28,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -154,6 +156,7 @@ public:
       raw.confirm = key_down(SDL_SCANCODE_SPACE);
       raw.cancel = key_down(SDL_SCANCODE_ESCAPE);
       raw.target_cycle = key_down(SDL_SCANCODE_TAB);
+      raw.particle_fire = key_down(SDL_SCANCODE_E);
       raw.tool_intensity = key_down(SDL_SCANCODE_F) ? 1.0F : 0.0F;
     }
 
@@ -170,6 +173,7 @@ public:
       raw.confirm = raw.confirm || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_SOUTH);
       raw.cancel = raw.cancel || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_EAST);
       raw.target_cycle = raw.target_cycle || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
+      raw.particle_fire = raw.particle_fire || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_WEST);
       raw.tool_intensity = std::max(raw.tool_intensity, trigger(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER));
     }
 
@@ -371,6 +375,55 @@ void tint_sprite(hyperverse::SpriteDraw& sprite, float r, float g, float b, floa
   sprite.tint_a = a;
 }
 
+[[nodiscard]] hyperverse::SpriteTexture glyph_texture(char character) {
+  if (character >= 'A' && character <= 'Z') {
+    return static_cast<hyperverse::SpriteTexture>(
+      static_cast<int>(hyperverse::SpriteTexture::GlyphA) + static_cast<int>(character - 'A')
+    );
+  }
+  return static_cast<hyperverse::SpriteTexture>(
+    static_cast<int>(hyperverse::SpriteTexture::Glyph0) + static_cast<int>(character - '0')
+  );
+}
+
+void add_hud_text(
+  std::vector<hyperverse::SpriteDraw>& sprites,
+  std::string_view text,
+  float left_ndc,
+  float top_ndc,
+  float glyph_height_ndc,
+  float r = 0.64F,
+  float g = 0.95F,
+  float b = 1.0F
+) {
+  const float glyph_width_ndc = glyph_height_ndc * 0.5F;
+  const float advance = glyph_width_ndc * 1.12F;
+  float x = left_ndc;
+
+  for (char character : text) {
+    if (character == ' ') {
+      x += advance;
+      continue;
+    }
+    if (character < '0' || (character > '9' && character < 'A') || character > 'Z') {
+      x += advance;
+      continue;
+    }
+
+    sprites.push_back({
+      .texture = glyph_texture(character),
+      .center_x_ndc = x + (glyph_width_ndc * 0.5F),
+      .center_y_ndc = top_ndc - (glyph_height_ndc * 0.5F),
+      .half_width_ndc = glyph_width_ndc * 0.5F,
+      .half_height_ndc = glyph_height_ndc * 0.5F,
+      .tint_r = r,
+      .tint_g = g,
+      .tint_b = b,
+    });
+    x += advance;
+  }
+}
+
 void add_target_bracket_lines(
   std::vector<hyperverse::LineDraw>& lines,
   const hyperverse::SpriteDraw& bounds,
@@ -398,13 +451,13 @@ void add_target_bracket_lines(
   add_line(right, bottom, right, bottom + vertical);
 }
 
-void add_box_lines(std::vector<hyperverse::LineDraw>& lines, const hyperverse::SpriteDraw& bounds, float r, float g, float b) {
+void add_box_lines(std::vector<hyperverse::LineDraw>& lines, const hyperverse::SpriteDraw& bounds, float r, float g, float b, float a = 1.0F) {
   const float left = bounds.center_x_ndc - bounds.half_width_ndc;
   const float right = bounds.center_x_ndc + bounds.half_width_ndc;
   const float bottom = bounds.center_y_ndc - bounds.half_height_ndc;
   const float top = bounds.center_y_ndc + bounds.half_height_ndc;
   const auto add_line = [&](float x0, float y0, float x1, float y1) {
-    lines.push_back({.start_x_ndc = x0, .start_y_ndc = y0, .end_x_ndc = x1, .end_y_ndc = y1, .r = r, .g = g, .b = b});
+    lines.push_back({.start_x_ndc = x0, .start_y_ndc = y0, .end_x_ndc = x1, .end_y_ndc = y1, .r = r, .g = g, .b = b, .a = a});
   };
 
   add_line(left, top, right, top);
@@ -517,33 +570,58 @@ int App::run() {
     account.registry().emplace<SectorPressureModel>(player);
     account.registry().emplace<SectorPressureHudSnapshot>(player);
     account.registry().emplace<MiningDroneHudSnapshot>(player);
+    account.registry().emplace<ParticleCannonHudSnapshot>(player);
     account.registry().emplace<RaiderHudSnapshot>(player);
     account.registry().emplace<CargoRecoveryHudSnapshot>(player);
     account.registry().emplace<CollisionHudSnapshot>(player);
 
-    const entt::entity mining_drone = account.registry().create();
-    account.registry().emplace<MiningDrone>(
-      mining_drone,
-      MiningDrone{.position = {.x = ship.position.x - 160.0F, .y = ship.position.y + 120.0F}}
-    );
+    std::vector<entt::entity> mining_drones;
+    mining_drones.reserve(8);
+    for (int index = 0; index < 8; ++index) {
+      const float angle = (static_cast<float>(index) / 8.0F) * std::numbers::pi_v<float> * 2.0F;
+      const entt::entity drone_entity = account.registry().create();
+      account.registry().emplace<MiningDrone>(
+        drone_entity,
+        MiningDrone{
+          .position = {.x = ship.position.x + (std::cos(angle) * 180.0F), .y = ship.position.y + (std::sin(angle) * 180.0F)},
+          .facing_radians = angle,
+        }
+      );
+      mining_drones.push_back(drone_entity);
+    }
     const entt::entity raider_entity = account.registry().create();
     account.registry().emplace<RaiderShip>(
       raider_entity,
       RaiderShip{.position = {.x = ship.position.x + 640.0F, .y = ship.position.y - 420.0F}}
     );
 
-    const entt::entity primary_asteroid = account.registry().create();
-    account.registry().emplace<AsteroidBody>(
-      primary_asteroid,
-      AsteroidBody{.position = {.x = 5650.0F, .y = 3850.0F}, .radius = 220.0F, .scan_confidence = 0.34F}
-    );
-    account.registry().emplace<MiningResource>(primary_asteroid);
-    const entt::entity secondary_asteroid = account.registry().create();
-    account.registry().emplace<AsteroidBody>(
-      secondary_asteroid,
-      AsteroidBody{.position = {.x = 3825.0F, .y = 5200.0F}, .radius = 150.0F, .scan_confidence = 0.58F}
-    );
-    account.registry().emplace<MiningResource>(secondary_asteroid);
+    const std::vector<AsteroidBody> asteroid_field{
+      {.position = {.x = 5650.0F, .y = 3850.0F}, .velocity = {.x = -22.0F, .y = 16.0F}, .radius = 220.0F, .base_radius = 220.0F, .angular_velocity = 0.18F, .scan_confidence = 0.34F},
+      {.position = {.x = 3825.0F, .y = 5200.0F}, .velocity = {.x = 18.0F, .y = -10.0F}, .radius = 150.0F, .base_radius = 150.0F, .angular_velocity = -0.24F, .scan_confidence = 0.58F},
+      {.position = {.x = 4925.0F, .y = 2920.0F}, .velocity = {.x = 12.0F, .y = 22.0F}, .radius = 95.0F, .base_radius = 95.0F, .angular_velocity = 0.42F, .scan_confidence = 0.46F},
+      {.position = {.x = 6200.0F, .y = 4625.0F}, .velocity = {.x = -30.0F, .y = -8.0F}, .radius = 180.0F, .base_radius = 180.0F, .angular_velocity = -0.12F, .scan_confidence = 0.72F},
+      {.position = {.x = 3100.0F, .y = 3550.0F}, .velocity = {.x = 26.0F, .y = 19.0F}, .radius = 130.0F, .base_radius = 130.0F, .angular_velocity = 0.31F, .scan_confidence = 0.41F},
+      {.position = {.x = 6900.0F, .y = 5980.0F}, .velocity = {.x = -18.0F, .y = -24.0F}, .radius = 260.0F, .base_radius = 260.0F, .angular_velocity = 0.09F, .scan_confidence = 0.29F},
+      {.position = {.x = 2450.0F, .y = 6100.0F}, .velocity = {.x = 34.0F, .y = -14.0F}, .radius = 110.0F, .base_radius = 110.0F, .angular_velocity = -0.36F, .scan_confidence = 0.63F},
+      {.position = {.x = 7800.0F, .y = 3100.0F}, .velocity = {.x = -28.0F, .y = 27.0F}, .radius = 155.0F, .base_radius = 155.0F, .angular_velocity = 0.22F, .scan_confidence = 0.52F},
+      {.position = {.x = 1500.0F, .y = 2500.0F}, .velocity = {.x = 24.0F, .y = 11.0F}, .radius = 75.0F, .base_radius = 75.0F, .angular_velocity = 0.57F, .scan_confidence = 0.38F},
+      {.position = {.x = 8350.0F, .y = 7250.0F}, .velocity = {.x = -36.0F, .y = -18.0F}, .radius = 205.0F, .base_radius = 205.0F, .angular_velocity = -0.16F, .scan_confidence = 0.67F},
+      {.position = {.x = 1150.0F, .y = 7200.0F}, .velocity = {.x = 20.0F, .y = -32.0F}, .radius = 140.0F, .base_radius = 140.0F, .angular_velocity = 0.28F, .scan_confidence = 0.57F},
+      {.position = {.x = 7350.0F, .y = 900.0F}, .velocity = {.x = -12.0F, .y = 36.0F}, .radius = 100.0F, .base_radius = 100.0F, .angular_velocity = -0.44F, .scan_confidence = 0.49F},
+    };
+    std::size_t asteroid_index = 0;
+    for (const AsteroidBody& asteroid : asteroid_field) {
+      const entt::entity entity = account.registry().create();
+      account.registry().emplace<AsteroidBody>(entity, asteroid);
+      const OreTier tier =
+        asteroid_index == 5U ? OreTier::Anomalous :
+        asteroid_index == 9U ? OreTier::Exotic :
+        (asteroid_index == 3U || asteroid_index == 7U) ? OreTier::Rare :
+        (asteroid_index == 1U || asteroid_index == 4U || asteroid_index == 10U) ? OreTier::Industrial :
+        OreTier::Common;
+      account.registry().emplace<MiningResource>(entity, MiningResource{.tier = tier});
+      ++asteroid_index;
+    }
     GamepadSlot gamepad;
     gamepad.open_first_available();
     FixedTimestep timestep{1.0F / 60.0F};
@@ -557,6 +635,7 @@ int App::run() {
     const CargoEscortRoute escort_route{.gate_position = {.x = 7600.0F, .y = 1600.0F}};
     const SectorPressureTuning pressure_tuning{.escalation_interval_seconds = 30.0F};
     const MiningDroneTuning mining_drone_tuning{};
+    const ParticleCannonTuning particle_cannon_tuning{};
     const RaiderTuning raider_tuning{};
     FlightInputMapper input_mapper;
     SemanticInputFrame latest_intent{};
@@ -597,6 +676,7 @@ int App::run() {
       while (timestep.consume_tick()) {
         latest_intent = input_mapper.map(gamepad.sample());
         simulate_assisted_flight(ship, latest_intent, flight, sector, timestep.tick_seconds());
+        update_asteroid_motion(account.registry(), sector, timestep.tick_seconds());
         CameraState& camera = account.registry().get<CameraState>(player);
         TargetLockModel& target_lock = account.registry().get<TargetLockModel>(player);
         MiningHudSnapshot& mining_hud = account.registry().get<MiningHudSnapshot>(player);
@@ -609,6 +689,7 @@ int App::run() {
         SectorPressureModel& pressure = account.registry().get<SectorPressureModel>(player);
         SectorPressureHudSnapshot& pressure_hud = account.registry().get<SectorPressureHudSnapshot>(player);
         MiningDroneHudSnapshot& drone_hud = account.registry().get<MiningDroneHudSnapshot>(player);
+        ParticleCannonHudSnapshot& particle_hud = account.registry().get<ParticleCannonHudSnapshot>(player);
         RaiderHudSnapshot& raider_hud = account.registry().get<RaiderHudSnapshot>(player);
         CargoRecoveryHudSnapshot& recovery_hud = account.registry().get<CargoRecoveryHudSnapshot>(player);
         CollisionHudSnapshot& collision_hud = account.registry().get<CollisionHudSnapshot>(player);
@@ -616,14 +697,27 @@ int App::run() {
         update_target_lock(target_lock, account.registry(), ship.position, ship.velocity, latest_intent, sector);
         mining_hud =
           update_mining_laser(account.registry(), target_lock, ship, latest_intent, sector, mining_laser, timestep.tick_seconds());
-        drone_hud = update_mining_drone(
-          account.registry().get<MiningDrone>(mining_drone),
-          account.registry(),
-          target_lock,
-          sector,
-          timestep.tick_seconds(),
-          mining_drone_tuning
-        );
+        drone_hud = {};
+        for (entt::entity drone_entity : mining_drones) {
+          const MiningDroneHudSnapshot current_drone = update_mining_drone(
+            account.registry().get<MiningDrone>(drone_entity),
+            account.registry(),
+            target_lock,
+            sector,
+            timestep.tick_seconds(),
+            mining_drone_tuning
+          );
+          drone_hud.extracted_mass += current_drone.extracted_mass;
+          if (current_drone.phase == MiningDronePhase::Mining) {
+            drone_hud.phase = MiningDronePhase::Mining;
+            drone_hud.target = current_drone.target;
+            drone_hud.target_distance = current_drone.target_distance;
+          } else if (drone_hud.phase == MiningDronePhase::Idle && current_drone.phase == MiningDronePhase::Travelling) {
+            drone_hud.phase = MiningDronePhase::Travelling;
+            drone_hud.target = current_drone.target;
+            drone_hud.target_distance = current_drone.target_distance;
+          }
+        }
         cargo_hud = update_cargo_manifest(cargo_manifest, account.registry(), quota);
         escort_hud = update_cargo_escort_state(cargo_escort, cargo_hud, latest_intent);
         if (!escort_hud.cargo_train_active && escort_hud.phase != CargoEscortPhase::Complete) {
@@ -644,6 +738,7 @@ int App::run() {
         if (recovery_hud.recovered) {
           raider_hud = {};
         }
+        particle_hud = update_particle_cannon(account.registry(), ship, latest_intent, sector, timestep.tick_seconds(), particle_cannon_tuning);
         pressure_hud = update_sector_pressure(pressure, timestep.tick_seconds(), pressure_tuning);
         collision_hud = predict_ship_asteroid_collision(ship, account.registry(), sector);
       }
@@ -658,6 +753,7 @@ int App::run() {
       const CargoEscortRouteHudSnapshot& route_hud = account.registry().get<CargoEscortRouteHudSnapshot>(player);
       const SectorPressureHudSnapshot& pressure_hud = account.registry().get<SectorPressureHudSnapshot>(player);
       const MiningDroneHudSnapshot& drone_hud = account.registry().get<MiningDroneHudSnapshot>(player);
+      const ParticleCannonHudSnapshot& particle_hud = account.registry().get<ParticleCannonHudSnapshot>(player);
       const RaiderHudSnapshot& raider_hud = account.registry().get<RaiderHudSnapshot>(player);
       const CargoRecoveryHudSnapshot& recovery_hud = account.registry().get<CargoRecoveryHudSnapshot>(player);
       const CollisionHudSnapshot& collision_hud = account.registry().get<CollisionHudSnapshot>(player);
@@ -684,8 +780,13 @@ int App::run() {
               sector,
               renderer.width(),
               renderer.height(),
-              asteroid_sprite_size(asteroid, account.registry().try_get<MiningResource>(entity))
+              asteroid_sprite_size(asteroid, account.registry().try_get<MiningResource>(entity)),
+              asteroid.rotation_radians
             );
+            if (const MiningResource* resource = account.registry().try_get<MiningResource>(entity); resource != nullptr) {
+              const OreTint tint = ore_tint(resource->tier);
+              tint_sprite(asteroid_sprite, tint.r, tint.g, tint.b);
+            }
             if (entity == mining_hud.target && mining_hud.blowout) {
               tint_sprite(asteroid_sprite, 1.0F, 0.24F, 0.12F);
             } else if (entity == mining_hud.target && mining_hud.unstable) {
@@ -723,20 +824,37 @@ int App::run() {
             tint_sprite(laser, 1.0F, 0.72F, 0.22F);
             sprites.push_back(laser);
           }
-          const MiningDrone& drone = account.registry().get<MiningDrone>(mining_drone);
-          SpriteDraw drone_sprite = make_world_sprite(
-            SpriteTexture::Drone,
-            drone.position,
-            camera.position,
-            sector,
-            renderer.width(),
-            renderer.height(),
-            42.0F
-          );
-          if (drone.phase == MiningDronePhase::Mining) {
-            tint_sprite(drone_sprite, 0.55F, 1.0F, 0.65F);
+          for (auto [entity, particle] : account.registry().view<ParticleShot>().each()) {
+            (void)entity;
+            SpriteDraw particle_sprite = make_world_sprite(
+              SpriteTexture::Particle,
+              particle.position,
+              camera.position,
+              sector,
+              renderer.width(),
+              renderer.height(),
+              16.0F
+            );
+            tint_sprite(particle_sprite, 0.72F, 0.92F, 1.0F);
+            sprites.push_back(particle_sprite);
           }
-          sprites.push_back(drone_sprite);
+          for (entt::entity drone_entity : mining_drones) {
+            const MiningDrone& drone = account.registry().get<MiningDrone>(drone_entity);
+            SpriteDraw drone_sprite = make_world_sprite(
+              SpriteTexture::Drone,
+              drone.position,
+              camera.position,
+              sector,
+              renderer.width(),
+              renderer.height(),
+              42.0F,
+              ship_sprite_rotation(drone.facing_radians)
+            );
+            if (drone.phase == MiningDronePhase::Mining) {
+              tint_sprite(drone_sprite, 0.55F, 1.0F, 0.65F);
+            }
+            sprites.push_back(drone_sprite);
+          }
           const RaiderShip& raider = account.registry().get<RaiderShip>(raider_entity);
           if (raider_hud.active) {
             SpriteDraw raider_sprite = make_world_sprite(
@@ -764,10 +882,49 @@ int App::run() {
             56.0F,
             ship_sprite_rotation(ship.facing_radians)
           ));
+          add_hud_text(sprites, "SPD " + std::to_string(static_cast<int>(hud.speed)), -0.96F, 0.92F, 0.045F);
+          add_hud_text(sprites, "ORE " + std::to_string(static_cast<int>(cargo_hud.delivered_mass)), -0.96F, 0.86F, 0.045F, 0.72F, 1.0F, 0.72F);
+          add_hud_text(sprites, "BOX " + std::to_string(cargo_hud.cargo_boxes), -0.96F, 0.80F, 0.045F, 0.72F, 1.0F, 0.72F);
+          add_hud_text(sprites, "PRS " + std::to_string(pressure_hud.escalation_level), -0.96F, 0.74F, 0.045F, 1.0F, 0.82F, 0.42F);
+          if (has_locked_target(target_lock)) {
+            add_hud_text(sprites, "TGT " + std::to_string(static_cast<int>(target_lock.wrapped_distance)), 0.56F, 0.92F, 0.045F);
+          }
+          if (mining_hud.beam_active) {
+            add_hud_text(sprites, "ZAP", 0.56F, 0.86F, 0.045F, 1.0F, 0.72F, 0.24F);
+          }
+          if (particle_hud.active_particles > 0 || particle_hud.impacts > 0) {
+            add_hud_text(sprites, "PCN " + std::to_string(particle_hud.active_particles), 0.56F, 0.68F, 0.045F, 0.72F, 0.92F, 1.0F);
+          }
+          if (escort_hud.cargo_train_active) {
+            add_hud_text(sprites, "GATE " + std::to_string(static_cast<int>(route_hud.gate_distance)), 0.48F, 0.80F, 0.045F);
+          }
+          if (raider_hud.active) {
+            add_hud_text(sprites, "RAIDER", 0.56F, 0.74F, 0.045F, 1.0F, 0.28F, 0.22F);
+          }
+          if (recovery_hud.stolen_box_near) {
+            add_hud_text(sprites, "RECOVER", 0.52F, 0.68F, 0.045F, 1.0F, 0.34F, 0.25F);
+          }
           return sprites;
         }(),
         .lines = [&] {
           std::vector<LineDraw> lines;
+          constexpr float radar_radius_world = 1800.0F;
+          for (auto [entity, asteroid] : account.registry().view<AsteroidBody>().each()) {
+            (void)entity;
+            if (wrapped_distance(ship.position, asteroid.position, sector) > radar_radius_world) {
+              continue;
+            }
+            const SpriteDraw radar_bounds = make_world_sprite(
+              SpriteTexture::Reticle,
+              asteroid.position,
+              camera.position,
+              sector,
+              renderer.width(),
+              renderer.height(),
+              (asteroid.radius * 0.48F) + 18.0F
+            );
+            add_box_lines(lines, radar_bounds, 0.22F, 0.86F, 1.0F, 0.42F);
+          }
           if (has_locked_target(target_lock) && account.registry().valid(target_lock.target)) {
             const AsteroidBody& target = account.registry().get<AsteroidBody>(target_lock.target);
             const SpriteDraw reticle_bounds = make_world_sprite(

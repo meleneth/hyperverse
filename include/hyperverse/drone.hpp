@@ -20,6 +20,7 @@ struct MiningDrone {
   Vec2 velocity{};
   entt::entity target{entt::null};
   MiningDronePhase phase{MiningDronePhase::Idle};
+  float facing_radians{0.0F};
   float extracted_mass{0.0F};
 };
 

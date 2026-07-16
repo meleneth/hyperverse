@@ -56,15 +56,17 @@ These assets are temporary implementation scaffolding, not a permanent visual co
 - Aim/facing assist: arrow keys or right stick
 - Cycle/lock asteroid target: `Tab` or right shoulder
 - Fire mining laser at locked asteroid: `F` or right trigger
+- Fire particle cannon: `E` or west face button
 - Activate cargo escort after quota authorization: `Space` or south face button
 - Cancel/quit: `Escape` or east face button
 
 The current Vulkan prototype draws Sector7-derived sprites, hardware-uploaded textures, line HUD
-brackets, mining beams, cargo boxes, active cargo train links, an escort gate route, and an active
-escort raider. The window title is the active HUD: it reports position, speed, camera anchor, edge
-warning, target distance, scan confidence, closing speed, rock integrity, heat, extracted ore, cargo
-quota, sector pressure, drone state, collision warnings, escort train state, gate distance, and
-raider disruption, stolen cargo escape, and recovery state.
+brackets, text glyph HUD, mining beams, particle cannon shots, cargo boxes, active cargo train links,
+an escort gate route, and an active escort raider. Ship and asteroid motion are stepped through
+Jolt. Asteroids vary in size, velocity, rotation, mass, and ore tint; nearby rocks get electric-blue
+radar brackets. The prototype starts with eight mining drones until progression is defined. The HUD
+reports position, speed, target state, extracted ore, cargo quota, sector pressure, drone state,
+collision warnings, escort state, raider disruption, stolen cargo escape, and recovery state.
 
 ## Core Fantasy
 

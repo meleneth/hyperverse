@@ -106,6 +106,7 @@ add_library(
   src/input.cpp
   src/mining.cpp
   src/pressure.cpp
+  src/projectile.cpp
   src/raider.cpp
   src/render_frame.cpp
   src/sector.cpp
