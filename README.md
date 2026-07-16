@@ -8,14 +8,14 @@ The game is about feel, information, and controlled industrial violence.
 
 ## Current Project Shape
 
-- 2D gameplay in continuous wraparound sectors
+- Playable 2D Vulkan prototype in continuous wraparound sectors
 - Each sector is approximately 9 camera-widths by 9 camera-heights
-- Typical mission length: about 20 minutes
-- Short contract variants: about 5 minutes
-- Five-minute escalation beats increase pressure and reward
-- Quota completion authorizes extraction
+- Fixed 60 Hz simulation clock through `UniverseClock::FixedTickSeconds`
+- Development round pressure currently escalates every 1 minute
+- The long-form design target remains longer contracts with larger escalation beats
+- Quota completion authorizes cargo escort and extraction
 - Remaining past quota increases payout
-- The final phase becomes an autoscrolling cargo escort
+- The final phase becomes a cargo escort to a remote jump gate
 - Linux and Steam Deck are primary targets
 - Initial development may begin under MSYS2
 - C++23
@@ -31,8 +31,9 @@ The game is about feel, information, and controlled industrial violence.
 
 ## Bootstrap
 
-Milestone 0 builds a `hyperverse` executable that opens an SDL3 Vulkan window, clears the
-screen through Vulkan, initializes gamepad support, and builds a Catch2 test target.
+The repository builds a `hyperverse` executable and a Catch2 test target. The current executable
+opens an SDL3 Vulkan window, initializes gamepad support, renders sprite assets and HUD geometry,
+and runs the playable mining/escort prototype.
 
 See [Installation and Bootstrap](docs/INSTALL.md) for Linux, Steam Deck, MSYS2, CI, and install
 commands.
@@ -50,7 +51,7 @@ The current local copy lives in `assets/sector7/sprites` with provenance notes i
 
 These assets are temporary implementation scaffolding, not a permanent visual constraint.
 
-## Current Prototype Controls
+## Current Controls
 
 - Move: `WASD` or left stick
 - Aim/facing assist: arrow keys or right stick
@@ -62,17 +63,41 @@ These assets are temporary implementation scaffolding, not a permanent visual co
 - Activate cargo escort after quota authorization: `Space` or south face button
 - Cancel/quit: `Escape`
 
+## Current Playable State
+
 The current Vulkan prototype draws Sector7-derived sprites, hardware-uploaded textures, line HUD
-brackets, text glyph HUD, mining beams, particle cannon shots, cargo boxes, active cargo train links,
-an escort gate route, and an active escort raider. Ship and asteroid motion are stepped through
-Jolt. Asteroids vary in size, velocity, rotation, explicit mass, structural break progress, and
-color-coded ore rarity; nearby rocks get electric-blue radar brackets. The prototype starts with
-eight mining drones until progression is defined. The HUD reports position, speed, target state,
-target mass, ore rarity value, mineral composition, extracted ore, cargo quota, sector pressure,
-drone state, collision warnings, escort state, raider disruption, stolen cargo escape, and recovery
-state. The upper-right HUD face-button legend shows the current face-button meanings and changes
-when the tool trigger is held. The top-center urgency HUD shows round time remaining, current
-threat level, next threat countdown, and a progress bar toward the next escalation.
+brackets, text glyph HUD, mining beams, dual particle cannon shots, cargo boxes, active cargo train
+links, a harpoon tether, an escort gate route, drones, and raiders.
+
+The ship uses assisted desired-motion flight, a short burst-speed mode, shields, armor, and a
+fixed-step simulation loop. Boost doubles top speed briefly and falls off on a short hockey-stick
+curve. Boost detaches both cargo tow links and the harpoon.
+
+Asteroids are large moving bodies with explicit mass, structural break progress, two break levels,
+composition, ore rarity, velocity, and spin. Kinetic particle shots apply linear impulse, and
+glancing hits apply angular impulse. Breakup produces recoverable component chunks instead of
+cloned copies of the parent composition, with some material lost when the parent has several
+meaningful component groups.
+
+The harpoon latches to the locked asteroid. While latched, the ship is pulled toward the rock's
+surface motion, including spin, and the asteroid receives full-engine-power velocity matching
+toward the ship velocity. This makes fast spinners dangerous and gives the player a tool for
+slowing rocks enough for drones to mine.
+
+Mining drones operate autonomously against valid target sizes, spread around work targets, return
+to formation, and break off when their target is invalid. The current prototype still starts with
+eight strong drones so high-end behavior is visible before progression is designed.
+
+Cargo is generated from extracted mass and ore value, inherits ore color, follows the ship as a
+train during escort, stages as a group near the jump gate, and extracts sequentially. Raiders can
+attack cargo and the player; gate arrival can spawn combat raiders.
+
+The HUD reports position, speed, ship health, round timer, threat level, target state, target mass,
+ore rarity value, mineral composition, extracted ore, cargo quota, sector pressure, drone state,
+collision warnings, escort state, raider disruption, stolen cargo escape, recovery state, and
+harpoon state. The upper-right HUD face-button legend shows current face-button meanings and
+changes when the tool trigger is held. The top-center urgency HUD shows round time remaining,
+current threat level, next threat countdown, and progress toward the next escalation.
 
 ## Current Gameplay Considerations
 
@@ -90,6 +115,19 @@ threat level, next threat countdown, and a progress bar toward the next escalati
 - Reaching the extraction gate spawns combat raiders that prioritize killing the player over stealing cargo.
 - Asteroid damage, fragmentation, consumption, particle impacts, and drone target release are event-visible gameplay facts. New behavior should prefer event responders over hidden direct call chains.
 - GrandCentral owns the EventPP bus and context objects expose it. App still contains too much orchestration and should keep shrinking toward platform setup plus GrandCentral startup.
+
+## Known Future Directions
+
+- Replace temporary eight-drone development start with progression-aware drone counts, roles, and upgrades.
+- Build explicit modal control FSMs for flight, mining posture, mobile weapons, harpoon/tow, HUD command, and cargo escort.
+- Make ship computer quality drive HUD effectiveness: radar count/range/update cadence, scan confidence, prediction quality, warning clarity, and target detail.
+- Expand asteroid scanning into real pre-breakup decision making with chemical makeup, fracture maps, volatile hazards, and tool recommendations.
+- Add more asteroid families and hazards: heat, gas, radiation, brittle fracture, controlled detonation, debris, and material-specific reactions.
+- Add additional projectile/tool behavior: laser-coherent breakup, kinetic velocity transfer, explosive radial fragmentation, and richer harpoon/tether stress.
+- Turn threat level into more than HUD pressure: escalating raider spawns, combat intensity, contract modifiers, and gate danger.
+- Improve cargo escort state machines: detached cargo recovery, tow stress, extraction sequencing, and loss/payment consequences.
+- Move more lifecycle behavior behind EventPP responders and typed contexts; keep shrinking `App` toward platform setup plus `GrandCentral` startup.
+- Replace placeholder art and temporary tuning with reviewed production assets, data-driven tuning, and richer feedback.
 
 ## Core Fantasy
 
