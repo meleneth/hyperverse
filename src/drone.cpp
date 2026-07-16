@@ -15,12 +15,21 @@ namespace {
   return {.x = std::cos(radians), .y = std::sin(radians)};
 }
 
+[[nodiscard]] Vec2 idle_formation_position(const MiningDrone& drone, const ShipMotion& ship, const SectorTuning& sector, const MiningDroneTuning& tuning) {
+  const Vec2 forward = direction_from_angle(ship.facing_radians);
+  const Vec2 right{.x = -forward.y, .y = forward.x};
+  const float side_offset = std::sin(drone.work_angle_radians) * tuning.formation_spread;
+  const float trail_offset = tuning.formation_trail_distance + (std::abs(std::cos(drone.work_angle_radians)) * tuning.formation_spread * 0.45F);
+  return wrap_position(ship.position - (forward * trail_offset) + (right * side_offset), sector);
+}
+
 }  // namespace
 
 MiningDroneHudSnapshot update_mining_drone(
   MiningDrone& drone,
   entt::registry& registry,
   const TargetLockModel& mining_priority,
+  const ShipMotion& ship,
   const SectorTuning& sector,
   float dt_seconds,
   const MiningDroneTuning& tuning
@@ -33,8 +42,18 @@ MiningDroneHudSnapshot update_mining_drone(
 
   MiningDroneHudSnapshot hud{.phase = drone.phase, .target = drone.target, .extracted_mass = drone.extracted_mass};
   if (drone.target == entt::null) {
+    const Vec2 formation_position = idle_formation_position(drone, ship, sector, tuning);
+    const Vec2 to_formation = wrapped_delta(drone.position, formation_position, sector);
     drone.phase = MiningDronePhase::Idle;
-    drone.velocity = {};
+    hud.target_distance = length(to_formation);
+    if (hud.target_distance > tuning.arrival_tolerance) {
+      drone.velocity = normalize_or_zero(to_formation) * tuning.max_speed;
+      drone.facing_radians = std::atan2(drone.velocity.y, drone.velocity.x);
+      drone.position = wrap_position(drone.position + (drone.velocity * dt_seconds), sector);
+    } else {
+      drone.velocity = ship.velocity;
+      drone.facing_radians = ship.facing_radians;
+    }
     hud.phase = drone.phase;
     return hud;
   }

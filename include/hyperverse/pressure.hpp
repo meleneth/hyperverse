@@ -9,7 +9,7 @@ struct SectorPressureModel {
 };
 
 struct SectorPressureTuning {
-  float escalation_interval_seconds{300.0F};
+  float escalation_interval_seconds{60.0F};
   float announcement_duration_seconds{8.0F};
   float pressure_per_level{0.18F};
 };

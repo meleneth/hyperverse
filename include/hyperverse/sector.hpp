@@ -9,6 +9,7 @@ struct SectorTuning {
   float height{9000.0F};
 };
 
+[[nodiscard]] SectorTuning sector_from_viewport(float viewport_width_pixels, float viewport_height_pixels, float screens = 9.0F);
 [[nodiscard]] float wrap_coordinate(float value, float span);
 [[nodiscard]] Vec2 wrap_position(Vec2 position, const SectorTuning& sector);
 [[nodiscard]] float wrapped_axis_delta(float from, float to, float span);

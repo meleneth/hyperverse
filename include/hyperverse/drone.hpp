@@ -1,5 +1,6 @@
 #pragma once
 
+#include "hyperverse/flight.hpp"
 #include "hyperverse/mining.hpp"
 #include "hyperverse/sector.hpp"
 #include "hyperverse/targeting.hpp"
@@ -29,6 +30,8 @@ struct MiningDroneTuning {
   float max_speed{520.0F};
   float mining_range{220.0F};
   float work_standoff{320.0F};
+  float formation_trail_distance{280.0F};
+  float formation_spread{190.0F};
   float arrival_tolerance{36.0F};
   float integrity_damage_per_second{5.0F};
   float extraction_per_second{3.5F};
@@ -45,6 +48,7 @@ struct MiningDroneHudSnapshot {
   MiningDrone& drone,
   entt::registry& registry,
   const TargetLockModel& mining_priority,
+  const ShipMotion& ship,
   const SectorTuning& sector,
   float dt_seconds,
   const MiningDroneTuning& tuning = {}

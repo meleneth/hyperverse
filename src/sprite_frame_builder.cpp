@@ -8,6 +8,7 @@
 #include "hyperverse/cargo_train.hpp"
 #include "hyperverse/collision.hpp"
 #include "hyperverse/drone.hpp"
+#include "hyperverse/hud_notice.hpp"
 #include "hyperverse/mining.hpp"
 #include "hyperverse/pressure.hpp"
 #include "hyperverse/projectile.hpp"
@@ -283,6 +284,7 @@ SpriteFrame build_sprite_frame(
   const RaiderHudSnapshot& raider_hud = account.registry().get<RaiderHudSnapshot>(player);
   const CargoRecoveryHudSnapshot& recovery_hud = account.registry().get<CargoRecoveryHudSnapshot>(player);
   const CollisionHudSnapshot& collision_hud = account.registry().get<CollisionHudSnapshot>(player);
+  const HudNotice& hud_notice = account.registry().get<HudNotice>(player);
 
   SpriteFrame frame{
     .state = {
@@ -367,6 +369,9 @@ SpriteFrame build_sprite_frame(
     frame.sprites.push_back(raider_sprite);
   }
   frame.sprites.push_back(make_world_sprite(SpriteTexture::Ship, ship.position, camera.position, sector, width, height, 56.0F, ship_sprite_rotation(ship.facing_radians)));
+  if (!hud_notice.message.empty()) {
+    add_hud_text(frame.sprites, hud_notice.message, -0.40F, 0.96F, 0.04F, 1.0F, 0.88F, 0.24F);
+  }
   add_hud_text(frame.sprites, "SPD " + std::to_string(static_cast<int>(hud.speed)), -0.96F, 0.92F, 0.045F);
   add_hud_text(frame.sprites, "SHD", -0.96F, 0.52F, 0.033F, 0.45F, 0.85F, 1.0F);
   add_hud_bar(frame.lines, -0.86F, 0.497F, 0.28F, ship_health.shields / std::max(ship_health.max_shields, 1.0F), 0.3F, 0.85F, 1.0F);

@@ -11,6 +11,7 @@
 #include "hyperverse/account_context.hpp"
 #include "hyperverse/fixed_timestep.hpp"
 #include "hyperverse/flight.hpp"
+#include "hyperverse/hud_notice.hpp"
 #include "hyperverse/camera.hpp"
 #include "hyperverse/cargo.hpp"
 #include "hyperverse/collision.hpp"

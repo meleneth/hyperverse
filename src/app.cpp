@@ -10,6 +10,7 @@
 #include "hyperverse/drone.hpp"
 #include "hyperverse/fixed_timestep.hpp"
 #include "hyperverse/flight.hpp"
+#include "hyperverse/hud_notice.hpp"
 #include "hyperverse/input.hpp"
 #include "hyperverse/mining.hpp"
 #include "hyperverse/pressure.hpp"
@@ -46,7 +47,7 @@ int App::run(AccountCtx& account) {
     GamepadSlot gamepad;
     gamepad.open_first_available();
     FixedTimestep timestep{1.0F / 60.0F};
-    const SectorTuning sector{};
+    const SectorTuning sector = sector_from_viewport(static_cast<float>(renderer.width()), static_cast<float>(renderer.height()));
     const FlightTuning flight{};
     const CameraTuning camera_tuning{};
     const MiningLaserTuning mining_laser{};
@@ -54,7 +55,7 @@ int App::run(AccountCtx& account) {
     const ExtractionSite extraction_site{.position = {.x = 4300.0F, .y = 4300.0F}};
     const CargoBoxTuning cargo_box_tuning{.box_mass = quota.cargo_box_mass};
     const CargoEscortRoute escort_route{.gate_position = {.x = 7600.0F, .y = 1600.0F}};
-    const SectorPressureTuning pressure_tuning{.escalation_interval_seconds = 30.0F};
+    const SectorPressureTuning pressure_tuning{.escalation_interval_seconds = 60.0F};
     const MiningDroneTuning mining_drone_tuning{};
     const ParticleCannonTuning particle_cannon_tuning{};
     const RaiderTuning raider_tuning{};
@@ -100,6 +101,7 @@ int App::run(AccountCtx& account) {
 
         CameraState& camera = account.registry().get<CameraState>(player);
         TargetLockModel& target_lock = account.registry().get<TargetLockModel>(player);
+        HudNotice& hud_notice = account.registry().get<HudNotice>(player);
         ShipHealth& ship_health = account.registry().get<ShipHealth>(player);
         RoundTimer& round_timer = account.registry().get<RoundTimer>(player);
         MiningHudSnapshot& mining_hud = account.registry().get<MiningHudSnapshot>(player);
@@ -119,6 +121,7 @@ int App::run(AccountCtx& account) {
 
         update_camera_anchor(camera, ship, sector, camera_tuning, timestep.tick_seconds());
         update_ship_status(ship_health, round_timer, timestep.tick_seconds());
+        update_hud_notice(hud_notice, timestep.tick_seconds());
         update_target_lock(target_lock, account.registry(), ship.position, ship.velocity, latest_intent, sector);
         mining_hud =
           update_mining_laser(account.registry(), target_lock, ship, latest_intent, sector, mining_laser, timestep.tick_seconds());
@@ -129,6 +132,7 @@ int App::run(AccountCtx& account) {
             account.registry().get<MiningDrone>(drone_entity),
             account.registry(),
             target_lock,
+            ship,
             sector,
             timestep.tick_seconds(),
             mining_drone_tuning
@@ -147,6 +151,9 @@ int App::run(AccountCtx& account) {
 
         cargo_hud = update_cargo_manifest(cargo_manifest, account.registry(), quota);
         escort_hud = update_cargo_escort_state(cargo_escort, cargo_hud, latest_intent);
+        if (escort_hud.cargo_train_active && hud_notice.message.empty()) {
+          push_hud_notice(hud_notice, "GET TO THE TRANSPORT GATE NOW");
+        }
         if (!escort_hud.cargo_train_active && escort_hud.phase != CargoEscortPhase::Complete) {
           (void)sync_cargo_boxes(account.registry(), cargo_manifest, extraction_site, cargo_box_tuning);
         }
@@ -162,6 +169,9 @@ int App::run(AccountCtx& account) {
           timestep.tick_seconds(),
           raider_tuning
         );
+        if (raider_hud.active && hud_notice.message != "CONVOY UNDER ATTACK") {
+          push_hud_notice(hud_notice, "CONVOY UNDER ATTACK");
+        }
         recovery_hud = recover_stolen_cargo(
           account.registry(),
           account.registry().get<RaiderShip>(entities.raider),

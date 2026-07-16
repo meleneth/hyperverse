@@ -110,7 +110,7 @@ Deliver:
 - quota tracking
 - extraction authorization
 - over-quota bonus
-- 5-minute escalation hook with accelerated debug timing
+- 1-minute development escalation hook, with 5-minute contract timing retained as the design target
 
 Acceptance:
 

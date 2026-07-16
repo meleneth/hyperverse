@@ -4,6 +4,14 @@
 
 namespace hyperverse {
 
+SectorTuning sector_from_viewport(float viewport_width_pixels, float viewport_height_pixels, float screens) {
+  constexpr float pixels_per_world_unit = 0.35F;
+  return {
+    .width = (viewport_width_pixels / pixels_per_world_unit) * screens,
+    .height = (viewport_height_pixels / pixels_per_world_unit) * screens,
+  };
+}
+
 float wrap_coordinate(float value, float span) {
   float wrapped = std::fmod(value, span);
   if (wrapped < 0.0F) {

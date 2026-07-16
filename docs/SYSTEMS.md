@@ -238,7 +238,7 @@ If the player destroys the raider before escape:
 
 ## Escalation
 
-Pressure increases on 5-minute intervals.
+Pressure increases on a tunable interval. The design target is a 5-minute beat, while current development builds use a 1-minute beat so escalation can be evaluated quickly.
 
 The HUD should announce escalation aggressively.
 

@@ -26,7 +26,7 @@ Some contracts target approximately 5 minutes.
 
 ## D005: Escalation
 
-Sector pressure increases on 5-minute intervals.
+Sector pressure increases on a tunable interval. The design target is a 5-minute interval, but development builds currently run it at 1 minute so escalation can be observed without long sessions.
 
 The HUD announces escalation loudly.
 

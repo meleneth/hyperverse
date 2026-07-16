@@ -110,6 +110,7 @@ add_library(
   src/fixed_timestep.cpp
   src/flight.cpp
   src/grand_central.cpp
+  src/hud_notice.cpp
   src/input.cpp
   src/mining.cpp
   src/png_rgba.cpp
@@ -195,6 +196,7 @@ if(HYPERVERSE_BUILD_TESTS)
     tests/drone_tests.cpp
     tests/fixed_timestep_tests.cpp
     tests/flight_tests.cpp
+    tests/hud_notice_tests.cpp
     tests/input_tests.cpp
     tests/mining_tests.cpp
     tests/pressure_tests.cpp
