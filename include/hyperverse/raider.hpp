@@ -1,6 +1,7 @@
 #pragma once
 
 #include "hyperverse/cargo.hpp"
+#include "hyperverse/input.hpp"
 #include "hyperverse/sector.hpp"
 
 #include <entt/entity/registry.hpp>
@@ -37,6 +38,17 @@ struct RaiderHudSnapshot {
   bool active{false};
 };
 
+struct CargoRecoveryTuning {
+  float recovery_range{120.0F};
+};
+
+struct CargoRecoveryHudSnapshot {
+  entt::entity recovered_box{entt::null};
+  float nearest_stolen_distance{0.0F};
+  bool stolen_box_near{false};
+  bool recovered{false};
+};
+
 [[nodiscard]] RaiderHudSnapshot update_raider_threat(
   RaiderShip& raider,
   entt::registry& registry,
@@ -45,6 +57,15 @@ struct RaiderHudSnapshot {
   const SectorTuning& sector,
   float dt_seconds,
   const RaiderTuning& tuning = {}
+);
+
+[[nodiscard]] CargoRecoveryHudSnapshot recover_stolen_cargo(
+  entt::registry& registry,
+  RaiderShip& raider,
+  const ShipMotion& ship,
+  const SemanticInputFrame& input,
+  const SectorTuning& sector,
+  const CargoRecoveryTuning& tuning = {}
 );
 
 }  // namespace hyperverse

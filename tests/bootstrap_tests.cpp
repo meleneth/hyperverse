@@ -833,6 +833,57 @@ TEST_CASE("active cargo train ignores stolen boxes") {
   CHECK(stolen_box.position.x == Catch::Approx(1200.0F));
 }
 
+TEST_CASE("stolen cargo recovery reports nearby boxes without relinking") {
+  entt::registry registry;
+  const entt::entity box_entity = registry.create();
+  registry.emplace<hyperverse::CargoBox>(
+    box_entity,
+    hyperverse::CargoBox{.position = {.x = 140.0F, .y = 100.0F}, .index = 0, .state = hyperverse::CargoBoxState::Stolen}
+  );
+  hyperverse::RaiderShip raider{.target_box = box_entity, .phase = hyperverse::RaiderPhase::Towing};
+
+  const hyperverse::CargoRecoveryHudSnapshot hud = hyperverse::recover_stolen_cargo(
+    registry,
+    raider,
+    {.position = {.x = 100.0F, .y = 100.0F}},
+    {},
+    {.width = 9000.0F, .height = 9000.0F},
+    {.recovery_range = 80.0F}
+  );
+
+  CHECK(hud.stolen_box_near);
+  CHECK_FALSE(hud.recovered);
+  CHECK(hud.nearest_stolen_distance == Catch::Approx(40.0F));
+  CHECK(registry.get<hyperverse::CargoBox>(box_entity).state == hyperverse::CargoBoxState::Stolen);
+}
+
+TEST_CASE("confirm near stolen cargo relinks it and drops the raider target") {
+  entt::registry registry;
+  const entt::entity box_entity = registry.create();
+  registry.emplace<hyperverse::CargoBox>(
+    box_entity,
+    hyperverse::CargoBox{.position = {.x = 140.0F, .y = 100.0F}, .index = 0, .state = hyperverse::CargoBoxState::Stolen}
+  );
+  hyperverse::RaiderShip raider{.target_box = box_entity, .phase = hyperverse::RaiderPhase::Towing, .disruption_seconds = 0.5F};
+
+  const hyperverse::CargoRecoveryHudSnapshot hud = hyperverse::recover_stolen_cargo(
+    registry,
+    raider,
+    {.position = {.x = 100.0F, .y = 100.0F}, .velocity = {.x = 25.0F, .y = 0.0F}},
+    {.confirm_requested = true},
+    {.width = 9000.0F, .height = 9000.0F},
+    {.recovery_range = 80.0F}
+  );
+
+  const hyperverse::CargoBox& box = registry.get<hyperverse::CargoBox>(box_entity);
+  CHECK(hud.recovered);
+  CHECK(box.state == hyperverse::CargoBoxState::Linked);
+  CHECK(box.velocity.x == Catch::Approx(25.0F));
+  CHECK((raider.target_box == entt::null));
+  CHECK(raider.phase == hyperverse::RaiderPhase::Idle);
+  CHECK(raider.disruption_seconds == Catch::Approx(0.0F));
+}
+
 TEST_CASE("mining drone acquires the locked asteroid as its priority") {
   entt::registry registry;
   const entt::entity asteroid = registry.create();

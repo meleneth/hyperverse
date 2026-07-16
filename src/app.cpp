@@ -237,6 +237,7 @@ void log_gamepad_state() {
   const hyperverse::SectorPressureHudSnapshot& pressure,
   const hyperverse::MiningDroneHudSnapshot& drone,
   const hyperverse::RaiderHudSnapshot& raider,
+  const hyperverse::CargoRecoveryHudSnapshot& recovery,
   const hyperverse::CollisionHudSnapshot& collision
 ) {
   const char* mapping = hud.control_mapping == hyperverse::ControlMapping::Gamepad ? "gamepad" : "keyboard";
@@ -315,6 +316,11 @@ void log_gamepad_state() {
     if (raider.phase == hyperverse::RaiderPhase::Towing) {
       title << " escape " << raider.escape_distance;
     }
+  }
+  if (recovery.recovered) {
+    title << " | CARGO RECOVERED";
+  } else if (recovery.stolen_box_near) {
+    title << " | RECOVER CARGO " << recovery.nearest_stolen_distance;
   }
   if (collision.contact) {
     title << " | COLLISION " << collision.impact_speed;
@@ -510,6 +516,7 @@ int App::run() {
     account.registry().emplace<SectorPressureHudSnapshot>(player);
     account.registry().emplace<MiningDroneHudSnapshot>(player);
     account.registry().emplace<RaiderHudSnapshot>(player);
+    account.registry().emplace<CargoRecoveryHudSnapshot>(player);
     account.registry().emplace<CollisionHudSnapshot>(player);
 
     const entt::entity mining_drone = account.registry().create();
@@ -601,6 +608,7 @@ int App::run() {
         SectorPressureHudSnapshot& pressure_hud = account.registry().get<SectorPressureHudSnapshot>(player);
         MiningDroneHudSnapshot& drone_hud = account.registry().get<MiningDroneHudSnapshot>(player);
         RaiderHudSnapshot& raider_hud = account.registry().get<RaiderHudSnapshot>(player);
+        CargoRecoveryHudSnapshot& recovery_hud = account.registry().get<CargoRecoveryHudSnapshot>(player);
         CollisionHudSnapshot& collision_hud = account.registry().get<CollisionHudSnapshot>(player);
         update_camera_anchor(camera, ship, sector, camera_tuning, timestep.tick_seconds());
         update_target_lock(target_lock, account.registry(), ship.position, ship.velocity, latest_intent, sector);
@@ -624,6 +632,16 @@ int App::run() {
         train_hud = update_cargo_train(account.registry(), cargo_escort, ship, sector, timestep.tick_seconds());
         raider_hud =
           update_raider_threat(account.registry().get<RaiderShip>(raider_entity), account.registry(), cargo_escort, ship, sector, timestep.tick_seconds(), raider_tuning);
+        recovery_hud = recover_stolen_cargo(
+          account.registry(),
+          account.registry().get<RaiderShip>(raider_entity),
+          ship,
+          latest_intent,
+          sector
+        );
+        if (recovery_hud.recovered) {
+          raider_hud = {};
+        }
         pressure_hud = update_sector_pressure(pressure, timestep.tick_seconds(), pressure_tuning);
         collision_hud = predict_ship_asteroid_collision(ship, account.registry(), sector);
       }
@@ -639,10 +657,11 @@ int App::run() {
       const SectorPressureHudSnapshot& pressure_hud = account.registry().get<SectorPressureHudSnapshot>(player);
       const MiningDroneHudSnapshot& drone_hud = account.registry().get<MiningDroneHudSnapshot>(player);
       const RaiderHudSnapshot& raider_hud = account.registry().get<RaiderHudSnapshot>(player);
+      const CargoRecoveryHudSnapshot& recovery_hud = account.registry().get<CargoRecoveryHudSnapshot>(player);
       const CollisionHudSnapshot& collision_hud = account.registry().get<CollisionHudSnapshot>(player);
 
       if (hud_title_accumulator >= 0.25F) {
-        window.set_title(make_title(hud, camera, target_lock, mining_hud, cargo_hud, escort_hud, train_hud, route_hud, pressure_hud, drone_hud, raider_hud, collision_hud));
+        window.set_title(make_title(hud, camera, target_lock, mining_hud, cargo_hud, escort_hud, train_hud, route_hud, pressure_hud, drone_hud, raider_hud, recovery_hud, collision_hud));
         hud_title_accumulator = 0.0F;
       }
 

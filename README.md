@@ -64,7 +64,7 @@ brackets, mining beams, cargo boxes, active cargo train links, an escort gate ro
 escort raider. The window title is the active HUD: it reports position, speed, camera anchor, edge
 warning, target distance, scan confidence, closing speed, rock integrity, heat, extracted ore, cargo
 quota, sector pressure, drone state, collision warnings, escort train state, gate distance, and
-raider disruption state.
+raider disruption, stolen cargo escape, and recovery state.
 
 ## Core Fantasy
 

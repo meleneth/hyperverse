@@ -93,4 +93,54 @@ RaiderHudSnapshot update_raider_threat(
   };
 }
 
+CargoRecoveryHudSnapshot recover_stolen_cargo(
+  entt::registry& registry,
+  RaiderShip& raider,
+  const ShipMotion& ship,
+  const SemanticInputFrame& input,
+  const SectorTuning& sector,
+  const CargoRecoveryTuning& tuning
+) {
+  entt::entity nearest = entt::null;
+  float nearest_distance = std::numeric_limits<float>::max();
+
+  for (auto [entity, box] : registry.view<CargoBox>().each()) {
+    if (box.state != CargoBoxState::Stolen) {
+      continue;
+    }
+
+    const float distance = wrapped_distance(ship.position, box.position, sector);
+    if (distance < nearest_distance) {
+      nearest = entity;
+      nearest_distance = distance;
+    }
+  }
+
+  if (nearest == entt::null) {
+    return {};
+  }
+
+  CargoRecoveryHudSnapshot hud{
+    .recovered_box = nearest,
+    .nearest_stolen_distance = nearest_distance,
+    .stolen_box_near = nearest_distance <= tuning.recovery_range,
+  };
+
+  if (hud.stolen_box_near && input.confirm_requested) {
+    CargoBox& box = registry.get<CargoBox>(nearest);
+    box.state = CargoBoxState::Linked;
+    box.velocity = ship.velocity;
+
+    if (raider.target_box == nearest) {
+      raider.target_box = entt::null;
+      raider.phase = RaiderPhase::Idle;
+      raider.disruption_seconds = 0.0F;
+    }
+
+    hud.recovered = true;
+  }
+
+  return hud;
+}
+
 }  // namespace hyperverse
