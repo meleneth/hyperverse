@@ -1,7 +1,7 @@
 #include "hyperverse/projectile.hpp"
 
 #include "hyperverse/account_context.hpp"
-#include "sphere_queries.hpp"
+#include "jolt_shape_queries.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -66,7 +66,13 @@ ParticleCannonHudSnapshot update_particle_cannon(
       }
 
       const Vec2 relative_position = wrapped_delta(projectile.position, asteroid.position, sector);
-      if (circles_overlap(relative_position, tuning.projectile_radius + asteroid.radius)) {
+      if (jolt_shapes_overlap(
+            SpriteCollisionShape::Particle,
+            tuning.projectile_radius,
+            SpriteCollisionShape::Rock,
+            asteroid.radius,
+            relative_position
+          )) {
         apply_projectile_damage(asteroid, resource, tuning);
         ctx.event_bus().enqueue(
           DomainEventType::ParticleImpact,

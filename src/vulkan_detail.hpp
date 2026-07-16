@@ -2,6 +2,8 @@
 
 #include <vulkan/vulkan.h>
 
+#include "hyperverse/sprite_collision_shape.hpp"
+
 #include <cstdint>
 #include <filesystem>
 #include <stdexcept>
@@ -41,11 +43,7 @@ inline void check(VkResult result, const char* message) {
   }
 }
 
-struct LoadedPng {
-  std::uint32_t width{0};
-  std::uint32_t height{0};
-  std::vector<std::uint8_t> rgba{};
-};
+using LoadedPng = SpriteAlphaMask;
 
 [[nodiscard]] std::vector<char> read_file(const std::filesystem::path& path);
 [[nodiscard]] std::vector<LoadedPng> load_sprite_textures();

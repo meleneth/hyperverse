@@ -1,6 +1,6 @@
 #include "hyperverse/mining.hpp"
 
-#include "sphere_queries.hpp"
+#include "jolt_shape_queries.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -50,7 +50,7 @@ void populate_hud_from_resource(MiningHudSnapshot& hud, const MiningResource& re
     }
 
     const Vec2 relative_position = wrapped_delta(ship.position, asteroid.position, sector);
-    const SphereCastHit hit = raycast_circle(relative_position, normalized_direction, range, asteroid.radius);
+    const ShapeQueryHit hit = jolt_raycast_shape(SpriteCollisionShape::Rock, asteroid.radius, relative_position, normalized_direction, range);
     if (!hit.hit) {
       continue;
     }

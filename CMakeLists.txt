@@ -112,6 +112,7 @@ add_library(
   src/hud_title.cpp
   src/input.cpp
   src/mining.cpp
+  src/png_rgba.cpp
   src/physics.cpp
   src/pressure.cpp
   src/projectile.cpp
@@ -120,7 +121,8 @@ add_library(
   src/sector.cpp
   src/scoped_log.cpp
   src/sdl_platform.cpp
-  src/sphere_queries.cpp
+  src/jolt_shape_queries.cpp
+  src/sprite_collision_shape.cpp
   src/targeting.cpp
   src/sprite_frame_builder.cpp
   src/version.cpp
@@ -197,6 +199,7 @@ if(HYPERVERSE_BUILD_TESTS)
     tests/raider_tests.cpp
     tests/render_frame_tests.cpp
     tests/sector_tests.cpp
+    tests/sprite_collision_shape_tests.cpp
     tests/targeting_tests.cpp
   )
   target_link_libraries(hyperverse_tests PRIVATE hyperverse::core Catch2::Catch2WithMain)
