@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <limits>
 #include <numbers>
 #include <string>
 #include <string_view>
@@ -288,6 +289,40 @@ void add_world_link_line(
   });
 }
 
+void add_gathering_edge_indicator(
+  std::vector<hyperverse::SpriteDraw>& sprites,
+  std::vector<hyperverse::LineDraw>& lines,
+  hyperverse::Vec2 ship_position,
+  hyperverse::Vec2 gathering_position,
+  const hyperverse::SectorTuning& sector,
+  std::uint32_t width,
+  std::uint32_t height
+) {
+  const hyperverse::Vec2 delta = hyperverse::wrapped_delta(ship_position, gathering_position, sector);
+  const hyperverse::Vec2 ndc_direction{
+    .x = (delta.x * PixelsPerWorldUnit * 2.0F) / static_cast<float>(width),
+    .y = (delta.y * PixelsPerWorldUnit * 2.0F) / static_cast<float>(height),
+  };
+  if (hyperverse::length(ndc_direction) <= 0.0001F) {
+    return;
+  }
+
+  constexpr float edge = 0.92F;
+  const float scale_x = std::abs(ndc_direction.x) > 0.0001F ? edge / std::abs(ndc_direction.x) : std::numeric_limits<float>::max();
+  const float scale_y = std::abs(ndc_direction.y) > 0.0001F ? edge / std::abs(ndc_direction.y) : std::numeric_limits<float>::max();
+  const float scale = std::min(scale_x, scale_y);
+  const hyperverse::Vec2 center = ndc_direction * scale;
+  hyperverse::SpriteDraw indicator{
+    .texture = hyperverse::SpriteTexture::Reticle,
+    .center_x_ndc = center.x,
+    .center_y_ndc = center.y,
+    .half_width_ndc = 0.035F,
+    .half_height_ndc = 0.035F,
+  };
+  add_box_lines(lines, indicator, 0.72F, 1.0F, 0.58F, 0.88F);
+  add_hud_text(sprites, "GTH", std::clamp(center.x - 0.04F, -0.96F, 0.86F), std::clamp(center.y - 0.045F, -0.96F, 0.96F), 0.026F, 0.72F, 1.0F, 0.58F);
+}
+
 [[nodiscard]] hyperverse::SpriteDraw make_world_sprite(
   hyperverse::SpriteTexture texture,
   hyperverse::Vec2 world_position,
@@ -363,6 +398,7 @@ SpriteFrame build_sprite_frame(
   const CargoRecoveryHudSnapshot& recovery_hud = account.registry().get<CargoRecoveryHudSnapshot>(player);
   const CollisionHudSnapshot& collision_hud = account.registry().get<CollisionHudSnapshot>(player);
   const HudNotice& hud_notice = account.registry().get<HudNotice>(player);
+  const ExtractionSite* gathering_site = account.registry().try_get<ExtractionSite>(player);
 
   SpriteFrame frame{
     .state = {
@@ -462,19 +498,23 @@ SpriteFrame build_sprite_frame(
   if (!hud_notice.message.empty()) {
     add_hud_text(frame.sprites, hud_notice.message, -0.40F, 0.96F, 0.04F, 1.0F, 0.88F, 0.24F);
   }
-  add_hud_text(frame.sprites, "MINERALS", -0.96F, 0.985F, 0.026F, 0.78F, 0.92F, 1.0F);
-  std::array<bool, 7> spawned_minerals{};
-  for (auto [entity, composition] : account.registry().view<MineralComposition>().each()) {
-    (void)entity;
-    spawned_minerals[0] = spawned_minerals[0] || composition.silicate > 0.005F;
-    spawned_minerals[1] = spawned_minerals[1] || composition.ferrite > 0.005F;
-    spawned_minerals[2] = spawned_minerals[2] || composition.nickel > 0.005F;
-    spawned_minerals[3] = spawned_minerals[3] || composition.cobalt > 0.005F;
-    spawned_minerals[4] = spawned_minerals[4] || composition.iridium > 0.005F;
-    spawned_minerals[5] = spawned_minerals[5] || composition.exotic_crystal > 0.005F;
-    spawned_minerals[6] = spawned_minerals[6] || composition.anomalous_matter > 0.005F;
+  if (gathering_site != nullptr) {
+    add_gathering_edge_indicator(frame.sprites, frame.lines, ship.position, gathering_site->position, sector, width, height);
   }
-  float legend_y = 0.952F;
+
+  add_hud_text(frame.sprites, "MINERALS", -0.96F, -0.955F, 0.026F, 0.78F, 0.92F, 1.0F);
+  std::array<float, 7> mineral_mass{};
+  for (auto [entity, composition, mass] : account.registry().view<MineralComposition, AsteroidMass>().each()) {
+    (void)entity;
+    mineral_mass[0] += mass.remaining_mass * composition.silicate;
+    mineral_mass[1] += mass.remaining_mass * composition.ferrite;
+    mineral_mass[2] += mass.remaining_mass * composition.nickel;
+    mineral_mass[3] += mass.remaining_mass * composition.cobalt;
+    mineral_mass[4] += mass.remaining_mass * composition.iridium;
+    mineral_mass[5] += mass.remaining_mass * composition.exotic_crystal;
+    mineral_mass[6] += mass.remaining_mass * composition.anomalous_matter;
+  }
+  float legend_y = -0.922F;
   constexpr std::array<std::string_view, 7> names{
     "SILICATE",
     "FERRITE",
@@ -493,12 +533,21 @@ SpriteFrame build_sprite_frame(
     OreTint{.r = 1.0F, .g = 0.46F, .b = 0.92F},
     OreTint{.r = 0.36F, .g = 1.0F, .b = 0.74F},
   };
-  for (std::size_t index = 0; index < spawned_minerals.size(); ++index) {
-    if (!spawned_minerals[index]) {
+  for (std::size_t index = 0; index < mineral_mass.size(); ++index) {
+    if (mineral_mass[index] <= 0.5F) {
       continue;
     }
-    add_hud_text(frame.sprites, names[index], -0.96F, legend_y, 0.021F, tints[index].r, tints[index].g, tints[index].b);
-    legend_y -= 0.027F;
+    add_hud_text(
+      frame.sprites,
+      std::string{names[index]} + " " + std::to_string(static_cast<int>(std::round(mineral_mass[index]))),
+      -0.96F,
+      legend_y,
+      0.021F,
+      tints[index].r,
+      tints[index].g,
+      tints[index].b
+    );
+    legend_y += 0.027F;
   }
   add_hud_text(frame.sprites, "SPD " + std::to_string(static_cast<int>(hud.speed)), -0.96F, 0.92F, 0.045F);
   add_hud_text(frame.sprites, "SHD", -0.96F, 0.52F, 0.033F, 0.45F, 0.85F, 1.0F);

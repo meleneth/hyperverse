@@ -62,6 +62,7 @@ int App::run(AccountCtx& account) {
     const CargoBoxTuning cargo_box_tuning{.box_mass = quota.cargo_box_mass};
     const CargoEscortRoute escort_route = extraction_route_from_gathering(gathering_site.position, sector);
     const CargoExtractionTuning cargo_extraction_tuning{};
+    account.registry().emplace_or_replace<ExtractionSite>(player, gathering_site);
     const SectorPressureTuning pressure_tuning{.escalation_interval_seconds = 60.0F};
     const MiningDroneTuning mining_drone_tuning{};
     const ParticleCannonTuning particle_cannon_tuning{};
