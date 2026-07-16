@@ -9,6 +9,8 @@
 
 namespace hyperverse {
 
+class AccountCtx;
+
 struct AsteroidBody {
   Vec2 position{};
   Vec2 velocity{};
@@ -52,6 +54,6 @@ void update_target_lock(
   const TargetingTuning& tuning = {}
 );
 
-void update_asteroid_motion(entt::registry& registry, const SectorTuning& sector, float dt_seconds);
+void update_asteroid_motion(AccountCtx& ctx, const SectorTuning& sector, float dt_seconds);
 
 }  // namespace hyperverse

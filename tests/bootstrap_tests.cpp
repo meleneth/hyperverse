@@ -100,11 +100,15 @@ TEST_CASE("wrapped sector distance uses the shortest edge crossing") {
 }
 
 TEST_CASE("assisted flight accelerates, brakes, and wraps through the sector") {
+  std::ostringstream output;
+  hyperverse::GrandCentral grand_central{output};
+  hyperverse::AccountCtx account = grand_central.account_context();
   hyperverse::ShipMotion ship{.position = {.x = 8995.0F, .y = 4500.0F}};
   const hyperverse::SectorTuning sector{.width = 9000.0F, .height = 9000.0F};
   const hyperverse::FlightTuning flight{.max_speed = 100.0F, .acceleration = 100.0F, .braking = 200.0F, .turn_rate = 20.0F};
 
   hyperverse::simulate_assisted_flight(
+    account,
     ship,
     {.desired_movement = {.x = 1.0F, .y = 0.0F}},
     flight,
@@ -115,16 +119,20 @@ TEST_CASE("assisted flight accelerates, brakes, and wraps through the sector") {
   CHECK(ship.velocity.x == Catch::Approx(100.0F));
   CHECK(ship.position.x == Catch::Approx(95.0F));
 
-  hyperverse::simulate_assisted_flight(ship, {}, flight, sector, 1.0F);
+  hyperverse::simulate_assisted_flight(account, ship, {}, flight, sector, 1.0F);
   CHECK(hyperverse::length(ship.velocity) == Catch::Approx(0.0F));
 }
 
 TEST_CASE("assisted flight turns the ship toward thrust direction") {
+  std::ostringstream output;
+  hyperverse::GrandCentral grand_central{output};
+  hyperverse::AccountCtx account = grand_central.account_context();
   hyperverse::ShipMotion ship{.facing_radians = 0.0F};
   const hyperverse::SectorTuning sector{.width = 9000.0F, .height = 9000.0F};
   const hyperverse::FlightTuning flight{.max_speed = 100.0F, .acceleration = 100.0F, .braking = 200.0F, .turn_rate = 20.0F};
 
   hyperverse::simulate_assisted_flight(
+    account,
     ship,
     {.desired_movement = {.x = 0.0F, .y = 1.0F}},
     flight,
@@ -136,11 +144,15 @@ TEST_CASE("assisted flight turns the ship toward thrust direction") {
 }
 
 TEST_CASE("assisted flight prefers thrust facing over aim facing while moving") {
+  std::ostringstream output;
+  hyperverse::GrandCentral grand_central{output};
+  hyperverse::AccountCtx account = grand_central.account_context();
   hyperverse::ShipMotion ship{.facing_radians = 0.0F};
   const hyperverse::SectorTuning sector{.width = 9000.0F, .height = 9000.0F};
   const hyperverse::FlightTuning flight{.max_speed = 100.0F, .acceleration = 100.0F, .braking = 200.0F, .turn_rate = 20.0F};
 
   hyperverse::simulate_assisted_flight(
+    account,
     ship,
     {
       .desired_movement = {.x = 1.0F, .y = 0.0F},
@@ -283,9 +295,11 @@ TEST_CASE("target lock cycles to another asteroid in range") {
 }
 
 TEST_CASE("asteroid motion is integrated through the physics step") {
-  entt::registry registry;
-  const entt::entity asteroid = registry.create();
-  registry.emplace<hyperverse::AsteroidBody>(
+  std::ostringstream output;
+  hyperverse::GrandCentral grand_central{output};
+  hyperverse::AccountCtx account = grand_central.account_context();
+  const entt::entity asteroid = account.registry().create();
+  account.registry().emplace<hyperverse::AsteroidBody>(
     asteroid,
     hyperverse::AsteroidBody{
       .position = {.x = 100.0F, .y = 100.0F},
@@ -296,9 +310,9 @@ TEST_CASE("asteroid motion is integrated through the physics step") {
     }
   );
 
-  hyperverse::update_asteroid_motion(registry, {.width = 9000.0F, .height = 9000.0F}, 1.0F);
+  hyperverse::update_asteroid_motion(account, {.width = 9000.0F, .height = 9000.0F}, 1.0F);
 
-  const hyperverse::AsteroidBody& moved = registry.get<hyperverse::AsteroidBody>(asteroid);
+  const hyperverse::AsteroidBody& moved = account.registry().get<hyperverse::AsteroidBody>(asteroid);
   CHECK(moved.position.x == Catch::Approx(125.0F));
   CHECK(moved.position.y == Catch::Approx(100.0F));
   CHECK(moved.rotation_radians == Catch::Approx(2.0F));
@@ -1111,9 +1125,11 @@ TEST_CASE("grand central derives a minimal account context without exposing owne
   hyperverse::AccountCtx account = grand_central.account_context();
 
   const entt::entity entity = account.registry().create();
+  auto* physics = &account.physics();
   account.log().info(account.account().callsign());
 
   CHECK((entity != entt::null));
+  CHECK(physics != nullptr);
   CHECK(account.log().scope() == "account");
   CHECK(output.str().find("[account] Pioneer") != std::string::npos);
 }

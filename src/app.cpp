@@ -675,8 +675,8 @@ int App::run() {
 
       while (timestep.consume_tick()) {
         latest_intent = input_mapper.map(gamepad.sample());
-        simulate_assisted_flight(ship, latest_intent, flight, sector, timestep.tick_seconds());
-        update_asteroid_motion(account.registry(), sector, timestep.tick_seconds());
+        simulate_assisted_flight(account, ship, latest_intent, flight, sector, timestep.tick_seconds());
+        update_asteroid_motion(account, sector, timestep.tick_seconds());
         CameraState& camera = account.registry().get<CameraState>(player);
         TargetLockModel& target_lock = account.registry().get<TargetLockModel>(player);
         MiningHudSnapshot& mining_hud = account.registry().get<MiningHudSnapshot>(player);

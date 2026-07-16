@@ -105,6 +105,7 @@ add_library(
   src/grand_central.cpp
   src/input.cpp
   src/mining.cpp
+  src/physics.cpp
   src/pressure.cpp
   src/projectile.cpp
   src/raider.cpp

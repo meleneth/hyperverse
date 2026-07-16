@@ -1,5 +1,7 @@
 #pragma once
 
+#include "hyperverse/physics.hpp"
+
 #include <entt/entity/registry.hpp>
 
 #include <iosfwd>
@@ -32,18 +34,20 @@ private:
 
 class AccountCtx {
 public:
-  AccountCtx(entt::registry& registry, std::mt19937& rng, ScopedLog& log, AccountState& account);
+  AccountCtx(entt::registry& registry, std::mt19937& rng, ScopedLog& log, AccountState& account, PhysicsWorld& physics);
 
   [[nodiscard]] entt::registry& registry() const;
   [[nodiscard]] std::mt19937& rng() const;
   [[nodiscard]] ScopedLog& log() const;
   [[nodiscard]] AccountState& account() const;
+  [[nodiscard]] PhysicsWorld& physics() const;
 
 private:
   entt::registry* registry_;
   std::mt19937* rng_;
   ScopedLog* log_;
   AccountState* account_;
+  PhysicsWorld* physics_;
 };
 
 class GrandCentral {
@@ -57,6 +61,7 @@ private:
   std::mt19937 rng_;
   ScopedLog log_;
   AccountState account_;
+  PhysicsWorld physics_;
 };
 
 }  // namespace hyperverse

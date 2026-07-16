@@ -6,6 +6,8 @@
 
 namespace hyperverse {
 
+class AccountCtx;
+
 struct ShipMotion {
   Vec2 position{};
   Vec2 velocity{};
@@ -36,6 +38,7 @@ struct FlightHudSnapshot {
 };
 
 void simulate_assisted_flight(
+  AccountCtx& ctx,
   ShipMotion& ship,
   const SemanticInputFrame& input,
   const FlightTuning& flight,

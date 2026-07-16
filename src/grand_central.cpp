@@ -21,8 +21,14 @@ const std::string& AccountState::callsign() const {
   return callsign_;
 }
 
-AccountCtx::AccountCtx(entt::registry& registry, std::mt19937& rng, ScopedLog& log, AccountState& account)
-    : registry_{&registry}, rng_{&rng}, log_{&log}, account_{&account} {}
+AccountCtx::AccountCtx(
+  entt::registry& registry,
+  std::mt19937& rng,
+  ScopedLog& log,
+  AccountState& account,
+  PhysicsWorld& physics
+)
+    : registry_{&registry}, rng_{&rng}, log_{&log}, account_{&account}, physics_{&physics} {}
 
 entt::registry& AccountCtx::registry() const {
   return *registry_;
@@ -40,11 +46,15 @@ AccountState& AccountCtx::account() const {
   return *account_;
 }
 
+PhysicsWorld& AccountCtx::physics() const {
+  return *physics_;
+}
+
 GrandCentral::GrandCentral(std::ostream& log_output)
     : rng_{0x48595045U}, log_{log_output, "account"}, account_{"Pioneer"} {}
 
 AccountCtx GrandCentral::account_context() {
-  return {registry_, rng_, log_, account_};
+  return {registry_, rng_, log_, account_, physics_};
 }
 
 }  // namespace hyperverse
