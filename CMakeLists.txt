@@ -95,6 +95,8 @@ endif()
 
 add_library(
   hyperverse_core
+  src/account_context.cpp
+  src/account_state.cpp
   src/app.cpp
   src/camera.cpp
   src/cargo.cpp
@@ -103,6 +105,7 @@ add_library(
   src/fixed_timestep.cpp
   src/flight.cpp
   src/grand_central.cpp
+  src/hud_title.cpp
   src/input.cpp
   src/mining.cpp
   src/physics.cpp
@@ -111,9 +114,18 @@ add_library(
   src/raider.cpp
   src/render_frame.cpp
   src/sector.cpp
+  src/scoped_log.cpp
+  src/sdl_platform.cpp
   src/targeting.cpp
+  src/sprite_frame_builder.cpp
   src/version.cpp
+  src/vertical_slice_seed.cpp
+  src/vulkan_assets.cpp
+  src/vulkan_commands.cpp
+  src/vulkan_pipeline.cpp
   src/vulkan_renderer.cpp
+  src/vulkan_swapchain.cpp
+  src/vulkan_texture.cpp
 )
 add_library(hyperverse::core ALIAS hyperverse_core)
 target_include_directories(
@@ -164,7 +176,24 @@ if(HYPERVERSE_BUILD_TESTS)
   list(APPEND CMAKE_MODULE_PATH "${Catch2_SOURCE_DIR}/extras")
   include(Catch)
 
-  add_executable(hyperverse_tests tests/bootstrap_tests.cpp)
+  add_executable(
+    hyperverse_tests
+    tests/architecture_tests.cpp
+    tests/bootstrap_tests.cpp
+    tests/cargo_tests.cpp
+    tests/collision_tests.cpp
+    tests/drone_tests.cpp
+    tests/fixed_timestep_tests.cpp
+    tests/flight_tests.cpp
+    tests/input_tests.cpp
+    tests/mining_tests.cpp
+    tests/pressure_tests.cpp
+    tests/projectile_tests.cpp
+    tests/raider_tests.cpp
+    tests/render_frame_tests.cpp
+    tests/sector_tests.cpp
+    tests/targeting_tests.cpp
+  )
   target_link_libraries(hyperverse_tests PRIVATE hyperverse::core Catch2::Catch2WithMain)
   hyperverse_enable_project_warnings(hyperverse_tests)
   catch_discover_tests(hyperverse_tests)

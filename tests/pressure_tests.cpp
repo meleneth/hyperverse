@@ -1,0 +1,36 @@
+#include "test_common.hpp"
+
+using hyperverse::test::TestAccountWorld;
+
+TEST_CASE("sector pressure escalates on a tunable interval") {
+  hyperverse::SectorPressureModel pressure;
+  const hyperverse::SectorPressureTuning tuning{
+    .escalation_interval_seconds = 10.0F,
+    .announcement_duration_seconds = 3.0F,
+    .pressure_per_level = 0.25F,
+  };
+
+  const hyperverse::SectorPressureHudSnapshot before = hyperverse::update_sector_pressure(pressure, 9.0F, tuning);
+  CHECK(before.escalation_level == 0);
+  CHECK(before.next_escalation_seconds == Catch::Approx(1.0F));
+  CHECK_FALSE(before.escalation_announced);
+
+  const hyperverse::SectorPressureHudSnapshot after = hyperverse::update_sector_pressure(pressure, 1.0F, tuning);
+  CHECK(after.escalation_level == 1);
+  CHECK(after.pressure_fraction == Catch::Approx(0.25F));
+  CHECK(after.escalation_announced);
+}
+
+TEST_CASE("sector pressure announcement expires after the HUD window") {
+  hyperverse::SectorPressureModel pressure;
+  const hyperverse::SectorPressureTuning tuning{
+    .escalation_interval_seconds = 10.0F,
+    .announcement_duration_seconds = 3.0F,
+  };
+
+  (void)hyperverse::update_sector_pressure(pressure, 10.0F, tuning);
+  const hyperverse::SectorPressureHudSnapshot expired = hyperverse::update_sector_pressure(pressure, 3.1F, tuning);
+
+  CHECK(expired.escalation_level == 1);
+  CHECK_FALSE(expired.escalation_announced);
+}
