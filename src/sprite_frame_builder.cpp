@@ -213,9 +213,9 @@ void add_target_inspection_panel(
   const hyperverse::MineralComposition* composition
 ) {
   constexpr float left = -0.43F;
-  constexpr float top = -0.68F;
+  constexpr float top = -0.62F;
   constexpr float width = 0.86F;
-  constexpr float height = 0.30F;
+  constexpr float height = 0.35F;
   add_box_lines(
     lines,
     hyperverse::SpriteDraw{
@@ -235,19 +235,30 @@ void add_target_inspection_panel(
   add_hud_text(sprites, "TARGET ROCK", left + 0.03F, top - 0.03F, 0.032F, 0.78F, 0.95F, 1.0F);
   add_hud_text(sprites, "MASS " + std::to_string(estimated_mass), left + 0.03F, top - 0.075F, 0.028F, 0.88F, 1.0F, 0.72F);
   if (resource != nullptr) {
-    add_hud_text(sprites, std::string{"CLASS "} + ore_tier_name(resource->tier), left + 0.31F, top - 0.075F, 0.026F, 0.88F, 1.0F, 0.72F);
+    const hyperverse::OreTierProfile profile = ore_tier_profile(resource->tier);
+    add_hud_text(sprites, std::string{"CLASS "} + profile.name, left + 0.31F, top - 0.075F, 0.026F, profile.tint.r, profile.tint.g, profile.tint.b);
+    add_hud_text(
+      sprites,
+      "VALUE " + std::to_string(static_cast<int>(std::round(profile.cash_per_mass))) + " CSH",
+      left + 0.31F,
+      top - 0.108F,
+      0.024F,
+      profile.tint.r,
+      profile.tint.g,
+      profile.tint.b
+    );
   }
 
   if (composition == nullptr) {
     return;
   }
-  add_composition_line(sprites, "SILICATE", composition->silicate, left + 0.03F, top - 0.12F);
-  add_composition_line(sprites, "FERRITE", composition->ferrite, left + 0.03F, top - 0.152F);
-  add_composition_line(sprites, "NICKEL", composition->nickel, left + 0.03F, top - 0.184F);
-  add_composition_line(sprites, "COBALT", composition->cobalt, left + 0.03F, top - 0.216F);
-  add_composition_line(sprites, "IRIDIUM", composition->iridium, left + 0.31F, top - 0.12F);
-  add_composition_line(sprites, "EXOTIC CRYSTAL", composition->exotic_crystal, left + 0.31F, top - 0.152F);
-  add_composition_line(sprites, "ANOMALOUS MATTER", composition->anomalous_matter, left + 0.31F, top - 0.184F);
+  add_composition_line(sprites, "SILICATE", composition->silicate, left + 0.03F, top - 0.142F);
+  add_composition_line(sprites, "FERRITE", composition->ferrite, left + 0.03F, top - 0.174F);
+  add_composition_line(sprites, "NICKEL", composition->nickel, left + 0.03F, top - 0.206F);
+  add_composition_line(sprites, "COBALT", composition->cobalt, left + 0.03F, top - 0.238F);
+  add_composition_line(sprites, "IRIDIUM", composition->iridium, left + 0.31F, top - 0.142F);
+  add_composition_line(sprites, "EXOTIC CRYSTAL", composition->exotic_crystal, left + 0.31F, top - 0.174F);
+  add_composition_line(sprites, "ANOMALOUS MATTER", composition->anomalous_matter, left + 0.31F, top - 0.206F);
 }
 
 void add_world_link_line(
@@ -379,11 +390,11 @@ SpriteFrame build_sprite_frame(
       asteroid_sprite_size(asteroid, account.registry().try_get<MiningResource>(entity)),
       asteroid.rotation_radians
     );
-    if (const MineralComposition* composition = account.registry().try_get<MineralComposition>(entity); composition != nullptr) {
-      const OreTint tint = ore_tint(*composition);
-      tint_sprite(asteroid_sprite, tint.r, tint.g, tint.b);
-    } else if (const MiningResource* resource = account.registry().try_get<MiningResource>(entity); resource != nullptr) {
+    if (const MiningResource* resource = account.registry().try_get<MiningResource>(entity); resource != nullptr) {
       const OreTint tint = ore_tint(resource->tier);
+      tint_sprite(asteroid_sprite, tint.r, tint.g, tint.b);
+    } else if (const MineralComposition* composition = account.registry().try_get<MineralComposition>(entity); composition != nullptr) {
+      const OreTint tint = ore_tint(*composition);
       tint_sprite(asteroid_sprite, tint.r, tint.g, tint.b);
     }
     if (entity == mining_hud.target && mining_hud.blowout) {

@@ -139,6 +139,15 @@ TEST_CASE("ore tiers expose distinct asteroid tint colors") {
   CHECK(anomalous.g == Catch::Approx(1.0F));
 }
 
+TEST_CASE("ore tier profiles expose escalating premium values") {
+  CHECK(hyperverse::ore_tier_cash_per_mass(hyperverse::OreTier::Common) == Catch::Approx(1.0F));
+  CHECK(hyperverse::ore_tier_cash_per_mass(hyperverse::OreTier::Industrial) > hyperverse::ore_tier_cash_per_mass(hyperverse::OreTier::Common));
+  CHECK(hyperverse::ore_tier_cash_per_mass(hyperverse::OreTier::Rare) > hyperverse::ore_tier_cash_per_mass(hyperverse::OreTier::Industrial));
+  CHECK(hyperverse::ore_tier_cash_per_mass(hyperverse::OreTier::Exotic) > hyperverse::ore_tier_cash_per_mass(hyperverse::OreTier::Rare));
+  CHECK(hyperverse::ore_tier_cash_per_mass(hyperverse::OreTier::Anomalous) > hyperverse::ore_tier_cash_per_mass(hyperverse::OreTier::Exotic));
+  CHECK(std::string{hyperverse::ore_tier_profile(hyperverse::OreTier::Anomalous).name} == "ANOMALOUS");
+}
+
 TEST_CASE("mining laser can acquire an asteroid from aim without a target lock") {
   entt::registry registry;
   const entt::entity asteroid = registry.create();

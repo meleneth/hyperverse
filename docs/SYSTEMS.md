@@ -81,6 +81,16 @@ Lifecycle:
 
 Kinetic particle impacts apply projectile velocity into the asteroid mass, so firing from ahead of a moving rock can slow it down. Laser, kinetic, and explosive breakup patterns remain separate tuning/behavior paths.
 
+Ore value is tiered and color-coded. The intended mining decision is not "extract every kilogram"; it is "identify and extract the premium material before spending time on cheap bulk."
+
+Current rarity/value curve:
+
+- Common: low-value grey utility ore
+- Industrial: modest-value amber production ore
+- Rare: high-value blue specialist ore
+- Exotic: premium magenta material
+- Anomalous: extreme-value green material
+
 Asteroid lifecycle facts should be event-visible. Current domain events include damage, fragmentation, consumption, particle fire/impact, and drone target release. New behavior should prefer subscribing/responding to those facts over threading direct calls across unrelated systems.
 
 Mining is a family of interacting systems rather than one fixed minigame.

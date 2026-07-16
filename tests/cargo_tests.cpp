@@ -64,6 +64,21 @@ TEST_CASE("cargo manifest calculates cash and score by ore tier") {
   CHECK(manifest.delivered_mass_by_tier[static_cast<std::size_t>(hyperverse::OreTier::Rare)] == Catch::Approx(4.0F));
 }
 
+TEST_CASE("cargo manifest default payout favors premium ore sharply") {
+  entt::registry registry;
+  const entt::entity common = registry.create();
+  const entt::entity anomalous = registry.create();
+  registry.emplace<hyperverse::MiningResource>(common, hyperverse::MiningResource{.tier = hyperverse::OreTier::Common, .extracted_mass = 20.0F});
+  registry.emplace<hyperverse::MiningResource>(anomalous, hyperverse::MiningResource{.tier = hyperverse::OreTier::Anomalous, .extracted_mass = 2.0F});
+  hyperverse::CargoManifest manifest;
+
+  const hyperverse::CargoHudSnapshot cargo = hyperverse::update_cargo_manifest(manifest, registry);
+
+  CHECK(cargo.cash == Catch::Approx(140.0F));
+  CHECK(cargo.delivered_mass_by_tier[static_cast<std::size_t>(hyperverse::OreTier::Common)] == Catch::Approx(20.0F));
+  CHECK(cargo.delivered_mass_by_tier[static_cast<std::size_t>(hyperverse::OreTier::Anomalous)] == Catch::Approx(2.0F));
+}
+
 TEST_CASE("cargo boxes are created at the extraction site from manifest mass") {
   entt::registry registry;
   const entt::entity asteroid = registry.create();

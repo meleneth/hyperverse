@@ -7,6 +7,8 @@
 
 #include <entt/entity/registry.hpp>
 
+#include <array>
+
 namespace hyperverse {
 
 enum class OreTier {
@@ -18,11 +20,18 @@ enum class OreTier {
 };
 
 inline constexpr int OreTierCount = 5;
+inline constexpr std::array<float, OreTierCount> OreTierCashPerMass{1.0F, 3.0F, 8.0F, 20.0F, 60.0F};
 
 struct OreTint {
   float r{0.78F};
   float g{0.80F};
   float b{0.82F};
+};
+
+struct OreTierProfile {
+  const char* name{"COMMON"};
+  float cash_per_mass{1.0F};
+  OreTint tint{};
 };
 
 struct MineralComposition {
@@ -46,7 +55,9 @@ struct MiningResource {
 };
 
 [[nodiscard]] MineralComposition mineral_composition_for_tier(OreTier tier);
+[[nodiscard]] OreTierProfile ore_tier_profile(OreTier tier);
 [[nodiscard]] const char* ore_tier_name(OreTier tier);
+[[nodiscard]] float ore_tier_cash_per_mass(OreTier tier);
 [[nodiscard]] OreTint ore_tint(OreTier tier);
 [[nodiscard]] OreTint ore_tint(const MineralComposition& composition);
 

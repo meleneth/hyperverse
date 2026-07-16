@@ -21,7 +21,7 @@ struct ContractQuotaTuning {
   float cargo_box_mass{10.0F};
   float over_quota_bonus_step_mass{20.0F};
   float bonus_per_step{0.15F};
-  std::array<float, OreTierCount> cash_per_mass{1.0F, 2.0F, 5.0F, 12.0F, 30.0F};
+  std::array<float, OreTierCount> cash_per_mass = OreTierCashPerMass;
   float score_per_cash{10.0F};
 };
 

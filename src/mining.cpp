@@ -107,24 +107,32 @@ MineralComposition mineral_composition_for_tier(OreTier tier) {
 }
 
 const char* ore_tier_name(OreTier tier) {
+  return ore_tier_profile(tier).name;
+}
+
+OreTierProfile ore_tier_profile(OreTier tier) {
   switch (tier) {
     case OreTier::Common:
-      return "COMMON";
+      return {.name = "COMMON", .cash_per_mass = OreTierCashPerMass[0], .tint = {.r = 0.62F, .g = 0.66F, .b = 0.70F}};
     case OreTier::Industrial:
-      return "INDUSTRIAL";
+      return {.name = "INDUSTRIAL", .cash_per_mass = OreTierCashPerMass[1], .tint = {.r = 0.95F, .g = 0.70F, .b = 0.34F}};
     case OreTier::Rare:
-      return "RARE";
+      return {.name = "RARE", .cash_per_mass = OreTierCashPerMass[2], .tint = {.r = 0.28F, .g = 0.78F, .b = 1.0F}};
     case OreTier::Exotic:
-      return "EXOTIC";
+      return {.name = "EXOTIC", .cash_per_mass = OreTierCashPerMass[3], .tint = {.r = 1.0F, .g = 0.42F, .b = 0.95F}};
     case OreTier::Anomalous:
-      return "ANOMALOUS";
+      return {.name = "ANOMALOUS", .cash_per_mass = OreTierCashPerMass[4], .tint = {.r = 0.28F, .g = 1.0F, .b = 0.58F}};
   }
 
-  return "UNKNOWN";
+  return {};
+}
+
+float ore_tier_cash_per_mass(OreTier tier) {
+  return ore_tier_profile(tier).cash_per_mass;
 }
 
 OreTint ore_tint(OreTier tier) {
-  return ore_tint(mineral_composition_for_tier(tier));
+  return ore_tier_profile(tier).tint;
 }
 
 OreTint ore_tint(const MineralComposition& composition) {
