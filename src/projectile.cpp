@@ -1,65 +1,17 @@
 #include "hyperverse/projectile.hpp"
 
 #include "hyperverse/account_context.hpp"
-
-#if defined(__GNUC__) || defined(__clang__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wconversion"
-#pragma GCC diagnostic ignored "-Wsign-conversion"
-#endif
-#include <Jolt/Jolt.h>
-#include <Jolt/Core/Factory.h>
-#include <Jolt/Core/Memory.h>
-#include <Jolt/Physics/Collision/CollideShape.h>
-#include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
-#include <Jolt/Physics/Collision/CollisionDispatch.h>
-#include <Jolt/Physics/Collision/Shape/SphereShape.h>
-#include <Jolt/RegisterTypes.h>
-#if defined(__GNUC__) || defined(__clang__)
-#pragma GCC diagnostic pop
-#endif
+#include "sphere_queries.hpp"
 
 #include <algorithm>
 #include <cmath>
-#include <mutex>
 #include <vector>
 
 namespace hyperverse {
 namespace {
 
-void ensure_jolt_projectile_ready() {
-  static std::once_flag jolt_registration;
-  std::call_once(jolt_registration, [] {
-    JPH::RegisterDefaultAllocator();
-    if (JPH::Factory::sInstance == nullptr) {
-      JPH::Factory::sInstance = new JPH::Factory();
-    }
-    JPH::RegisterTypes();
-  });
-}
-
 [[nodiscard]] Vec2 facing_direction(float radians) {
   return {.x = std::cos(radians), .y = std::sin(radians)};
-}
-
-[[nodiscard]] bool jolt_spheres_overlap(float particle_radius, float asteroid_radius, Vec2 relative_position) {
-  const JPH::SphereShape particle_shape{particle_radius};
-  const JPH::SphereShape asteroid_shape{asteroid_radius};
-  JPH::CollideShapeSettings settings;
-  JPH::AnyHitCollisionCollector<JPH::CollideShapeCollector> collector;
-  JPH::CollisionDispatch::sCollideShapeVsShape(
-    &particle_shape,
-    &asteroid_shape,
-    JPH::Vec3::sOne(),
-    JPH::Vec3::sOne(),
-    JPH::Mat44::sIdentity(),
-    JPH::Mat44::sTranslation(JPH::Vec3(relative_position.x, relative_position.y, 0.0F)),
-    JPH::SubShapeIDCreator(),
-    JPH::SubShapeIDCreator(),
-    settings,
-    collector
-  );
-  return collector.HadHit();
 }
 
 void apply_projectile_damage(AsteroidBody& asteroid, MiningResource& resource, const ParticleCannonTuning& tuning) {
@@ -78,7 +30,6 @@ ParticleCannonHudSnapshot update_particle_cannon(
   float dt_seconds,
   const ParticleCannonTuning& tuning
 ) {
-  ensure_jolt_projectile_ready();
   entt::registry& registry = ctx.registry();
 
   if (input.particle_fire_requested) {
@@ -115,7 +66,7 @@ ParticleCannonHudSnapshot update_particle_cannon(
       }
 
       const Vec2 relative_position = wrapped_delta(projectile.position, asteroid.position, sector);
-      if (jolt_spheres_overlap(tuning.projectile_radius, asteroid.radius, relative_position)) {
+      if (circles_overlap(relative_position, tuning.projectile_radius + asteroid.radius)) {
         apply_projectile_damage(asteroid, resource, tuning);
         ctx.event_bus().enqueue(
           DomainEventType::ParticleImpact,

@@ -1,17 +1,6 @@
 #include "hyperverse/mining.hpp"
 
-#if defined(__GNUC__) || defined(__clang__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wconversion"
-#pragma GCC diagnostic ignored "-Wsign-conversion"
-#endif
-#include <Jolt/Jolt.h>
-#include <Jolt/Physics/Collision/CastResult.h>
-#include <Jolt/Physics/Collision/RayCast.h>
-#include <Jolt/Physics/Collision/Shape/SphereShape.h>
-#if defined(__GNUC__) || defined(__clang__)
-#pragma GCC diagnostic pop
-#endif
+#include "sphere_queries.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -55,23 +44,20 @@ void populate_hud_from_resource(MiningHudSnapshot& hud, const MiningResource& re
     return best;
   }
 
-  const JPH::Vec3 ray_direction{normalized_direction.x * range, normalized_direction.y * range, 0.0F};
   for (auto [entity, asteroid, resource] : registry.view<AsteroidBody, MiningResource>().each()) {
     if (resource.integrity <= 0.0F) {
       continue;
     }
 
     const Vec2 relative_position = wrapped_delta(ship.position, asteroid.position, sector);
-    const JPH::SphereShape asteroid_shape{asteroid.radius};
-    JPH::RayCast ray{{-relative_position.x, -relative_position.y, 0.0F}, ray_direction};
-    JPH::RayCastResult hit{};
-    if (!asteroid_shape.CastRay(ray, JPH::SubShapeIDCreator(), hit)) {
+    const SphereCastHit hit = raycast_circle(relative_position, normalized_direction, range, asteroid.radius);
+    if (!hit.hit) {
       continue;
     }
 
-    if (hit.mFraction < best_fraction) {
-      best_fraction = hit.mFraction;
-      best = {.entity = entity, .distance = hit.mFraction * range};
+    if (hit.fraction < best_fraction) {
+      best_fraction = hit.fraction;
+      best = {.entity = entity, .distance = hit.fraction * range};
     }
   }
 

@@ -120,6 +120,7 @@ add_library(
   src/sector.cpp
   src/scoped_log.cpp
   src/sdl_platform.cpp
+  src/sphere_queries.cpp
   src/targeting.cpp
   src/sprite_frame_builder.cpp
   src/version.cpp
