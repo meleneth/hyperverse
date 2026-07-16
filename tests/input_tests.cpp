@@ -12,6 +12,7 @@ TEST_CASE("flight input maps raw devices into semantic movement intent") {
       .movement_axis = {.x = 1.0F, .y = 1.0F},
       .confirm = true,
       .target_cycle = true,
+      .boost = true,
       .particle_fire = true,
       .tool_intensity = 0.5F,
       .control_mapping = hyperverse::ControlMapping::Gamepad,
@@ -19,6 +20,7 @@ TEST_CASE("flight input maps raw devices into semantic movement intent") {
   CHECK(hyperverse::length(moving.desired_movement) == Catch::Approx(1.0F));
   CHECK(moving.confirm_requested);
   CHECK(moving.target_cycle_requested);
+  CHECK(moving.boost_requested);
   CHECK(moving.particle_fire_requested);
   CHECK(moving.particle_fire_active);
   CHECK(moving.tool_intensity == Catch::Approx(0.5F));
@@ -44,6 +46,11 @@ TEST_CASE("stateful flight input mapper emits button requests on rising edges") 
   CHECK(fired.particle_fire_active);
   CHECK_FALSE(held_fire.particle_fire_requested);
   CHECK(held_fire.particle_fire_active);
+
+  const hyperverse::SemanticInputFrame boosted = mapper.map({.boost = true});
+  const hyperverse::SemanticInputFrame held_boost = mapper.map({.boost = true});
+  CHECK(boosted.boost_requested);
+  CHECK_FALSE(held_boost.boost_requested);
 }
 
 TEST_CASE("flight input mapper uses a state machine for active device mapping") {

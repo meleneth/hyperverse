@@ -58,7 +58,7 @@ CargoExtractionHudSnapshot update_cargo_extraction(
 ) {
   std::vector<entt::entity> boxes;
   for (auto [entity, box] : registry.view<CargoBox>().each()) {
-    if (box.state != CargoBoxState::Lost && box.state != CargoBoxState::Stolen) {
+    if (box.state != CargoBoxState::Lost && box.state != CargoBoxState::Stolen && box.state != CargoBoxState::Detached) {
       boxes.push_back(entity);
     }
   }
@@ -87,6 +87,34 @@ CargoExtractionHudSnapshot update_cargo_extraction(
     if (box.state == CargoBoxState::Linked) {
       box.state = CargoBoxState::GateBound;
     }
+  }
+
+  bool staged = true;
+  for (entt::entity entity : boxes) {
+    CargoBox& box = registry.get<CargoBox>(entity);
+    if (box.state == CargoBoxState::Extracted) {
+      continue;
+    }
+    const Vec2 staging_position = wrap_position(
+      {
+        .x = route.gate_position.x - (static_cast<float>(box.index) * tuning.staging_spacing),
+        .y = route.gate_position.y,
+      },
+      sector
+    );
+    const Vec2 to_staging = wrapped_delta(box.position, staging_position, sector);
+    if (length(to_staging) > tuning.staging_radius) {
+      staged = false;
+      box.state = CargoBoxState::GateBound;
+      box.velocity = clamp_length(to_staging * tuning.approach_rate, tuning.max_speed);
+      box.position = wrap_position(box.position + (box.velocity * std::max(0.0F, dt_seconds)), sector);
+    } else if (box.state == CargoBoxState::GateBound) {
+      box.velocity = {};
+    }
+  }
+
+  if (!staged) {
+    return hud;
   }
 
   entt::entity active_box = entt::null;

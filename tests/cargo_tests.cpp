@@ -343,6 +343,54 @@ TEST_CASE("cargo extraction processes boxes one at a time at the gate") {
   CHECK(complete_events == 1);
 }
 
+TEST_CASE("cargo extraction stages the whole group near the gate before loading") {
+  entt::registry registry;
+  const entt::entity first = registry.create();
+  registry.emplace<hyperverse::CargoBox>(
+    first,
+    hyperverse::CargoBox{.position = {.x = 500.0F, .y = 1000.0F}, .index = 0}
+  );
+  const entt::entity second = registry.create();
+  registry.emplace<hyperverse::CargoBox>(
+    second,
+    hyperverse::CargoBox{.position = {.x = 450.0F, .y = 1000.0F}, .index = 1}
+  );
+  hyperverse::CargoEscortState escort{.phase = hyperverse::CargoEscortPhase::Extracting};
+  const hyperverse::CargoEscortRoute route{.gate_position = {.x = 1000.0F, .y = 1000.0F}};
+
+  const hyperverse::CargoExtractionHudSnapshot hud = hyperverse::update_cargo_extraction(
+    registry,
+    escort,
+    route,
+    {.width = 9000.0F, .height = 9000.0F},
+    0.5F,
+    nullptr,
+    {.seconds_per_box = 5.0F, .staging_radius = 40.0F, .staging_spacing = 80.0F, .approach_rate = 2.0F, .max_speed = 100.0F}
+  );
+
+  CHECK(hud.active);
+  CHECK(hud.extracted_boxes == 0);
+  CHECK(registry.get<hyperverse::CargoBox>(first).state == hyperverse::CargoBoxState::GateBound);
+  CHECK(registry.get<hyperverse::CargoBox>(second).state == hyperverse::CargoBoxState::GateBound);
+  CHECK(registry.get<hyperverse::CargoBox>(first).position.x > 500.0F);
+  CHECK(registry.get<hyperverse::CargoBox>(second).position.x > 450.0F);
+}
+
+TEST_CASE("burst speed detaches linked cargo train boxes") {
+  entt::registry registry;
+  const entt::entity linked = registry.create();
+  registry.emplace<hyperverse::CargoBox>(linked, hyperverse::CargoBox{.state = hyperverse::CargoBoxState::Linked});
+  const entt::entity stolen = registry.create();
+  registry.emplace<hyperverse::CargoBox>(stolen, hyperverse::CargoBox{.state = hyperverse::CargoBoxState::Stolen});
+
+  const int detached = hyperverse::detach_linked_cargo(registry, {.x = 120.0F, .y = 0.0F});
+
+  CHECK(detached == 1);
+  CHECK(registry.get<hyperverse::CargoBox>(linked).state == hyperverse::CargoBoxState::Detached);
+  CHECK(registry.get<hyperverse::CargoBox>(linked).velocity.x == Catch::Approx(120.0F));
+  CHECK(registry.get<hyperverse::CargoBox>(stolen).state == hyperverse::CargoBoxState::Stolen);
+}
+
 TEST_CASE("active cargo train ignores stolen boxes") {
   entt::registry registry;
   const entt::entity linked = registry.create();

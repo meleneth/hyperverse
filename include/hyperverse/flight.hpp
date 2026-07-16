@@ -12,6 +12,7 @@ struct ShipMotion {
   Vec2 position{};
   Vec2 velocity{};
   float facing_radians{0.0F};
+  float boost_speed{0.0F};
 };
 
 struct FlightTuning {
@@ -19,6 +20,9 @@ struct FlightTuning {
   float acceleration{2400.0F};
   float braking{3200.0F};
   float turn_rate{11.0F};
+  float boost_extra_speed{520.0F};
+  float boost_impulse{420.0F};
+  float boost_decay_per_second{360.0F};
 };
 
 struct FlightHudTuning {

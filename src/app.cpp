@@ -117,6 +117,9 @@ int App::run(AccountCtx& account) {
         SectorTickCtx tick_ctx{account, sector, timestep.tick_seconds()};
         latest_intent = input_mapper.map(gamepad.sample());
         simulate_assisted_flight(account, ship, latest_intent, flight, sector, timestep.tick_seconds());
+        if (latest_intent.boost_requested && account.registry().get<CargoEscortState>(player).phase == CargoEscortPhase::EscortActive) {
+          (void)detach_linked_cargo(account.registry(), ship.velocity);
+        }
         update_asteroid_motion(account, sector, timestep.tick_seconds());
 
         CameraState& camera = account.registry().get<CameraState>(player);

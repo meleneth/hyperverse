@@ -43,7 +43,16 @@ void simulate_assisted_flight(
   const Vec2 velocity_error = desired_velocity - ship.velocity;
   const float response = length(input.desired_movement) > 0.0F ? flight.acceleration : flight.braking;
   ship.velocity += clamp_length(velocity_error, response * dt_seconds);
-  ship.velocity = clamp_length(ship.velocity, flight.max_speed);
+  if (input.boost_requested) {
+    const Vec2 boost_direction =
+      length(input.desired_movement) > 0.0F ? normalize_or_zero(input.desired_movement) :
+      length(input.primary_aim) > 0.0F ? normalize_or_zero(input.primary_aim) :
+      Vec2{.x = std::cos(ship.facing_radians), .y = std::sin(ship.facing_radians)};
+    ship.boost_speed = std::max(ship.boost_speed, flight.boost_extra_speed);
+    ship.velocity += boost_direction * flight.boost_impulse;
+  }
+  ship.boost_speed = std::max(0.0F, ship.boost_speed - (flight.boost_decay_per_second * std::max(0.0F, dt_seconds)));
+  ship.velocity = clamp_length(ship.velocity, flight.max_speed + ship.boost_speed);
   ctx.physics().integrate_ship(ship, sector, dt_seconds);
 
   const Vec2 facing_intent = length(input.desired_movement) > 0.0F ? input.desired_movement : input.primary_aim;

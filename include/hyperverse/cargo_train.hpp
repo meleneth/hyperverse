@@ -31,4 +31,6 @@ struct CargoTrainHudSnapshot {
   const CargoTrainTuning& tuning = {}
 );
 
+int detach_linked_cargo(entt::registry& registry, Vec2 inherited_velocity);
+
 }  // namespace hyperverse

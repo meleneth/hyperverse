@@ -131,7 +131,7 @@ RawInputFrame GamepadSlot::sample() const {
       .y = axis(SDL_GAMEPAD_AXIS_RIGHTY),
     };
     raw.confirm = raw.confirm || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_SOUTH);
-    raw.cancel = raw.cancel || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_EAST);
+    raw.boost = raw.boost || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_EAST);
     raw.target_cycle = raw.target_cycle || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER) ||
                        SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
     raw.particle_fire = raw.particle_fire || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_WEST);

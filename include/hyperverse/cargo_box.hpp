@@ -16,6 +16,7 @@ enum class CargoBoxState {
   GateBound,
   Extracting,
   Extracted,
+  Detached,
   Stolen,
   Lost,
 };

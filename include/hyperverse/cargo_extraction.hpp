@@ -13,6 +13,8 @@ namespace hyperverse {
 struct CargoExtractionTuning {
   float seconds_per_box{5.0F};
   float gate_radius{96.0F};
+  float staging_radius{140.0F};
+  float staging_spacing{78.0F};
   float approach_rate{4.0F};
   float max_speed{520.0F};
 };

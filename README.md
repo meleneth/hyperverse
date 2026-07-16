@@ -57,8 +57,9 @@ These assets are temporary implementation scaffolding, not a permanent visual co
 - Cycle/lock asteroid target: `Tab` or right shoulder
 - Fire mining laser at locked asteroid: `F` or right trigger
 - Fire particle cannon: `E` or west face button
+- Burst of speed: east face button
 - Activate cargo escort after quota authorization: `Space` or south face button
-- Cancel/quit: `Escape` or east face button
+- Cancel/quit: `Escape`
 
 The current Vulkan prototype draws Sector7-derived sprites, hardware-uploaded textures, line HUD
 brackets, text glyph HUD, mining beams, particle cannon shots, cargo boxes, active cargo train links,
@@ -78,7 +79,8 @@ state.
 - Kinetic particle impacts transfer velocity into asteroid mass. Getting in front of a moving rock and firing back into its path is the intended way to slow it before mining.
 - Mining drones cannot work the largest asteroid tier. The player must break big rocks into medium or small pieces before drones can safely mine them.
 - Mined cargo starts at the gathering site. The extraction gate is derived as the furthest wrapped-sector point from that gathering site.
-- During escort, cargo follows the player as a train. Once the train reaches the extraction gate, cargo breaks off from player-follow and locks to the gate.
+- During escort, cargo follows the player as a train. Once the player reaches the extraction gate, cargo remains gate-bound and stages as a group near the gate before loading starts.
+- Burst of speed temporarily pushes the ship past its normal top speed and decays back down. Bursting while towing cargo breaks the cargo train coupling.
 - Gate extraction processes cargo boxes sequentially at roughly five seconds per box. A round is not complete until extraction finishes.
 - Reaching the extraction gate spawns combat raiders that prioritize killing the player over stealing cargo.
 - Asteroid damage, fragmentation, consumption, particle impacts, and drone target release are event-visible gameplay facts. New behavior should prefer event responders over hidden direct call chains.

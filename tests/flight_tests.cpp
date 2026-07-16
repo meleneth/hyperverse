@@ -44,6 +44,39 @@ TEST_CASE("assisted flight turns the ship toward thrust direction") {
   CHECK(ship.facing_radians == Catch::Approx(1.5707964F));
 }
 
+TEST_CASE("burst speed can exceed max speed and decays back toward top speed") {
+  TestAccountWorld world;
+  hyperverse::AccountCtx account = world.account_context();
+  hyperverse::ShipMotion ship{};
+  const hyperverse::SectorTuning sector{.width = 9000.0F, .height = 9000.0F};
+  const hyperverse::FlightTuning flight{
+    .max_speed = 100.0F,
+    .acceleration = 0.0F,
+    .braking = 0.0F,
+    .turn_rate = 20.0F,
+    .boost_extra_speed = 80.0F,
+    .boost_impulse = 160.0F,
+    .boost_decay_per_second = 40.0F,
+  };
+
+  hyperverse::simulate_assisted_flight(
+    account,
+    ship,
+    {.desired_movement = {.x = 1.0F, .y = 0.0F}, .boost_requested = true},
+    flight,
+    sector,
+    0.0F
+  );
+
+  CHECK(hyperverse::length(ship.velocity) > flight.max_speed);
+  CHECK(ship.boost_speed == Catch::Approx(80.0F));
+
+  hyperverse::simulate_assisted_flight(account, ship, {}, flight, sector, 2.0F);
+
+  CHECK(ship.boost_speed == Catch::Approx(0.0F));
+  CHECK(hyperverse::length(ship.velocity) == Catch::Approx(flight.max_speed));
+}
+
 TEST_CASE("assisted flight prefers thrust facing over aim facing while moving") {
   TestAccountWorld world;
   hyperverse::AccountCtx account = world.account_context();
