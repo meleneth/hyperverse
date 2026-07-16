@@ -74,7 +74,7 @@ TEST_CASE("mining laser reduces asteroid collision mass as integrity drops") {
     2.0F
   );
 
-  CHECK(registry.get<hyperverse::AsteroidBody>(asteroid).radius == Catch::Approx(40.0F));
+  CHECK(registry.get<hyperverse::AsteroidBody>(asteroid).radius == Catch::Approx(75.0F));
 }
 
 TEST_CASE("mining depletion keeps asteroids at one sixth of base radius") {
@@ -82,7 +82,7 @@ TEST_CASE("mining depletion keeps asteroids at one sixth of base radius") {
   const entt::entity asteroid = registry.create();
   registry.emplace<hyperverse::AsteroidBody>(
     asteroid,
-    hyperverse::AsteroidBody{.position = {.x = 350.0F, .y = 100.0F}, .radius = 600.0F, .base_radius = 600.0F}
+    hyperverse::AsteroidBody{.position = {.x = 350.0F, .y = 100.0F}, .radius = 1200.0F, .base_radius = 1200.0F}
   );
   registry.emplace<hyperverse::MiningResource>(asteroid);
 
@@ -96,7 +96,7 @@ TEST_CASE("mining depletion keeps asteroids at one sixth of base radius") {
     1.0F
   );
 
-  CHECK(registry.get<hyperverse::AsteroidBody>(asteroid).radius == Catch::Approx(100.0F));
+  CHECK(registry.get<hyperverse::AsteroidBody>(asteroid).radius == Catch::Approx(200.0F));
 }
 
 TEST_CASE("mining depletion breaks an asteroid into laser-coherent fragments") {
@@ -104,7 +104,7 @@ TEST_CASE("mining depletion breaks an asteroid into laser-coherent fragments") {
   const entt::entity asteroid = registry.create();
   registry.emplace<hyperverse::AsteroidBody>(
     asteroid,
-    hyperverse::AsteroidBody{.position = {.x = 350.0F, .y = 100.0F}, .radius = 600.0F, .base_radius = 600.0F}
+    hyperverse::AsteroidBody{.position = {.x = 350.0F, .y = 100.0F}, .radius = 1200.0F, .base_radius = 1200.0F}
   );
   registry.emplace<hyperverse::MiningResource>(asteroid);
 

@@ -17,7 +17,7 @@ namespace {
 void apply_projectile_damage(AsteroidBody& asteroid, MiningResource& resource, const ParticleCannonTuning& tuning) {
   resource.integrity = std::max(0.0F, resource.integrity - tuning.damage);
   const float remaining_fraction = std::clamp(resource.integrity / 100.0F, tuning.asteroid_min_radius_fraction, 1.0F);
-  asteroid.radius = std::max(8.0F, asteroid.base_radius * remaining_fraction);
+  asteroid.radius = std::max(MinimumPlayableAsteroidRadius, asteroid.base_radius * remaining_fraction);
 }
 
 void fragment_depleted_asteroid(

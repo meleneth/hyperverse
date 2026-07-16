@@ -62,6 +62,6 @@ TEST_CASE("particle cannon damages and shrinks asteroids on Jolt overlap") {
   CHECK(hud.impacts == 0);
   CHECK(event_hud.impacts == 1);
   CHECK(account.registry().get<hyperverse::MiningResource>(asteroid).integrity == Catch::Approx(75.0F));
-  CHECK(account.registry().get<hyperverse::AsteroidBody>(asteroid).radius == Catch::Approx(60.0F));
+  CHECK(account.registry().get<hyperverse::AsteroidBody>(asteroid).radius == Catch::Approx(75.0F));
   CHECK(std::distance(account.registry().view<hyperverse::ParticleShot>().begin(), account.registry().view<hyperverse::ParticleShot>().end()) == 0);
 }

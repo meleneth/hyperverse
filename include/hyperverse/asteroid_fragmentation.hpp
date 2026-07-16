@@ -23,6 +23,8 @@ struct AsteroidFragmentationRequest {
   int pieces{4};
 };
 
+inline constexpr float MinimumPlayableAsteroidRadius = 75.0F;
+
 [[nodiscard]] std::vector<entt::entity> fragment_asteroid(
   entt::registry& registry,
   entt::entity asteroid,

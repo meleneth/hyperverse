@@ -110,7 +110,6 @@ add_library(
   src/fixed_timestep.cpp
   src/flight.cpp
   src/grand_central.cpp
-  src/hud_title.cpp
   src/input.cpp
   src/mining.cpp
   src/png_rgba.cpp

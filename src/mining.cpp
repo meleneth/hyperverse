@@ -182,7 +182,7 @@ MiningHudSnapshot update_mining_laser(
   }
 
   const float remaining_fraction = std::clamp(resource.integrity / 100.0F, AsteroidMinimumRadiusFraction, 1.0F);
-  asteroid.radius = std::max(12.0F, asteroid.base_radius * remaining_fraction);
+  asteroid.radius = std::max(MinimumPlayableAsteroidRadius, asteroid.base_radius * remaining_fraction);
   if (resource.integrity <= 0.0F) {
     populate_hud_from_resource(hud, resource, tuning);
     (void)fragment_asteroid(

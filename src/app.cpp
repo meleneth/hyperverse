@@ -10,7 +10,6 @@
 #include "hyperverse/drone.hpp"
 #include "hyperverse/fixed_timestep.hpp"
 #include "hyperverse/flight.hpp"
-#include "hyperverse/hud_title.hpp"
 #include "hyperverse/input.hpp"
 #include "hyperverse/mining.hpp"
 #include "hyperverse/pressure.hpp"
@@ -61,18 +60,17 @@ int App::run(AccountCtx& account) {
     SemanticInputFrame latest_intent{};
 
     std::cout << application_name() << " " << version() << "\n";
+    window.set_title(std::string{application_name()} + " " + std::string{version()});
     log_gamepad_state();
 
     bool running = true;
     auto previous_time = std::chrono::steady_clock::now();
-    float hud_title_accumulator = 0.0F;
 
     while (running) {
       const auto current_time = std::chrono::steady_clock::now();
       const float elapsed_seconds = std::chrono::duration<float>(current_time - previous_time).count();
       previous_time = current_time;
       timestep.accumulate(elapsed_seconds);
-      hud_title_accumulator += elapsed_seconds;
 
       SDL_Event event{};
       while (SDL_PollEvent(&event)) {
@@ -176,37 +174,6 @@ int App::run(AccountCtx& account) {
       }
 
       const FlightHudSnapshot hud = make_flight_hud_snapshot(ship, latest_intent, flight, sector);
-      const CameraState& camera = account.registry().get<CameraState>(player);
-      const TargetLockModel& target_lock = account.registry().get<TargetLockModel>(player);
-      const MiningHudSnapshot& mining_hud = account.registry().get<MiningHudSnapshot>(player);
-      const CargoHudSnapshot& cargo_hud = account.registry().get<CargoHudSnapshot>(player);
-      const CargoEscortHudSnapshot& escort_hud = account.registry().get<CargoEscortHudSnapshot>(player);
-      const CargoTrainHudSnapshot& train_hud = account.registry().get<CargoTrainHudSnapshot>(player);
-      const CargoEscortRouteHudSnapshot& route_hud = account.registry().get<CargoEscortRouteHudSnapshot>(player);
-      const SectorPressureHudSnapshot& pressure_hud = account.registry().get<SectorPressureHudSnapshot>(player);
-      const MiningDroneHudSnapshot& drone_hud = account.registry().get<MiningDroneHudSnapshot>(player);
-      const RaiderHudSnapshot& raider_hud = account.registry().get<RaiderHudSnapshot>(player);
-      const CargoRecoveryHudSnapshot& recovery_hud = account.registry().get<CargoRecoveryHudSnapshot>(player);
-      const CollisionHudSnapshot& collision_hud = account.registry().get<CollisionHudSnapshot>(player);
-
-      if (hud_title_accumulator >= 0.25F) {
-        window.set_title(make_title(
-          hud,
-          camera,
-          target_lock,
-          mining_hud,
-          cargo_hud,
-          escort_hud,
-          train_hud,
-          route_hud,
-          pressure_hud,
-          drone_hud,
-          raider_hud,
-          recovery_hud,
-          collision_hud
-        ));
-        hud_title_accumulator = 0.0F;
-      }
 
       renderer.draw_frame(build_sprite_frame(
         account,

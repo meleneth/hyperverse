@@ -5,6 +5,7 @@
 #include "hyperverse/cargo_escort.hpp"
 #include "hyperverse/cargo_manifest.hpp"
 #include "hyperverse/cargo_route.hpp"
+#include "hyperverse/cargo_train.hpp"
 #include "hyperverse/collision.hpp"
 #include "hyperverse/drone.hpp"
 #include "hyperverse/mining.hpp"
@@ -255,8 +256,10 @@ SpriteFrame build_sprite_frame(
   const MiningHudSnapshot& mining_hud = account.registry().get<MiningHudSnapshot>(player);
   const CargoHudSnapshot& cargo_hud = account.registry().get<CargoHudSnapshot>(player);
   const CargoEscortHudSnapshot& escort_hud = account.registry().get<CargoEscortHudSnapshot>(player);
+  const CargoTrainHudSnapshot& train_hud = account.registry().get<CargoTrainHudSnapshot>(player);
   const CargoEscortRouteHudSnapshot& route_hud = account.registry().get<CargoEscortRouteHudSnapshot>(player);
   const SectorPressureHudSnapshot& pressure_hud = account.registry().get<SectorPressureHudSnapshot>(player);
+  const MiningDroneHudSnapshot& drone_hud = account.registry().get<MiningDroneHudSnapshot>(player);
   const ParticleCannonHudSnapshot& particle_hud = account.registry().get<ParticleCannonHudSnapshot>(player);
   const RaiderHudSnapshot& raider_hud = account.registry().get<RaiderHudSnapshot>(player);
   const CargoRecoveryHudSnapshot& recovery_hud = account.registry().get<CargoRecoveryHudSnapshot>(player);
@@ -346,26 +349,44 @@ SpriteFrame build_sprite_frame(
   }
   frame.sprites.push_back(make_world_sprite(SpriteTexture::Ship, ship.position, camera.position, sector, width, height, 56.0F, ship_sprite_rotation(ship.facing_radians)));
   add_hud_text(frame.sprites, "SPD " + std::to_string(static_cast<int>(hud.speed)), -0.96F, 0.92F, 0.045F);
+  add_hud_text(frame.sprites, "POS " + std::to_string(static_cast<int>(ship.position.x)) + " " + std::to_string(static_cast<int>(ship.position.y)), -0.96F, 0.68F, 0.035F);
   add_hud_text(frame.sprites, "ORE " + std::to_string(static_cast<int>(cargo_hud.delivered_mass)), -0.96F, 0.86F, 0.045F, 0.72F, 1.0F, 0.72F);
   add_hud_text(frame.sprites, "BOX " + std::to_string(cargo_hud.cargo_boxes), -0.96F, 0.80F, 0.045F, 0.72F, 1.0F, 0.72F);
   add_hud_text(frame.sprites, "PRS " + std::to_string(pressure_hud.escalation_level), -0.96F, 0.74F, 0.045F, 1.0F, 0.82F, 0.42F);
+  add_hud_text(frame.sprites, "PCT " + std::to_string(static_cast<int>(pressure_hud.pressure_fraction * 100.0F)), -0.96F, 0.63F, 0.035F, 1.0F, 0.82F, 0.42F);
   if (has_locked_target(target_lock)) {
     add_hud_text(frame.sprites, "TGT " + std::to_string(static_cast<int>(target_lock.wrapped_distance)), 0.56F, 0.92F, 0.045F);
+    add_hud_text(frame.sprites, "SCN " + std::to_string(static_cast<int>(target_lock.scan_confidence * 100.0F)), 0.56F, 0.81F, 0.035F);
   }
   if (mining_hud.beam_active) {
     add_hud_text(frame.sprites, "ZAP", 0.56F, 0.86F, 0.045F, 1.0F, 0.72F, 0.24F);
+    add_hud_text(frame.sprites, "INT " + std::to_string(static_cast<int>(mining_hud.target_integrity)), 0.56F, 0.76F, 0.035F, 1.0F, 0.72F, 0.24F);
+    add_hud_text(frame.sprites, "HET " + std::to_string(static_cast<int>(mining_hud.target_heat)), 0.56F, 0.72F, 0.035F, 1.0F, 0.72F, 0.24F);
+    add_hud_text(frame.sprites, "STR " + std::to_string(static_cast<int>(mining_hud.target_structural_stress)), 0.56F, 0.68F, 0.035F, 1.0F, 0.72F, 0.24F);
+  } else if (has_locked_target(target_lock) && mining_hud.target != entt::null) {
+    add_hud_text(frame.sprites, mining_hud.target_in_range ? "MINE RDY" : "OUT RNG", 0.56F, 0.76F, 0.035F, 1.0F, 0.72F, 0.24F);
   }
   if (particle_hud.active_particles > 0 || particle_hud.impacts > 0) {
     add_hud_text(frame.sprites, "PCN " + std::to_string(particle_hud.active_particles), 0.56F, 0.68F, 0.045F, 0.72F, 0.92F, 1.0F);
   }
   if (escort_hud.cargo_train_active) {
     add_hud_text(frame.sprites, "GATE " + std::to_string(static_cast<int>(route_hud.gate_distance)), 0.48F, 0.80F, 0.045F);
+    add_hud_text(frame.sprites, "TRN " + std::to_string(static_cast<int>(train_hud.train_length)) + " STR " + std::to_string(static_cast<int>(train_hud.max_coupling_stress * 100.0F)), 0.48F, 0.75F, 0.035F);
   }
   if (raider_hud.active) {
     add_hud_text(frame.sprites, "RAIDER", 0.56F, 0.74F, 0.045F, 1.0F, 0.28F, 0.22F);
+    add_hud_text(frame.sprites, "RAID " + std::to_string(static_cast<int>(raider_hud.target_distance)), 0.56F, 0.63F, 0.035F, 1.0F, 0.28F, 0.22F);
+  }
+  if (drone_hud.target != entt::null) {
+    add_hud_text(frame.sprites, "DRN " + std::to_string(static_cast<int>(drone_hud.target_distance)), -0.96F, 0.58F, 0.035F, 0.55F, 1.0F, 0.65F);
   }
   if (recovery_hud.stolen_box_near) {
     add_hud_text(frame.sprites, "RECOVER", 0.52F, 0.68F, 0.045F, 1.0F, 0.34F, 0.25F);
+  }
+  if (collision_hud.contact) {
+    add_hud_text(frame.sprites, "COL " + std::to_string(static_cast<int>(collision_hud.impact_speed)), 0.48F, 0.58F, 0.04F, 1.0F, 0.2F, 0.15F);
+  } else if (collision_hud.warning) {
+    add_hud_text(frame.sprites, "IMP " + std::to_string(static_cast<int>(collision_hud.time_to_contact_seconds)), 0.48F, 0.58F, 0.04F, 1.0F, 0.85F, 0.2F);
   }
 
   const float radar_radius_world = hud_radar_radius_world(width, height);

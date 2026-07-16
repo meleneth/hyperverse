@@ -72,6 +72,11 @@ std::vector<entt::entity> fragment_asteroid(
   const MiningResource* parent_resource = registry.try_get<MiningResource>(asteroid);
   const MineralComposition* parent_composition = registry.try_get<MineralComposition>(asteroid);
   const float child_radius = std::max(8.0F, parent.radius / std::sqrt(static_cast<float>(request.pieces)));
+  if (child_radius < MinimumPlayableAsteroidRadius) {
+    registry.destroy(asteroid);
+    return {};
+  }
+
   const float placement_radius = std::max(child_radius, parent.radius - child_radius);
   std::vector<entt::entity> fragments;
   fragments.reserve(static_cast<std::size_t>(request.pieces));

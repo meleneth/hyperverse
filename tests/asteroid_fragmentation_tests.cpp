@@ -13,8 +13,8 @@ namespace {
     hyperverse::AsteroidBody{
       .position = {.x = 100.0F, .y = 100.0F},
       .velocity = velocity,
-      .radius = 120.0F,
-      .base_radius = 120.0F,
+      .radius = 240.0F,
+      .base_radius = 240.0F,
       .scan_confidence = 0.5F,
     }
   );
@@ -39,7 +39,7 @@ TEST_CASE("laser fragmentation keeps child vectors nearly coherent") {
   CHECK_FALSE(registry.valid(asteroid));
   for (entt::entity fragment : fragments) {
     const hyperverse::AsteroidBody& body = registry.get<hyperverse::AsteroidBody>(fragment);
-    CHECK(body.radius < 120.0F);
+    CHECK(body.radius == Catch::Approx(120.0F));
     CHECK(body.velocity.x == Catch::Approx(50.0F));
     CHECK(body.velocity.y > -5.0F);
     CHECK(body.velocity.y < 20.0F);
