@@ -311,9 +311,11 @@ void log_gamepad_state() {
       raider_phase = "disrupt";
     } else if (raider.phase == hyperverse::RaiderPhase::Towing) {
       raider_phase = "towing";
+    } else if (raider.phase == hyperverse::RaiderPhase::Escaped) {
+      raider_phase = "escaped";
     }
     title << " | raider " << raider_phase << " d" << raider.target_distance << " hack " << (raider.disruption_fraction * 100.0F) << "%";
-    if (raider.phase == hyperverse::RaiderPhase::Towing) {
+    if (raider.phase == hyperverse::RaiderPhase::Towing || raider.phase == hyperverse::RaiderPhase::Escaped) {
       title << " escape " << raider.escape_distance;
     }
   }
@@ -825,7 +827,9 @@ int App::run() {
               28.0F
             );
             if (escort_hud.cargo_train_active) {
-              if (box.state == CargoBoxState::Stolen) {
+              if (box.state == CargoBoxState::Lost) {
+                add_box_lines(lines, box_bounds, 0.55F, 0.1F, 0.1F);
+              } else if (box.state == CargoBoxState::Stolen) {
                 add_box_lines(lines, box_bounds, 1.0F, 0.2F, 0.15F);
               } else {
                 add_box_lines(lines, box_bounds, 0.35F, 0.9F, 1.0F);

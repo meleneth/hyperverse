@@ -33,7 +33,9 @@ RaiderHudSnapshot update_raider_threat(
   const RaiderTuning& tuning
 ) {
   if (escort.phase != CargoEscortPhase::EscortActive) {
-    raider.phase = RaiderPhase::Idle;
+    if (raider.phase != RaiderPhase::Escaped) {
+      raider.phase = RaiderPhase::Idle;
+    }
     raider.velocity = {};
     raider.target_box = entt::null;
     raider.disruption_seconds = 0.0F;
@@ -81,6 +83,12 @@ RaiderHudSnapshot update_raider_threat(
     raider.position = wrap_position(raider.position + (raider.velocity * dt_seconds), sector);
     target.position = raider.position;
     target.velocity = raider.velocity;
+    if (wrapped_distance(ship.position, target.position, sector) >= tuning.escape_distance) {
+      target.state = CargoBoxState::Lost;
+      raider.phase = RaiderPhase::Escaped;
+      raider.target_box = entt::null;
+      raider.velocity = {};
+    }
   }
 
   return {
@@ -88,7 +96,8 @@ RaiderHudSnapshot update_raider_threat(
     .phase = raider.phase,
     .target_distance = target_distance,
     .disruption_fraction = raider.disruption_seconds / std::max(tuning.disruption_seconds, std::numeric_limits<float>::epsilon()),
-    .escape_distance = raider.phase == RaiderPhase::Towing ? wrapped_distance(ship.position, target.position, sector) : 0.0F,
+    .escape_distance =
+      (raider.phase == RaiderPhase::Towing || raider.phase == RaiderPhase::Escaped) ? wrapped_distance(ship.position, target.position, sector) : 0.0F,
     .active = true,
   };
 }

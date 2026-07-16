@@ -13,6 +13,7 @@ enum class RaiderPhase {
   Approaching,
   Disrupting,
   Towing,
+  Escaped,
 };
 
 struct RaiderShip {
@@ -27,6 +28,7 @@ struct RaiderTuning {
   float max_speed{460.0F};
   float disruption_range{70.0F};
   float disruption_seconds{0.5F};
+  float escape_distance{3200.0F};
 };
 
 struct RaiderHudSnapshot {

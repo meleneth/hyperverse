@@ -21,6 +21,7 @@ struct ExtractionSite {
 enum class CargoBoxState {
   Linked,
   Stolen,
+  Lost,
 };
 
 struct CargoBox {
