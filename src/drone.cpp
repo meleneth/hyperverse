@@ -6,6 +6,8 @@
 namespace hyperverse {
 namespace {
 
+constexpr float TauRadians = 6.28318530718F;
+
 [[nodiscard]] bool valid_mining_target(entt::registry& registry, entt::entity target) {
   return target != entt::null && registry.valid(target) && registry.all_of<AsteroidBody, MiningResource>(target) &&
          registry.get<MiningResource>(target).integrity > 0.0F;
@@ -34,6 +36,12 @@ MiningDroneHudSnapshot update_mining_drone(
   float dt_seconds,
   const MiningDroneTuning& tuning
 ) {
+  const float scaled_dt = std::max(0.0F, dt_seconds);
+  drone.work_angle_radians = std::fmod(drone.work_angle_radians + (tuning.work_angle_rotation_radians_per_second * scaled_dt), TauRadians);
+  if (drone.work_angle_radians < 0.0F) {
+    drone.work_angle_radians += TauRadians;
+  }
+
   if (has_locked_target(mining_priority) && valid_mining_target(registry, mining_priority.target)) {
     drone.target = mining_priority.target;
   } else if (!valid_mining_target(registry, drone.target)) {
@@ -74,7 +82,6 @@ MiningDroneHudSnapshot update_mining_drone(
   } else {
     drone.phase = MiningDronePhase::Mining;
     drone.velocity = {};
-    const float scaled_dt = std::max(0.0F, dt_seconds);
     resource.integrity = std::max(0.0F, resource.integrity - (tuning.integrity_damage_per_second * scaled_dt));
     resource.extracted_mass += tuning.extraction_per_second * scaled_dt;
     drone.extracted_mass += tuning.extraction_per_second * scaled_dt;

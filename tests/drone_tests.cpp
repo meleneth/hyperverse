@@ -20,7 +20,7 @@ TEST_CASE("mining drone acquires the locked asteroid as its priority") {
     ship,
     {.width = 9000.0F, .height = 9000.0F},
     0.5F,
-    {.max_speed = 100.0F, .mining_range = 50.0F, .work_standoff = 40.0F}
+    {.max_speed = 100.0F, .mining_range = 50.0F, .work_standoff = 40.0F, .work_angle_rotation_radians_per_second = 0.0F}
   );
 
   CHECK(drone.target == asteroid);
@@ -97,4 +97,22 @@ TEST_CASE("idle mining drones form up behind the player ship") {
   CHECK(drone.position.x < 500.0F);
   CHECK_FALSE(registry.valid(hud.target));
   CHECK(hud.target_distance > 0.0F);
+}
+
+TEST_CASE("mining drone work angles rotate slowly over time") {
+  entt::registry registry;
+  hyperverse::MiningDrone drone{.position = {.x = 500.0F, .y = 500.0F}, .work_angle_radians = 6.20F};
+  const hyperverse::ShipMotion ship{.position = {.x = 500.0F, .y = 500.0F}};
+
+  (void)hyperverse::update_mining_drone(
+    drone,
+    registry,
+    {},
+    ship,
+    {.width = 9000.0F, .height = 9000.0F},
+    1.0F,
+    {.max_speed = 100.0F, .work_angle_rotation_radians_per_second = 0.20F}
+  );
+
+  CHECK(drone.work_angle_radians == Catch::Approx(0.1168146F));
 }
