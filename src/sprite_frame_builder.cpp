@@ -1,7 +1,10 @@
 #include "hyperverse/sprite_frame_builder.hpp"
 
 #include "hyperverse/camera.hpp"
-#include "hyperverse/cargo.hpp"
+#include "hyperverse/cargo_box.hpp"
+#include "hyperverse/cargo_escort.hpp"
+#include "hyperverse/cargo_manifest.hpp"
+#include "hyperverse/cargo_route.hpp"
 #include "hyperverse/collision.hpp"
 #include "hyperverse/drone.hpp"
 #include "hyperverse/mining.hpp"

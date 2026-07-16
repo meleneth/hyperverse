@@ -1,6 +1,8 @@
 #pragma once
 
-#include "hyperverse/cargo.hpp"
+#include "hyperverse/cargo_box.hpp"
+#include "hyperverse/cargo_escort.hpp"
+#include "hyperverse/flight.hpp"
 #include "hyperverse/input.hpp"
 #include "hyperverse/sector.hpp"
 

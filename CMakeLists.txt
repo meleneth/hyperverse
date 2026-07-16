@@ -99,7 +99,11 @@ add_library(
   src/account_state.cpp
   src/app.cpp
   src/camera.cpp
-  src/cargo.cpp
+  src/cargo_box.cpp
+  src/cargo_escort.cpp
+  src/cargo_manifest.cpp
+  src/cargo_route.cpp
+  src/cargo_train.cpp
   src/collision.cpp
   src/drone.cpp
   src/fixed_timestep.cpp

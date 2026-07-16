@@ -1,7 +1,10 @@
 #pragma once
 
 #include "hyperverse/camera.hpp"
-#include "hyperverse/cargo.hpp"
+#include "hyperverse/cargo_escort.hpp"
+#include "hyperverse/cargo_manifest.hpp"
+#include "hyperverse/cargo_route.hpp"
+#include "hyperverse/cargo_train.hpp"
 #include "hyperverse/collision.hpp"
 #include "hyperverse/drone.hpp"
 #include "hyperverse/flight.hpp"
