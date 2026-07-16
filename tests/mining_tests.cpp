@@ -77,6 +77,52 @@ TEST_CASE("mining laser reduces asteroid collision mass as integrity drops") {
   CHECK(registry.get<hyperverse::AsteroidBody>(asteroid).radius == Catch::Approx(40.0F));
 }
 
+TEST_CASE("mining depletion keeps asteroids at one sixth of base radius") {
+  entt::registry registry;
+  const entt::entity asteroid = registry.create();
+  registry.emplace<hyperverse::AsteroidBody>(
+    asteroid,
+    hyperverse::AsteroidBody{.position = {.x = 350.0F, .y = 100.0F}, .radius = 600.0F, .base_radius = 600.0F}
+  );
+  registry.emplace<hyperverse::MiningResource>(asteroid);
+
+  (void)hyperverse::update_mining_laser(
+    registry,
+    {.phase = hyperverse::TargetLockPhase::Locked, .target = asteroid, .wrapped_distance = 250.0F},
+    {.position = {.x = 100.0F, .y = 100.0F}},
+    {.tool_intensity = 1.0F},
+    {.width = 9000.0F, .height = 9000.0F},
+    {.range = 500.0F, .integrity_damage_per_second = 90.0F},
+    1.0F
+  );
+
+  CHECK(registry.get<hyperverse::AsteroidBody>(asteroid).radius == Catch::Approx(100.0F));
+}
+
+TEST_CASE("mining depletion breaks an asteroid into laser-coherent fragments") {
+  entt::registry registry;
+  const entt::entity asteroid = registry.create();
+  registry.emplace<hyperverse::AsteroidBody>(
+    asteroid,
+    hyperverse::AsteroidBody{.position = {.x = 350.0F, .y = 100.0F}, .radius = 600.0F, .base_radius = 600.0F}
+  );
+  registry.emplace<hyperverse::MiningResource>(asteroid);
+
+  const hyperverse::MiningHudSnapshot hud = hyperverse::update_mining_laser(
+    registry,
+    {.phase = hyperverse::TargetLockPhase::Locked, .target = asteroid, .wrapped_distance = 250.0F},
+    {.position = {.x = 100.0F, .y = 100.0F}, .facing_radians = 0.0F},
+    {.tool_intensity = 1.0F},
+    {.width = 9000.0F, .height = 9000.0F},
+    {.range = 500.0F, .integrity_damage_per_second = 120.0F},
+    1.0F
+  );
+
+  CHECK(hud.target_integrity == Catch::Approx(0.0F));
+  CHECK_FALSE(registry.valid(asteroid));
+  CHECK(std::distance(registry.view<hyperverse::AsteroidBody>().begin(), registry.view<hyperverse::AsteroidBody>().end()) == 4);
+}
+
 TEST_CASE("ore tiers expose distinct asteroid tint colors") {
   const hyperverse::OreTint common = hyperverse::ore_tint(hyperverse::OreTier::Common);
   const hyperverse::OreTint rare = hyperverse::ore_tint(hyperverse::OreTier::Rare);

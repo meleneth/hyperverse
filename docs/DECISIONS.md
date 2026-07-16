@@ -136,3 +136,25 @@ MSYS2 may be used for initial scaffolding.
 ## D021: Placeholder Art
 
 Initial sprites come from `meleneth/sector7`, branch `master`.
+
+## D022: Asteroid Breakup
+
+Asteroids start large and can break into smaller child asteroids.
+
+The impact source determines fragment motion. Laser breakup stays coherent, kinetic impacts transfer projectile velocity, and explosive impacts scatter fragments radially.
+
+Large asteroids should support chemical scanning. Composition should influence breakup output with tunable distributions and deliberate loss, not exact hard-coded equal partitions.
+
+## D023: Weapon Firing Architecture
+
+Particle beam firing should be event-driven and modeled as a small FSM.
+
+The particle beam is a dual-fire weapon with two side-by-side shots. Each shot has independent collision and impact handling.
+
+The FSM should consume semantic fire intent and simulation-clock events, then emit projectile spawn events.
+
+## D024: Universe Clock
+
+The project needs one documented canonical simulation clock.
+
+Fixed timestep simulation exists, but the exact base tick and scheduling policy remain a pending decision for weapon FSMs, cooldowns, AI, escalation, and HUD animation.

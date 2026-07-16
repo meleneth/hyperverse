@@ -96,6 +96,32 @@ Long-term mastery should allow hazards to become value:
 - expose deeper seams
 - harvest irradiated or unstable material safely
 
+Asteroids should begin as large bodies and break into smaller child bodies under tool pressure.
+
+Breakup is not one generic explosion. The impact source determines the fragment velocity field:
+
+- laser: child pieces keep nearly the same vector, with only small divergence
+- kinetic missile: child pieces inherit direct imparted velocity from the projectile
+- explosive missile: child pieces scatter outward in many directions
+
+Large asteroids should be scannable before breakup. Scan output should expose chemical makeup clearly enough for the player to decide whether to mine, fracture, or destroy the body.
+
+Composition should influence child chunks. For example, an asteroid with four roughly equal mineral groups might produce about three recoverable chunks while one portion is destroyed, vaporized, or dispersed. The implementation should use tunable N-way distributions rather than exact hard-coded ratios.
+
+## Weapons
+
+Weapon firing should be event-driven.
+
+The particle beam is intended as a dual-fire weapon: two side-by-side shots from separate muzzle offsets. Each shot must be an independent projectile with its own collision query and impact event.
+
+The firing mechanism should be modeled as a small FSM driven by semantic fire intent and simulation-clock events. Cooldown, burst timing, dual-barrel synchronization, and projectile spawn events belong in that machine rather than in direct input polling.
+
+## Time
+
+The universe needs one canonical simulation clock.
+
+Current code uses fixed timestep simulation, but the project still needs an explicit base tick decision that gameplay schedulers, weapon FSMs, AI, escalation, cooldowns, and HUD timings can share.
+
 ## Drones
 
 Drones are mostly autonomous.

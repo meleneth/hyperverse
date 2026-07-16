@@ -1,5 +1,6 @@
 #pragma once
 
+#include "hyperverse/asteroid_fragmentation.hpp"
 #include "hyperverse/flight.hpp"
 #include "hyperverse/input.hpp"
 #include "hyperverse/mining.hpp"
@@ -20,7 +21,8 @@ struct ParticleCannonTuning {
   float projectile_speed{1450.0F};
   float projectile_radius{10.0F};
   float damage{22.0F};
-  float asteroid_min_radius_fraction{0.12F};
+  float asteroid_min_radius_fraction{1.0F / 6.0F};
+  AsteroidImpactKind impact_kind{AsteroidImpactKind::Kinetic};
 };
 
 struct ParticleCannonHudSnapshot {

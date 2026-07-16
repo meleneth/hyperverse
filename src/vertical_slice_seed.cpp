@@ -18,6 +18,29 @@
 #include <numbers>
 
 namespace hyperverse {
+namespace {
+
+constexpr float AsteroidStartScale = 6.0F;
+
+[[nodiscard]] AsteroidBody seed_asteroid(
+  Vec2 position,
+  Vec2 velocity,
+  float depleted_radius,
+  float angular_velocity,
+  float scan_confidence
+) {
+  const float starting_radius = depleted_radius * AsteroidStartScale;
+  return {
+    .position = position,
+    .velocity = velocity,
+    .radius = starting_radius,
+    .base_radius = starting_radius,
+    .angular_velocity = angular_velocity,
+    .scan_confidence = scan_confidence,
+  };
+}
+
+}  // namespace
 
 VerticalSliceEntities seed_vertical_slice(AccountCtx& account) {
   VerticalSliceEntities entities;
@@ -65,18 +88,18 @@ VerticalSliceEntities seed_vertical_slice(AccountCtx& account) {
   );
 
   const std::vector<AsteroidBody> asteroid_field{
-    {.position = {.x = 5650.0F, .y = 3850.0F}, .velocity = {.x = -22.0F, .y = 16.0F}, .radius = 220.0F, .base_radius = 220.0F, .angular_velocity = 0.18F, .scan_confidence = 0.34F},
-    {.position = {.x = 3825.0F, .y = 5200.0F}, .velocity = {.x = 18.0F, .y = -10.0F}, .radius = 150.0F, .base_radius = 150.0F, .angular_velocity = -0.24F, .scan_confidence = 0.58F},
-    {.position = {.x = 4925.0F, .y = 2920.0F}, .velocity = {.x = 12.0F, .y = 22.0F}, .radius = 95.0F, .base_radius = 95.0F, .angular_velocity = 0.42F, .scan_confidence = 0.46F},
-    {.position = {.x = 6200.0F, .y = 4625.0F}, .velocity = {.x = -30.0F, .y = -8.0F}, .radius = 180.0F, .base_radius = 180.0F, .angular_velocity = -0.12F, .scan_confidence = 0.72F},
-    {.position = {.x = 3100.0F, .y = 3550.0F}, .velocity = {.x = 26.0F, .y = 19.0F}, .radius = 130.0F, .base_radius = 130.0F, .angular_velocity = 0.31F, .scan_confidence = 0.41F},
-    {.position = {.x = 6900.0F, .y = 5980.0F}, .velocity = {.x = -18.0F, .y = -24.0F}, .radius = 260.0F, .base_radius = 260.0F, .angular_velocity = 0.09F, .scan_confidence = 0.29F},
-    {.position = {.x = 2450.0F, .y = 6100.0F}, .velocity = {.x = 34.0F, .y = -14.0F}, .radius = 110.0F, .base_radius = 110.0F, .angular_velocity = -0.36F, .scan_confidence = 0.63F},
-    {.position = {.x = 7800.0F, .y = 3100.0F}, .velocity = {.x = -28.0F, .y = 27.0F}, .radius = 155.0F, .base_radius = 155.0F, .angular_velocity = 0.22F, .scan_confidence = 0.52F},
-    {.position = {.x = 1500.0F, .y = 2500.0F}, .velocity = {.x = 24.0F, .y = 11.0F}, .radius = 75.0F, .base_radius = 75.0F, .angular_velocity = 0.57F, .scan_confidence = 0.38F},
-    {.position = {.x = 8350.0F, .y = 7250.0F}, .velocity = {.x = -36.0F, .y = -18.0F}, .radius = 205.0F, .base_radius = 205.0F, .angular_velocity = -0.16F, .scan_confidence = 0.67F},
-    {.position = {.x = 1150.0F, .y = 7200.0F}, .velocity = {.x = 20.0F, .y = -32.0F}, .radius = 140.0F, .base_radius = 140.0F, .angular_velocity = 0.28F, .scan_confidence = 0.57F},
-    {.position = {.x = 7350.0F, .y = 900.0F}, .velocity = {.x = -12.0F, .y = 36.0F}, .radius = 100.0F, .base_radius = 100.0F, .angular_velocity = -0.44F, .scan_confidence = 0.49F},
+    seed_asteroid({.x = 5650.0F, .y = 3850.0F}, {.x = -22.0F, .y = 16.0F}, 220.0F, 0.18F, 0.34F),
+    seed_asteroid({.x = 3825.0F, .y = 5200.0F}, {.x = 18.0F, .y = -10.0F}, 150.0F, -0.24F, 0.58F),
+    seed_asteroid({.x = 4925.0F, .y = 2920.0F}, {.x = 12.0F, .y = 22.0F}, 95.0F, 0.42F, 0.46F),
+    seed_asteroid({.x = 6200.0F, .y = 4625.0F}, {.x = -30.0F, .y = -8.0F}, 180.0F, -0.12F, 0.72F),
+    seed_asteroid({.x = 3100.0F, .y = 3550.0F}, {.x = 26.0F, .y = 19.0F}, 130.0F, 0.31F, 0.41F),
+    seed_asteroid({.x = 6900.0F, .y = 5980.0F}, {.x = -18.0F, .y = -24.0F}, 260.0F, 0.09F, 0.29F),
+    seed_asteroid({.x = 2450.0F, .y = 6100.0F}, {.x = 34.0F, .y = -14.0F}, 110.0F, -0.36F, 0.63F),
+    seed_asteroid({.x = 7800.0F, .y = 3100.0F}, {.x = -28.0F, .y = 27.0F}, 155.0F, 0.22F, 0.52F),
+    seed_asteroid({.x = 1500.0F, .y = 2500.0F}, {.x = 24.0F, .y = 11.0F}, 75.0F, 0.57F, 0.38F),
+    seed_asteroid({.x = 8350.0F, .y = 7250.0F}, {.x = -36.0F, .y = -18.0F}, 205.0F, -0.16F, 0.67F),
+    seed_asteroid({.x = 1150.0F, .y = 7200.0F}, {.x = 20.0F, .y = -32.0F}, 140.0F, 0.28F, 0.57F),
+    seed_asteroid({.x = 7350.0F, .y = 900.0F}, {.x = -12.0F, .y = 36.0F}, 100.0F, -0.44F, 0.49F),
   };
 
   std::size_t asteroid_index = 0;

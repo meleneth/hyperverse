@@ -20,6 +20,28 @@ void apply_projectile_damage(AsteroidBody& asteroid, MiningResource& resource, c
   asteroid.radius = std::max(8.0F, asteroid.base_radius * remaining_fraction);
 }
 
+void fragment_depleted_asteroid(
+  entt::registry& registry,
+  entt::entity asteroid,
+  const ParticleShot& projectile,
+  const ParticleCannonTuning& tuning
+) {
+  if (!registry.valid(asteroid) || !registry.all_of<MiningResource>(asteroid) || registry.get<MiningResource>(asteroid).integrity > 0.0F) {
+    return;
+  }
+
+  (void)fragment_asteroid(
+    registry,
+    asteroid,
+    AsteroidFragmentationRequest{
+      .impact_kind = tuning.impact_kind,
+      .impact_position = projectile.position,
+      .impact_velocity = projectile.velocity,
+      .pieces = 4,
+    }
+  );
+}
+
 }  // namespace
 
 ParticleCannonHudSnapshot update_particle_cannon(
@@ -84,6 +106,7 @@ ParticleCannonHudSnapshot update_particle_cannon(
             .amount = tuning.damage,
           }
         );
+        fragment_depleted_asteroid(registry, asteroid_entity, projectile, tuning);
         hit = true;
         break;
       }

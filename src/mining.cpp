@@ -1,5 +1,6 @@
 #include "hyperverse/mining.hpp"
 
+#include "hyperverse/asteroid_fragmentation.hpp"
 #include "jolt_shape_queries.hpp"
 
 #include <algorithm>
@@ -8,6 +9,8 @@
 
 namespace hyperverse {
 namespace {
+
+constexpr float AsteroidMinimumRadiusFraction = 1.0F / 6.0F;
 
 struct MiningTarget {
   entt::entity entity{entt::null};
@@ -178,8 +181,22 @@ MiningHudSnapshot update_mining_laser(
     }
   }
 
-  const float remaining_fraction = std::clamp(resource.integrity / 100.0F, 0.18F, 1.0F);
+  const float remaining_fraction = std::clamp(resource.integrity / 100.0F, AsteroidMinimumRadiusFraction, 1.0F);
   asteroid.radius = std::max(12.0F, asteroid.base_radius * remaining_fraction);
+  if (resource.integrity <= 0.0F) {
+    populate_hud_from_resource(hud, resource, tuning);
+    (void)fragment_asteroid(
+      registry,
+      target.entity,
+      AsteroidFragmentationRequest{
+        .impact_kind = AsteroidImpactKind::Laser,
+        .impact_position = ship.position,
+        .impact_velocity = facing_direction(ship.facing_radians) * tuning.range,
+        .pieces = 4,
+      }
+    );
+    return hud;
+  }
   populate_hud_from_resource(hud, resource, tuning);
   return hud;
 }

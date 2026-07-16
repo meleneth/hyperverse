@@ -1,5 +1,7 @@
 #include "test_common.hpp"
 
+#include "hyperverse/vertical_slice_seed.hpp"
+
 using hyperverse::test::TestAccountWorld;
 
 TEST_CASE("project metadata is available") {
@@ -21,4 +23,20 @@ TEST_CASE("baseline dependencies are visible to project code") {
 
   namespace sml = boost::sml;
   CHECK(std::string{sml::aux::get_type_name<int>()}.find("int") != std::string::npos);
+}
+
+TEST_CASE("vertical slice asteroids start six times their depleted size") {
+  TestAccountWorld world;
+  hyperverse::AccountCtx account = world.account_context();
+  (void)hyperverse::seed_vertical_slice(account);
+
+  bool found_asteroid = false;
+  for (auto [entity, asteroid] : account.registry().view<hyperverse::AsteroidBody>().each()) {
+    (void)entity;
+    found_asteroid = true;
+    CHECK(asteroid.radius == Catch::Approx(asteroid.base_radius));
+    CHECK(asteroid.base_radius / 6.0F >= 75.0F);
+  }
+
+  CHECK(found_asteroid);
 }
