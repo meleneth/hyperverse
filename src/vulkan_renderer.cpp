@@ -749,6 +749,7 @@ void VulkanRenderer::create_texture_resources() {
     std::filesystem::path{"assets/sector7/sprites/reticle.png"},
     std::filesystem::path{"assets/sector7/sprites/laser.png"},
     std::filesystem::path{"assets/sector7/sprites/robot.png"},
+    std::filesystem::path{"assets/sector7/sprites/rocket.png"},
   };
 
   textures_.resize(paths.size());

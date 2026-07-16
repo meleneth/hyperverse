@@ -16,6 +16,7 @@
 #include "hyperverse/input.hpp"
 #include "hyperverse/mining.hpp"
 #include "hyperverse/pressure.hpp"
+#include "hyperverse/raider.hpp"
 #include "hyperverse/render_frame.hpp"
 #include "hyperverse/sector.hpp"
 #include "hyperverse/targeting.hpp"
@@ -719,6 +720,59 @@ TEST_CASE("cargo escort completes when the active train reaches the gate") {
 
   CHECK(persistent.phase == hyperverse::CargoEscortPhase::Complete);
   CHECK_FALSE(persistent.cargo_train_active);
+}
+
+TEST_CASE("raider acquires and approaches the rearmost cargo box during escort") {
+  entt::registry registry;
+  const entt::entity front = registry.create();
+  registry.emplace<hyperverse::CargoBox>(
+    front,
+    hyperverse::CargoBox{.position = {.x = 500.0F, .y = 100.0F}, .index = 0}
+  );
+  const entt::entity rear = registry.create();
+  registry.emplace<hyperverse::CargoBox>(
+    rear,
+    hyperverse::CargoBox{.position = {.x = 700.0F, .y = 100.0F}, .index = 2}
+  );
+  hyperverse::RaiderShip raider{.position = {.x = 100.0F, .y = 100.0F}};
+
+  const hyperverse::RaiderHudSnapshot hud = hyperverse::update_raider_threat(
+    raider,
+    registry,
+    {.phase = hyperverse::CargoEscortPhase::EscortActive},
+    {.width = 9000.0F, .height = 9000.0F},
+    1.0F,
+    {.max_speed = 100.0F, .disruption_range = 50.0F}
+  );
+
+  CHECK(hud.active);
+  CHECK(hud.phase == hyperverse::RaiderPhase::Approaching);
+  CHECK(hud.target_box == rear);
+  CHECK(raider.target_box == rear);
+  CHECK(raider.position.x == Catch::Approx(200.0F));
+}
+
+TEST_CASE("raider disrupts cargo coupling when inside range") {
+  entt::registry registry;
+  const entt::entity box = registry.create();
+  registry.emplace<hyperverse::CargoBox>(
+    box,
+    hyperverse::CargoBox{.position = {.x = 120.0F, .y = 100.0F}, .index = 0}
+  );
+  hyperverse::RaiderShip raider{.position = {.x = 100.0F, .y = 100.0F}};
+
+  const hyperverse::RaiderHudSnapshot hud = hyperverse::update_raider_threat(
+    raider,
+    registry,
+    {.phase = hyperverse::CargoEscortPhase::EscortActive},
+    {.width = 9000.0F, .height = 9000.0F},
+    0.25F,
+    {.disruption_range = 50.0F, .disruption_seconds = 0.5F}
+  );
+
+  CHECK(hud.phase == hyperverse::RaiderPhase::Disrupting);
+  CHECK(hud.disruption_fraction == Catch::Approx(0.5F));
+  CHECK(raider.disruption_seconds == Catch::Approx(0.25F));
 }
 
 TEST_CASE("mining drone acquires the locked asteroid as its priority") {

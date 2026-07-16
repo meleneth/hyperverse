@@ -10,6 +10,7 @@
 #include "hyperverse/input.hpp"
 #include "hyperverse/mining.hpp"
 #include "hyperverse/pressure.hpp"
+#include "hyperverse/raider.hpp"
 #include "hyperverse/targeting.hpp"
 #include "hyperverse/version.hpp"
 #include "hyperverse/vulkan_renderer.hpp"
@@ -235,6 +236,7 @@ void log_gamepad_state() {
   const hyperverse::CargoEscortRouteHudSnapshot& route,
   const hyperverse::SectorPressureHudSnapshot& pressure,
   const hyperverse::MiningDroneHudSnapshot& drone,
+  const hyperverse::RaiderHudSnapshot& raider,
   const hyperverse::CollisionHudSnapshot& collision
 ) {
   const char* mapping = hud.control_mapping == hyperverse::ControlMapping::Gamepad ? "gamepad" : "keyboard";
@@ -300,6 +302,15 @@ void log_gamepad_state() {
     drone_phase = "mine";
   }
   title << " | drone " << drone_phase << " d" << drone.target_distance << " ore " << drone.extracted_mass;
+  if (raider.active) {
+    const char* raider_phase = "idle";
+    if (raider.phase == hyperverse::RaiderPhase::Approaching) {
+      raider_phase = "approach";
+    } else if (raider.phase == hyperverse::RaiderPhase::Disrupting) {
+      raider_phase = "disrupt";
+    }
+    title << " | raider " << raider_phase << " d" << raider.target_distance << " hack " << (raider.disruption_fraction * 100.0F) << "%";
+  }
   if (collision.contact) {
     title << " | COLLISION " << collision.impact_speed;
   } else if (collision.warning) {
@@ -493,12 +504,18 @@ int App::run() {
     account.registry().emplace<SectorPressureModel>(player);
     account.registry().emplace<SectorPressureHudSnapshot>(player);
     account.registry().emplace<MiningDroneHudSnapshot>(player);
+    account.registry().emplace<RaiderHudSnapshot>(player);
     account.registry().emplace<CollisionHudSnapshot>(player);
 
     const entt::entity mining_drone = account.registry().create();
     account.registry().emplace<MiningDrone>(
       mining_drone,
       MiningDrone{.position = {.x = ship.position.x - 160.0F, .y = ship.position.y + 120.0F}}
+    );
+    const entt::entity raider_entity = account.registry().create();
+    account.registry().emplace<RaiderShip>(
+      raider_entity,
+      RaiderShip{.position = {.x = ship.position.x + 640.0F, .y = ship.position.y - 420.0F}}
     );
 
     const entt::entity primary_asteroid = account.registry().create();
@@ -526,6 +543,7 @@ int App::run() {
     const CargoEscortRoute escort_route{.gate_position = {.x = 7600.0F, .y = 1600.0F}};
     const SectorPressureTuning pressure_tuning{.escalation_interval_seconds = 30.0F};
     const MiningDroneTuning mining_drone_tuning{};
+    const RaiderTuning raider_tuning{};
     FlightInputMapper input_mapper;
     SemanticInputFrame latest_intent{};
 
@@ -577,6 +595,7 @@ int App::run() {
         SectorPressureModel& pressure = account.registry().get<SectorPressureModel>(player);
         SectorPressureHudSnapshot& pressure_hud = account.registry().get<SectorPressureHudSnapshot>(player);
         MiningDroneHudSnapshot& drone_hud = account.registry().get<MiningDroneHudSnapshot>(player);
+        RaiderHudSnapshot& raider_hud = account.registry().get<RaiderHudSnapshot>(player);
         CollisionHudSnapshot& collision_hud = account.registry().get<CollisionHudSnapshot>(player);
         update_camera_anchor(camera, ship, sector, camera_tuning, timestep.tick_seconds());
         update_target_lock(target_lock, account.registry(), ship.position, ship.velocity, latest_intent, sector);
@@ -596,6 +615,8 @@ int App::run() {
         route_hud = update_cargo_escort_route(cargo_escort, escort_route, ship, sector);
         escort_hud = update_cargo_escort_arrival(cargo_escort, cargo_hud, route_hud);
         train_hud = update_cargo_train(account.registry(), cargo_escort, ship, sector, timestep.tick_seconds());
+        raider_hud =
+          update_raider_threat(account.registry().get<RaiderShip>(raider_entity), account.registry(), cargo_escort, sector, timestep.tick_seconds(), raider_tuning);
         pressure_hud = update_sector_pressure(pressure, timestep.tick_seconds(), pressure_tuning);
         collision_hud = predict_ship_asteroid_collision(ship, account.registry(), sector);
       }
@@ -610,10 +631,11 @@ int App::run() {
       const CargoEscortRouteHudSnapshot& route_hud = account.registry().get<CargoEscortRouteHudSnapshot>(player);
       const SectorPressureHudSnapshot& pressure_hud = account.registry().get<SectorPressureHudSnapshot>(player);
       const MiningDroneHudSnapshot& drone_hud = account.registry().get<MiningDroneHudSnapshot>(player);
+      const RaiderHudSnapshot& raider_hud = account.registry().get<RaiderHudSnapshot>(player);
       const CollisionHudSnapshot& collision_hud = account.registry().get<CollisionHudSnapshot>(player);
 
       if (hud_title_accumulator >= 0.25F) {
-        window.set_title(make_title(hud, camera, target_lock, mining_hud, cargo_hud, escort_hud, train_hud, route_hud, pressure_hud, drone_hud, collision_hud));
+        window.set_title(make_title(hud, camera, target_lock, mining_hud, cargo_hud, escort_hud, train_hud, route_hud, pressure_hud, drone_hud, raider_hud, collision_hud));
         hud_title_accumulator = 0.0F;
       }
 
@@ -687,6 +709,23 @@ int App::run() {
             tint_sprite(drone_sprite, 0.55F, 1.0F, 0.65F);
           }
           sprites.push_back(drone_sprite);
+          const RaiderShip& raider = account.registry().get<RaiderShip>(raider_entity);
+          if (raider_hud.active) {
+            SpriteDraw raider_sprite = make_world_sprite(
+              SpriteTexture::Raider,
+              raider.position,
+              camera.position,
+              sector,
+              renderer.width(),
+              renderer.height(),
+              52.0F,
+              ship_sprite_rotation(std::atan2(raider.velocity.y, raider.velocity.x))
+            );
+            if (raider.phase == RaiderPhase::Disrupting) {
+              tint_sprite(raider_sprite, 1.0F, 0.24F, 0.18F);
+            }
+            sprites.push_back(raider_sprite);
+          }
           sprites.push_back(make_world_sprite(
             SpriteTexture::Ship,
             ship.position,

@@ -26,6 +26,7 @@ enum class SpriteTexture {
   Reticle,
   Laser,
   Drone,
+  Raider,
 };
 
 struct SpriteDraw {

@@ -60,10 +60,11 @@ These assets are temporary implementation scaffolding, not a permanent visual co
 - Cancel/quit: `Escape` or east face button
 
 The current Vulkan prototype draws Sector7-derived sprites, hardware-uploaded textures, line HUD
-brackets, mining beams, cargo boxes, active cargo train links, and an escort gate route. The window
-title is the active HUD: it reports position, speed, camera anchor, edge warning, target distance,
-scan confidence, closing speed, rock integrity, heat, extracted ore, cargo quota, sector pressure,
-drone state, collision warnings, escort train state, and gate distance.
+brackets, mining beams, cargo boxes, active cargo train links, an escort gate route, and an active
+escort raider. The window title is the active HUD: it reports position, speed, camera anchor, edge
+warning, target distance, scan confidence, closing speed, rock integrity, heat, extracted ore, cargo
+quota, sector pressure, drone state, collision warnings, escort train state, gate distance, and
+raider disruption state.
 
 ## Core Fantasy
 
