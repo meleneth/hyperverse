@@ -610,8 +610,10 @@ int App::run() {
           mining_drone_tuning
         );
         cargo_hud = update_cargo_manifest(cargo_manifest, account.registry(), quota);
-        (void)sync_cargo_boxes(account.registry(), cargo_manifest, extraction_site, cargo_box_tuning);
         escort_hud = update_cargo_escort_state(cargo_escort, cargo_hud, latest_intent);
+        if (!escort_hud.cargo_train_active && escort_hud.phase != CargoEscortPhase::Complete) {
+          (void)sync_cargo_boxes(account.registry(), cargo_manifest, extraction_site, cargo_box_tuning);
+        }
         route_hud = update_cargo_escort_route(cargo_escort, escort_route, ship, sector);
         escort_hud = update_cargo_escort_arrival(cargo_escort, cargo_hud, route_hud);
         train_hud = update_cargo_train(account.registry(), cargo_escort, ship, sector, timestep.tick_seconds());
