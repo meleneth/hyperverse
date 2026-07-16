@@ -24,6 +24,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 #include <mutex>
 #include <numbers>
 #include <thread>
@@ -90,11 +91,27 @@ void ensure_jolt_physics_ready() {
   return static_cast<int>(std::max(1U, std::thread::hardware_concurrency()));
 }
 
+[[nodiscard]] float jolt_velocity_limit(Vec2 velocity) {
+  return std::max(1.0F, length(velocity) + 1.0F);
+}
+
 }  // namespace
+
+struct PhysicsWorld::Runtime {
+  Runtime()
+      : temp_allocator{2 * 1024 * 1024},
+        job_system{JPH::cMaxPhysicsJobs, JPH::cMaxPhysicsBarriers, worker_count()} {}
+
+  JPH::TempAllocatorImpl temp_allocator;
+  JPH::JobSystemThreadPool job_system;
+};
 
 PhysicsWorld::PhysicsWorld() {
   ensure_jolt_physics_ready();
+  runtime_ = std::make_unique<Runtime>();
 }
+
+PhysicsWorld::~PhysicsWorld() = default;
 
 void PhysicsWorld::integrate_ship(ShipMotion& ship, const SectorTuning& sector, float dt_seconds) {
   BroadPhaseLayerInterface broad_phase_layer_interface;
@@ -114,12 +131,11 @@ void PhysicsWorld::integrate_ship(ShipMotion& ship, const SectorTuning& sector, 
   settings.mGravityFactor = 0.0F;
   settings.mLinearDamping = 0.0F;
   settings.mAngularDamping = 0.0F;
+  settings.mMaxLinearVelocity = jolt_velocity_limit(ship.velocity);
   settings.mLinearVelocity = JPH::Vec3(ship.velocity.x, ship.velocity.y, 0.0F);
 
   const JPH::BodyID body_id = body_interface.CreateAndAddBody(settings, JPH::EActivation::Activate);
-  JPH::TempAllocatorImpl temp_allocator(512 * 1024);
-  JPH::JobSystemThreadPool job_system(JPH::cMaxPhysicsJobs, JPH::cMaxPhysicsBarriers, worker_count());
-  physics_system.Update(dt_seconds, 1, &temp_allocator, &job_system);
+  physics_system.Update(dt_seconds, 1, &runtime_->temp_allocator, &runtime_->job_system);
 
   const JPH::RVec3 position = body_interface.GetPosition(body_id);
   const JPH::Vec3 velocity = body_interface.GetLinearVelocity(body_id);
@@ -167,15 +183,14 @@ void PhysicsWorld::integrate_asteroids(entt::registry& registry, const SectorTun
     settings.mGravityFactor = 0.0F;
     settings.mLinearDamping = 0.0F;
     settings.mAngularDamping = 0.0F;
+    settings.mMaxLinearVelocity = jolt_velocity_limit(asteroid.velocity);
     settings.mLinearVelocity = JPH::Vec3(asteroid.velocity.x, asteroid.velocity.y, 0.0F);
     settings.mAngularVelocity = JPH::Vec3(0.0F, 0.0F, asteroid.angular_velocity);
     body_ids.push_back(body_interface.CreateAndAddBody(settings, JPH::EActivation::Activate));
   }
 
-  JPH::TempAllocatorImpl temp_allocator(2 * 1024 * 1024);
-  JPH::JobSystemThreadPool job_system(JPH::cMaxPhysicsJobs, JPH::cMaxPhysicsBarriers, worker_count());
   physics_system.OptimizeBroadPhase();
-  physics_system.Update(dt_seconds, 1, &temp_allocator, &job_system);
+  physics_system.Update(dt_seconds, 1, &runtime_->temp_allocator, &runtime_->job_system);
 
   constexpr float full_turn = std::numbers::pi_v<float> * 2.0F;
   for (std::size_t index = 0; index < entities.size(); ++index) {
