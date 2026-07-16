@@ -4,6 +4,7 @@
 #include "hyperverse/mining.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <numbers>
 
@@ -16,6 +17,117 @@ namespace {
 
 [[nodiscard]] Vec2 direction_from_angle(float radians) {
   return {.x = std::cos(radians), .y = std::sin(radians)};
+}
+
+enum class MineralKind {
+  Silicate,
+  Ferrite,
+  Nickel,
+  Cobalt,
+  Iridium,
+  ExoticCrystal,
+  AnomalousMatter,
+};
+
+struct MineralShare {
+  MineralKind kind{MineralKind::Silicate};
+  float amount{0.0F};
+};
+
+[[nodiscard]] MineralComposition composition_for_share(MineralKind kind) {
+  switch (kind) {
+    case MineralKind::Silicate:
+      return {.silicate = 1.0F};
+    case MineralKind::Ferrite:
+      return {.ferrite = 1.0F};
+    case MineralKind::Nickel:
+      return {.nickel = 1.0F};
+    case MineralKind::Cobalt:
+      return {.cobalt = 1.0F};
+    case MineralKind::Iridium:
+      return {.iridium = 1.0F};
+    case MineralKind::ExoticCrystal:
+      return {.exotic_crystal = 1.0F};
+    case MineralKind::AnomalousMatter:
+      return {.anomalous_matter = 1.0F};
+  }
+
+  return {};
+}
+
+[[nodiscard]] OreTier tier_for_share(MineralKind kind) {
+  switch (kind) {
+    case MineralKind::Silicate:
+      return OreTier::Common;
+    case MineralKind::Ferrite:
+    case MineralKind::Nickel:
+      return OreTier::Industrial;
+    case MineralKind::Cobalt:
+    case MineralKind::Iridium:
+      return OreTier::Rare;
+    case MineralKind::ExoticCrystal:
+      return OreTier::Exotic;
+    case MineralKind::AnomalousMatter:
+      return OreTier::Anomalous;
+  }
+
+  return OreTier::Common;
+}
+
+[[nodiscard]] std::vector<MineralShare> mineral_shares(const MineralComposition& composition) {
+  std::vector<MineralShare> shares{
+    {.kind = MineralKind::Silicate, .amount = composition.silicate},
+    {.kind = MineralKind::Ferrite, .amount = composition.ferrite},
+    {.kind = MineralKind::Nickel, .amount = composition.nickel},
+    {.kind = MineralKind::Cobalt, .amount = composition.cobalt},
+    {.kind = MineralKind::Iridium, .amount = composition.iridium},
+    {.kind = MineralKind::ExoticCrystal, .amount = composition.exotic_crystal},
+    {.kind = MineralKind::AnomalousMatter, .amount = composition.anomalous_matter},
+  };
+  std::erase_if(shares, [](const MineralShare& share) { return share.amount <= 0.001F; });
+  std::ranges::sort(shares, [](const MineralShare& lhs, const MineralShare& rhs) {
+    return lhs.amount > rhs.amount;
+  });
+  return shares;
+}
+
+[[nodiscard]] std::vector<MineralShare> recoverable_fragment_shares(
+  const MineralComposition* composition,
+  int requested_pieces
+) {
+  if (composition == nullptr) {
+    std::vector<MineralShare> equal_shares;
+    equal_shares.reserve(static_cast<std::size_t>(requested_pieces));
+    const float share = 1.0F / static_cast<float>(requested_pieces);
+    for (int index = 0; index < requested_pieces; ++index) {
+      equal_shares.push_back({.kind = MineralKind::Silicate, .amount = share});
+    }
+    return equal_shares;
+  }
+
+  std::vector<MineralShare> shares = mineral_shares(*composition);
+  if (shares.empty()) {
+    return recoverable_fragment_shares(nullptr, requested_pieces);
+  }
+
+  const std::size_t requested = static_cast<std::size_t>(requested_pieces);
+  if (shares.size() == 1U) {
+    const MineralShare source = shares.front();
+    const std::size_t mono_count = requested;
+    shares.clear();
+    shares.reserve(mono_count);
+    for (std::size_t index = 0; index < mono_count; ++index) {
+      shares.push_back({.kind = source.kind, .amount = source.amount / static_cast<float>(mono_count)});
+    }
+    return shares;
+  }
+
+  std::size_t recoverable = std::min(shares.size(), requested);
+  if (shares.size() >= 4U && requested >= 4U) {
+    recoverable = std::min(recoverable, requested - 1U);
+  }
+  shares.resize(recoverable);
+  return shares;
 }
 
 [[nodiscard]] Vec2 impact_direction(const AsteroidFragmentationRequest& request, const AsteroidBody& parent) {
@@ -111,7 +223,10 @@ void emit_fragmented(
 
   const AsteroidBody parent = registry.get<AsteroidBody>(asteroid);
   const int parent_remaining_breaks = remaining_breaks_for(registry, asteroid);
-  const float child_radius = std::max(8.0F, parent.radius / std::sqrt(static_cast<float>(request.pieces)));
+  const MineralComposition* parent_composition = registry.try_get<MineralComposition>(asteroid);
+  const std::vector<MineralShare> fragment_shares = recoverable_fragment_shares(parent_composition, request.pieces);
+  const int fragment_count = static_cast<int>(fragment_shares.size());
+  const float child_radius = std::max(8.0F, parent.radius / std::sqrt(static_cast<float>(fragment_count)));
   if (parent_remaining_breaks <= 0 || child_radius < MinimumPlayableAsteroidRadius) {
     registry.destroy(asteroid);
     emit_consumed(event_bus, asteroid, parent.position);
@@ -119,44 +234,44 @@ void emit_fragmented(
   }
 
   const MiningResource* parent_resource = registry.try_get<MiningResource>(asteroid);
-  const MineralComposition* parent_composition = registry.try_get<MineralComposition>(asteroid);
   const AsteroidMass* parent_mass = registry.try_get<AsteroidMass>(asteroid);
   const int child_remaining_breaks = parent_remaining_breaks - 1;
   const float placement_radius = std::max(child_radius, parent.radius - child_radius);
   std::vector<entt::entity> fragments;
-  fragments.reserve(static_cast<std::size_t>(request.pieces));
+  fragments.reserve(fragment_shares.size());
 
-  for (int index = 0; index < request.pieces; ++index) {
-    const float angle = (static_cast<float>(index) / static_cast<float>(request.pieces)) * std::numbers::pi_v<float> * 2.0F;
+  for (int index = 0; index < fragment_count; ++index) {
+    const MineralShare share = fragment_shares[static_cast<std::size_t>(index)];
+    const float angle = (static_cast<float>(index) / static_cast<float>(fragment_count)) * std::numbers::pi_v<float> * 2.0F;
     const Vec2 offset = direction_from_angle(angle) * placement_radius;
     const entt::entity fragment = registry.create();
     registry.emplace<AsteroidBody>(
       fragment,
       AsteroidBody{
         .position = parent.position + offset,
-        .velocity = fragment_velocity(parent, request, index, request.pieces),
+        .velocity = fragment_velocity(parent, request, index, fragment_count),
         .radius = child_radius,
         .base_radius = child_radius,
         .rotation_radians = parent.rotation_radians + angle,
         .angular_velocity = parent.angular_velocity + ((static_cast<float>(index) - 1.5F) * 0.12F),
-        .scan_confidence = parent.scan_confidence,
+        .scan_confidence = parent.scan_confidence * 0.85F,
       }
     );
     registry.emplace<AsteroidFragmentation>(fragment, AsteroidFragmentation{.remaining_breaks = child_remaining_breaks});
-    const float child_mass = parent_mass != nullptr ? parent_mass->remaining_mass / static_cast<float>(request.pieces) : child_radius;
+    const float child_mass = parent_mass != nullptr ? parent_mass->remaining_mass * share.amount : child_radius;
     registry.emplace<AsteroidMass>(fragment, AsteroidMass{.initial_mass = child_mass, .remaining_mass = child_mass});
     if (parent_resource != nullptr) {
       registry.emplace<MiningResource>(
         fragment,
         MiningResource{
-          .tier = parent_resource->tier,
+          .tier = parent_composition != nullptr ? tier_for_share(share.kind) : parent_resource->tier,
           .integrity = 100.0F,
-          .extracted_mass = parent_resource->extracted_mass / static_cast<float>(request.pieces),
+          .extracted_mass = parent_resource->extracted_mass * share.amount,
         }
       );
     }
     if (parent_composition != nullptr) {
-      registry.emplace<MineralComposition>(fragment, *parent_composition);
+      registry.emplace<MineralComposition>(fragment, composition_for_share(share.kind));
     }
     fragments.push_back(fragment);
   }

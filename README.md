@@ -58,6 +58,7 @@ These assets are temporary implementation scaffolding, not a permanent visual co
 - Fire mining laser at locked asteroid: `F` or right trigger
 - Fire particle cannon: `E` or west face button
 - Burst of speed: east face button
+- Fire/release harpoon at locked asteroid: `Q` or north face button
 - Activate cargo escort after quota authorization: `Space` or south face button
 - Cancel/quit: `Escape`
 
@@ -69,18 +70,20 @@ color-coded ore rarity; nearby rocks get electric-blue radar brackets. The proto
 eight mining drones until progression is defined. The HUD reports position, speed, target state,
 target mass, ore rarity value, mineral composition, extracted ore, cargo quota, sector pressure,
 drone state, collision warnings, escort state, raider disruption, stolen cargo escape, and recovery
-state.
+state. The upper-right HUD face-button legend shows the current face-button meanings and changes
+when the tool trigger is held.
 
 ## Current Gameplay Considerations
 
 - Ore value is tiered and color-coded by rarity. Cheap bulk ore is intentionally much less important than premium rare, exotic, and anomalous material.
 - Asteroid mass and structural damage are separate. Damage means "how close this rock is to breaking up"; extraction means "how much useful mass has been removed."
-- Large asteroids have two break levels. The first break creates medium pieces, the second creates small pieces, and further depletion consumes the final fragment.
-- Kinetic particle impacts transfer velocity into asteroid mass. Getting in front of a moving rock and firing back into its path is the intended way to slow it before mining.
+- Large asteroids have two break levels. Breakup creates recoverable component chunks from the parent mineral distribution, with some material deliberately lost when the parent has several meaningful components.
+- Kinetic particle impacts transfer velocity into asteroid mass. Glancing kinetic hits also impart rotational velocity from impact angle, so spinning rocks become a real hazard.
+- The harpoon latches to locked asteroids, pulls the ship toward the rock's surface motion, and applies full-engine-power velocity matching to help slow a rock for drone harvesting. Boosting detaches the harpoon.
 - Mining drones cannot work the largest asteroid tier. The player must break big rocks into medium or small pieces before drones can safely mine them.
 - Mined cargo starts at the gathering site. The extraction gate is derived as the furthest wrapped-sector point from that gathering site.
 - During escort, cargo follows the player as a train. Once the player reaches the extraction gate, cargo remains gate-bound and stages as a group near the gate before loading starts.
-- Burst of speed temporarily pushes the ship past its normal top speed and decays back down. Bursting while towing cargo breaks the cargo train coupling.
+- Burst of speed doubles the ship's normal top speed, then falls off on a short hockey-stick curve over roughly a third of a second. Bursting while towing cargo breaks the cargo train coupling.
 - Gate extraction processes cargo boxes sequentially at roughly five seconds per box. A round is not complete until extraction finishes.
 - Reaching the extraction gate spawns combat raiders that prioritize killing the player over stealing cargo.
 - Asteroid damage, fragmentation, consumption, particle impacts, and drone target release are event-visible gameplay facts. New behavior should prefer event responders over hidden direct call chains.

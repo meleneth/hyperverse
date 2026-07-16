@@ -60,6 +60,7 @@ SemanticInputFrame map_flight_intent(const RawInputFrame& raw, const InputTuning
     .cancel_requested = raw.cancel,
     .target_cycle_requested = raw.target_cycle,
     .boost_requested = raw.boost,
+    .harpoon_requested = raw.harpoon,
     .particle_fire_requested = raw.particle_fire,
     .particle_fire_active = raw.particle_fire,
     .tool_intensity = std::clamp(raw.tool_intensity, 0.0F, 1.0F),
@@ -76,6 +77,7 @@ SemanticInputFrame FlightInputMapper::map(const RawInputFrame& raw, const InputT
     intent.cancel_requested = raw.cancel && !previous_.cancel;
     intent.target_cycle_requested = raw.target_cycle && !previous_.target_cycle;
     intent.boost_requested = raw.boost && !previous_.boost;
+    intent.harpoon_requested = raw.harpoon && !previous_.harpoon;
     intent.particle_fire_requested = raw.particle_fire && !previous_.particle_fire;
   }
 

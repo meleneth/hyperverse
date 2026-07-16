@@ -10,6 +10,8 @@
 #include "hyperverse/ship_status.hpp"
 #include "hyperverse/targeting.hpp"
 
+#include <optional>
+
 namespace hyperverse {
 
 enum class ParticleCannonPhase {
@@ -45,6 +47,7 @@ struct ParticleCannonTuning {
   float muzzle_side_offset{14.0F};
   float raider_fire_range{1800.0F};
   float asteroid_kinetic_impulse_scale{0.18F};
+  float asteroid_angular_impulse_scale{0.12F};
   AsteroidImpactKind impact_kind{AsteroidImpactKind::Kinetic};
 };
 
@@ -56,6 +59,13 @@ struct ParticleCannonHudSnapshot {
 struct WeaponTrigger {
   Vec2 aim{};
   bool active{false};
+};
+
+struct ParticleCannonFireCommand {
+  Vec2 origin{};
+  Vec2 direction{};
+  Vec2 source_velocity{};
+  ProjectileOwner owner{ProjectileOwner::Player};
 };
 
 class WeaponCtx {
@@ -73,6 +83,25 @@ public:
 private:
   EntityCtx entity_;
 };
+
+[[nodiscard]] std::optional<ParticleCannonFireCommand> request_player_particle_fire(
+  WeaponCtx ctx,
+  WeaponTrigger trigger,
+  const ParticleCannonTuning& tuning = {}
+);
+
+[[nodiscard]] std::optional<ParticleCannonFireCommand> request_raider_particle_fire(
+  WeaponCtx ctx,
+  EntityCtx target,
+  WeaponTrigger trigger,
+  const ParticleCannonTuning& tuning = {}
+);
+
+void spawn_requested_particle_fire(
+  WeaponCtx ctx,
+  const ParticleCannonFireCommand& command,
+  const ParticleCannonTuning& tuning = {}
+);
 
 class ProjectileSimCtx {
 public:

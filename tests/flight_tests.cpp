@@ -54,9 +54,8 @@ TEST_CASE("burst speed can exceed max speed and decays back toward top speed") {
     .acceleration = 0.0F,
     .braking = 0.0F,
     .turn_rate = 20.0F,
-    .boost_extra_speed = 80.0F,
-    .boost_impulse = 160.0F,
-    .boost_decay_per_second = 40.0F,
+    .boost_speed_multiplier = 2.0F,
+    .boost_duration_seconds = 0.33F,
   };
 
   hyperverse::simulate_assisted_flight(
@@ -68,10 +67,15 @@ TEST_CASE("burst speed can exceed max speed and decays back toward top speed") {
     0.0F
   );
 
-  CHECK(hyperverse::length(ship.velocity) > flight.max_speed);
-  CHECK(ship.boost_speed == Catch::Approx(80.0F));
+  CHECK(hyperverse::length(ship.velocity) == Catch::Approx(flight.max_speed * 2.0F));
+  CHECK(ship.boost_speed == Catch::Approx(100.0F));
 
-  hyperverse::simulate_assisted_flight(account, ship, {}, flight, sector, 2.0F);
+  hyperverse::simulate_assisted_flight(account, ship, {}, flight, sector, 0.165F);
+
+  CHECK(ship.boost_speed == Catch::Approx(87.5F));
+  CHECK(hyperverse::length(ship.velocity) > flight.max_speed);
+
+  hyperverse::simulate_assisted_flight(account, ship, {}, flight, sector, 0.165F);
 
   CHECK(ship.boost_speed == Catch::Approx(0.0F));
   CHECK(hyperverse::length(ship.velocity) == Catch::Approx(flight.max_speed));

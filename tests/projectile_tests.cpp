@@ -161,6 +161,40 @@ TEST_CASE("kinetic particle impacts can slow an asteroid from the front") {
   CHECK(account.registry().get<hyperverse::AsteroidBody>(asteroid).velocity.x < 90.0F);
 }
 
+TEST_CASE("glancing kinetic particle impacts spin asteroids") {
+  TestAccountWorld world;
+  hyperverse::AccountCtx account = world.account_context();
+  const entt::entity asteroid = account.registry().create();
+  account.registry().emplace<hyperverse::AsteroidBody>(
+    asteroid,
+    hyperverse::AsteroidBody{
+      .position = {.x = 100.0F, .y = 100.0F},
+      .radius = 80.0F,
+      .base_radius = 80.0F,
+    }
+  );
+  account.registry().emplace<hyperverse::MiningResource>(asteroid);
+  account.registry().emplace<hyperverse::AsteroidMass>(asteroid, hyperverse::AsteroidMass{.initial_mass = 80.0F, .remaining_mass = 80.0F});
+  const entt::entity particle = account.registry().create();
+  account.registry().emplace<hyperverse::ParticleShot>(
+    particle,
+    hyperverse::ParticleShot{
+      .position = {.x = 100.0F, .y = 150.0F},
+      .velocity = {.x = 400.0F, .y = 0.0F},
+      .damage = 25.0F,
+      .radius = 10.0F,
+    }
+  );
+  const entt::entity player = make_player(world, {.x = 1000.0F, .y = 1000.0F});
+
+  (void)hyperverse::update_particle_projectiles(
+    hyperverse::ProjectileSimCtx{tick_context(account, 0.0F), player},
+    {.asteroid_kinetic_impulse_scale = 0.0F, .asteroid_angular_impulse_scale = 1.0F}
+  );
+
+  CHECK(account.registry().get<hyperverse::AsteroidBody>(asteroid).angular_velocity < 0.0F);
+}
+
 TEST_CASE("player particle shots damage raiders") {
   TestAccountWorld world;
   hyperverse::AccountCtx account = world.account_context();

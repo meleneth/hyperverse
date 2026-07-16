@@ -1,5 +1,7 @@
 #pragma once
 
+#include "hyperverse/universe_clock.hpp"
+
 namespace hyperverse {
 
 class FixedTimestep {
@@ -14,7 +16,7 @@ public:
   [[nodiscard]] float alpha() const;
 
 private:
-  float tick_seconds_{1.0F / 60.0F};
+  float tick_seconds_{UniverseClock::FixedTickSeconds};
   float accumulator_{0.0F};
 };
 

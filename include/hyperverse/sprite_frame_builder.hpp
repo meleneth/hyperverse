@@ -18,6 +18,7 @@ namespace hyperverse {
   const std::vector<entt::entity>& mining_drones,
   entt::entity raider_entity,
   const FlightHudSnapshot& hud,
+  const SemanticInputFrame& input,
   const SectorTuning& sector,
   std::uint32_t width,
   std::uint32_t height

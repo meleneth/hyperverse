@@ -137,6 +137,23 @@ Large asteroids should be scannable before breakup. Scan output should expose ch
 
 Composition should influence child chunks. For example, an asteroid with four roughly equal mineral groups might produce about three recoverable chunks while one portion is destroyed, vaporized, or dispersed. The implementation should use tunable N-way distributions rather than exact hard-coded ratios.
 
+Current breakup creates recoverable component chunks from the parent composition. Each child carries a dominant mineral component and a matching ore tier. When a parent has several meaningful component groups, not every group is guaranteed to survive breakup.
+
+Fast-spinning asteroids are a major physical hazard. Default seeded rocks spin visibly, harpooned rocks can pull the ship toward their surface motion, and glancing kinetic particle impacts impart angular velocity according to impact offset and projectile velocity.
+
+## Harpoon
+
+The harpoon is fired at the currently locked asteroid.
+
+While latched:
+
+- the asteroid receives full-engine-power velocity matching toward the ship velocity
+- the ship is pulled toward the asteroid surface velocity, including spin
+- excessive range releases the tether
+- burst speed releases the tether immediately
+
+The intended use is to get ahead of a moving rock, latch it, and use the ship's engine to bleed enough speed for drones to harvest safely. The intended risk is that a large or fast-spinning rock can throw the ship around.
+
 ## Weapons
 
 Weapon firing should be event-driven.
@@ -149,7 +166,7 @@ The firing mechanism should be modeled as a small FSM driven by semantic fire in
 
 The universe needs one canonical simulation clock.
 
-Current code uses fixed timestep simulation, but the project still needs an explicit base tick decision that gameplay schedulers, weapon FSMs, AI, escalation, cooldowns, and HUD timings can share.
+The canonical simulation clock is 60 Hz. `UniverseClock::FixedTickSeconds` is the shared base tick for gameplay schedulers, weapon FSMs, AI, escalation, cooldowns, and HUD timings. Rendering may still interpolate between fixed simulation ticks.
 
 ## Ship Status and Computers
 

@@ -2,6 +2,8 @@
 
 #include "hyperverse/vertical_slice_seed.hpp"
 
+#include <cmath>
+
 using hyperverse::test::TestAccountWorld;
 
 TEST_CASE("project metadata is available") {
@@ -57,6 +59,7 @@ TEST_CASE("vertical slice asteroid field is spread across the sector and visibly
     (void)entity;
     ++asteroid_count;
     CHECK(hyperverse::length(asteroid.velocity) >= 180.0F);
+    CHECK(std::abs(asteroid.angular_velocity) >= 0.216F);
     if (asteroid.position.x >= left && asteroid.position.x <= right && asteroid.position.y >= top && asteroid.position.y <= bottom) {
       ++initially_visible_count;
     }

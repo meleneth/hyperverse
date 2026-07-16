@@ -72,6 +72,7 @@ void apply_projectile_damage(
   AsteroidBody& asteroid,
   MiningResource& resource,
   const ParticleShot& projectile,
+  const SectorTuning& sector,
   const ParticleCannonTuning& tuning
 ) {
   resource.integrity = std::max(0.0F, resource.integrity - projectile.damage);
@@ -79,6 +80,10 @@ void apply_projectile_damage(
     const AsteroidMass* mass = registry.try_get<AsteroidMass>(asteroid_entity);
     const float impulse_mass = std::max(mass != nullptr ? mass->remaining_mass : asteroid.radius, 1.0F);
     asteroid.velocity += projectile.velocity * ((projectile.damage * tuning.asteroid_kinetic_impulse_scale) / impulse_mass);
+    const Vec2 impact_offset = wrapped_delta(asteroid.position, projectile.position, sector);
+    const float angular_lever = (impact_offset.x * projectile.velocity.y) - (impact_offset.y * projectile.velocity.x);
+    const float moment = impulse_mass * std::max(asteroid.radius * asteroid.radius, 1.0F);
+    asteroid.angular_velocity += (angular_lever * projectile.damage * tuning.asteroid_angular_impulse_scale) / moment;
   }
 }
 
@@ -115,26 +120,23 @@ void apply_ship_damage(ShipHealth& health, float damage) {
 void spawn_particle_pair(
   entt::registry& registry,
   DomainEventBus& event_bus,
-  Vec2 origin,
-  Vec2 direction,
-  Vec2 source_velocity,
-  ProjectileOwner owner,
+  const ParticleCannonFireCommand& command,
   const ParticleCannonTuning& tuning
 ) {
-  const Vec2 normalized_direction = normalize_or_zero(direction);
+  const Vec2 normalized_direction = normalize_or_zero(command.direction);
   const Vec2 right{.x = -normalized_direction.y, .y = normalized_direction.x};
-  const Vec2 velocity = (normalized_direction * tuning.projectile_speed) + source_velocity;
+  const Vec2 velocity = (normalized_direction * tuning.projectile_speed) + command.source_velocity;
 
   for (const float side : {-1.0F, 1.0F}) {
     const entt::entity projectile = registry.create();
     registry.emplace<ParticleShot>(
       projectile,
       ParticleShot{
-        .position = origin + (normalized_direction * tuning.muzzle_forward_offset) + (right * tuning.muzzle_side_offset * side),
+        .position = command.origin + (normalized_direction * tuning.muzzle_forward_offset) + (right * tuning.muzzle_side_offset * side),
         .velocity = velocity,
         .damage = tuning.damage,
         .radius = tuning.projectile_radius,
-        .owner = owner,
+        .owner = command.owner,
       }
     );
     event_bus.enqueue(
@@ -142,7 +144,7 @@ void spawn_particle_pair(
       DomainEvent{
         .type = DomainEventType::ParticleFired,
         .subject = projectile,
-        .position = origin,
+        .position = command.origin,
         .amount = tuning.projectile_speed,
       }
     );
@@ -181,6 +183,57 @@ ParticleCannonModel& WeaponCtx::cannon() const {
   return entity_.get<ParticleCannonModel>();
 }
 
+std::optional<ParticleCannonFireCommand> request_player_particle_fire(
+  WeaponCtx ctx,
+  WeaponTrigger trigger,
+  const ParticleCannonTuning& tuning
+) {
+  if (!advance_particle_cannon_fsm(ctx.cannon(), trigger.active, ctx.dt(), tuning)) {
+    return std::nullopt;
+  }
+
+  const EntityCtx owner = ctx.entity_context();
+  const ShipMotion& ship = owner.get<ShipMotion>();
+  const Vec2 direction = length(trigger.aim) > 0.0F ? normalize_or_zero(trigger.aim) : facing_direction(ship.facing_radians);
+  return ParticleCannonFireCommand{
+    .origin = ship.position,
+    .direction = direction,
+    .source_velocity = ship.velocity,
+    .owner = ProjectileOwner::Player,
+  };
+}
+
+std::optional<ParticleCannonFireCommand> request_raider_particle_fire(
+  WeaponCtx ctx,
+  EntityCtx target,
+  WeaponTrigger trigger,
+  const ParticleCannonTuning& tuning
+) {
+  const EntityCtx raider_entity = ctx.entity_context();
+  const RaiderShip& raider = raider_entity.get<RaiderShip>();
+  const ShipMotion& target_motion = target.get<ShipMotion>();
+  const Vec2 to_target = wrapped_delta(raider.position, target_motion.position, ctx.sector());
+  const bool trigger_active = trigger.active && raider.integrity > 0.0F && length(to_target) <= tuning.raider_fire_range;
+  if (!advance_particle_cannon_fsm(ctx.cannon(), trigger_active, ctx.dt(), tuning) || length(to_target) <= 0.0001F) {
+    return std::nullopt;
+  }
+
+  return ParticleCannonFireCommand{
+    .origin = raider.position,
+    .direction = normalize_or_zero(to_target),
+    .source_velocity = raider.velocity,
+    .owner = ProjectileOwner::Raider,
+  };
+}
+
+void spawn_requested_particle_fire(
+  WeaponCtx ctx,
+  const ParticleCannonFireCommand& command,
+  const ParticleCannonTuning& tuning
+) {
+  spawn_particle_pair(ctx.registry(), ctx.event_bus(), command, tuning);
+}
+
 ProjectileSimCtx::ProjectileSimCtx(SectorTickCtx tick, entt::entity player) : tick_{tick}, player_{player} {}
 
 entt::registry& ProjectileSimCtx::registry() const {
@@ -216,14 +269,9 @@ void update_player_particle_cannon(
   WeaponTrigger trigger,
   const ParticleCannonTuning& tuning
 ) {
-  if (!advance_particle_cannon_fsm(ctx.cannon(), trigger.active, ctx.dt(), tuning)) {
-    return;
+  if (const std::optional<ParticleCannonFireCommand> command = request_player_particle_fire(ctx, trigger, tuning)) {
+    spawn_requested_particle_fire(ctx, *command, tuning);
   }
-
-  const EntityCtx owner = ctx.entity_context();
-  const ShipMotion& ship = owner.get<ShipMotion>();
-  const Vec2 direction = length(trigger.aim) > 0.0F ? normalize_or_zero(trigger.aim) : facing_direction(ship.facing_radians);
-  spawn_particle_pair(ctx.registry(), ctx.event_bus(), ship.position, direction, ship.velocity, ProjectileOwner::Player, tuning);
 }
 
 void update_raider_particle_cannon(
@@ -232,16 +280,9 @@ void update_raider_particle_cannon(
   WeaponTrigger trigger,
   const ParticleCannonTuning& tuning
 ) {
-  const EntityCtx raider_entity = ctx.entity_context();
-  const RaiderShip& raider = raider_entity.get<RaiderShip>();
-  const ShipMotion& target_motion = target.get<ShipMotion>();
-  const Vec2 to_target = wrapped_delta(raider.position, target_motion.position, ctx.sector());
-  const bool trigger_active = trigger.active && raider.integrity > 0.0F && length(to_target) <= tuning.raider_fire_range;
-  if (!advance_particle_cannon_fsm(ctx.cannon(), trigger_active, ctx.dt(), tuning) || length(to_target) <= 0.0001F) {
-    return;
+  if (const std::optional<ParticleCannonFireCommand> command = request_raider_particle_fire(ctx, target, trigger, tuning)) {
+    spawn_requested_particle_fire(ctx, *command, tuning);
   }
-
-  spawn_particle_pair(ctx.registry(), ctx.event_bus(), raider.position, normalize_or_zero(to_target), raider.velocity, ProjectileOwner::Raider, tuning);
 }
 
 ParticleCannonHudSnapshot update_particle_projectiles(
@@ -270,7 +311,7 @@ ParticleCannonHudSnapshot update_particle_projectiles(
               asteroid.radius,
               relative_position
             )) {
-          apply_projectile_damage(registry, asteroid_entity, asteroid, resource, projectile, tuning);
+          apply_projectile_damage(registry, asteroid_entity, asteroid, resource, projectile, ctx.sector(), tuning);
           ctx.event_bus().enqueue(
             DomainEventType::ParticleImpact,
             DomainEvent{

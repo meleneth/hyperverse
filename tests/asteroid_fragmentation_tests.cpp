@@ -37,19 +37,60 @@ TEST_CASE("laser fragmentation keeps child vectors nearly coherent") {
     {.impact_kind = hyperverse::AsteroidImpactKind::Laser, .impact_velocity = {.x = 1000.0F, .y = 0.0F}, .pieces = 4}
   );
 
-  REQUIRE(fragments.size() == 4U);
+  REQUIRE(fragments.size() == 3U);
   CHECK_FALSE(registry.valid(asteroid));
   for (entt::entity fragment : fragments) {
     const hyperverse::AsteroidBody& body = registry.get<hyperverse::AsteroidBody>(fragment);
-    CHECK(body.radius == Catch::Approx(120.0F));
+    CHECK(body.radius == Catch::Approx(240.0F / std::sqrt(3.0F)));
     CHECK(body.velocity.x == Catch::Approx(50.0F));
     CHECK(body.velocity.y > -5.0F);
     CHECK(body.velocity.y < 20.0F);
     CHECK(registry.get<hyperverse::AsteroidFragmentation>(fragment).remaining_breaks == 1);
-    CHECK(registry.get<hyperverse::AsteroidMass>(fragment).remaining_mass == Catch::Approx(40.0F));
-    CHECK(registry.get<hyperverse::MiningResource>(fragment).tier == hyperverse::OreTier::Rare);
     CHECK(registry.all_of<hyperverse::MineralComposition>(fragment));
   }
+}
+
+TEST_CASE("asteroid fragmentation separates recoverable component chunks") {
+  entt::registry registry;
+  const entt::entity asteroid = make_fragmentable_asteroid(registry);
+  registry.replace<hyperverse::MineralComposition>(
+    asteroid,
+    hyperverse::MineralComposition{.silicate = 0.25F, .ferrite = 0.25F, .cobalt = 0.25F, .exotic_crystal = 0.25F}
+  );
+
+  const std::vector<entt::entity> fragments = hyperverse::fragment_asteroid(
+    registry,
+    asteroid,
+    {.impact_kind = hyperverse::AsteroidImpactKind::Laser, .impact_velocity = {.x = 100.0F, .y = 0.0F}, .pieces = 4}
+  );
+
+  REQUIRE(fragments.size() == 3U);
+  float recoverable_mass = 0.0F;
+  bool found_common = false;
+  bool found_industrial = false;
+  bool found_rare = false;
+  bool found_exotic = false;
+  for (entt::entity fragment : fragments) {
+    const hyperverse::MiningResource& resource = registry.get<hyperverse::MiningResource>(fragment);
+    const hyperverse::MineralComposition& composition = registry.get<hyperverse::MineralComposition>(fragment);
+    recoverable_mass += registry.get<hyperverse::AsteroidMass>(fragment).remaining_mass;
+    found_common = found_common || resource.tier == hyperverse::OreTier::Common;
+    found_industrial = found_industrial || resource.tier == hyperverse::OreTier::Industrial;
+    found_rare = found_rare || resource.tier == hyperverse::OreTier::Rare;
+    found_exotic = found_exotic || resource.tier == hyperverse::OreTier::Exotic;
+    const bool is_component_chunk =
+      composition.silicate == Catch::Approx(1.0F) ||
+      composition.ferrite == Catch::Approx(1.0F) ||
+      composition.cobalt == Catch::Approx(1.0F) ||
+      composition.exotic_crystal == Catch::Approx(1.0F);
+    CHECK(is_component_chunk);
+  }
+
+  CHECK(recoverable_mass == Catch::Approx(120.0F));
+  const bool found_any_expected_tier = found_common || found_industrial || found_rare || found_exotic;
+  const bool recovered_every_component = found_common && found_industrial && found_rare && found_exotic;
+  CHECK(found_any_expected_tier);
+  CHECK_FALSE(recovered_every_component);
 }
 
 TEST_CASE("asteroids only break into multiples for two levels") {
@@ -65,7 +106,7 @@ TEST_CASE("asteroids only break into multiples for two levels") {
     {.impact_kind = hyperverse::AsteroidImpactKind::Kinetic, .impact_velocity = {.x = 100.0F, .y = 0.0F}, .pieces = 4}
   );
 
-  REQUIRE(first_level.size() == 4U);
+  REQUIRE(first_level.size() == 3U);
   const std::vector<entt::entity> second_level = hyperverse::fragment_asteroid(
     registry,
     first_level.front(),
@@ -94,7 +135,7 @@ TEST_CASE("asteroid fragmentation emits lifecycle events") {
     hyperverse::DomainEventType::AsteroidFragmented,
     [&](const hyperverse::DomainEvent& event) {
       CHECK(event.type == hyperverse::DomainEventType::AsteroidFragmented);
-      CHECK(event.count == 4);
+      CHECK(event.count == 3);
       CHECK(event.amount == Catch::Approx(0.0F));
       ++fragmented_events;
     }
@@ -116,7 +157,7 @@ TEST_CASE("asteroid fragmentation emits lifecycle events") {
     {.impact_kind = hyperverse::AsteroidImpactKind::Kinetic, .impact_velocity = {.x = 100.0F, .y = 0.0F}, .pieces = 4}
   );
 
-  REQUIRE(fragments.size() == 4U);
+  REQUIRE(fragments.size() == 3U);
   event_bus.process();
   CHECK(fragmented_events == 1);
   CHECK(consumed_events == 0);
@@ -143,7 +184,7 @@ TEST_CASE("kinetic fragmentation transfers projectile velocity into every child"
     {.impact_kind = hyperverse::AsteroidImpactKind::Kinetic, .impact_velocity = {.x = 900.0F, .y = 0.0F}, .pieces = 4}
   );
 
-  REQUIRE(fragments.size() == 4U);
+  REQUIRE(fragments.size() == 3U);
   for (entt::entity fragment : fragments) {
     CHECK(registry.get<hyperverse::AsteroidBody>(fragment).velocity.x == Catch::Approx(252.0F));
   }
@@ -159,12 +200,12 @@ TEST_CASE("explosive fragmentation scatters children in opposing directions") {
     {.impact_kind = hyperverse::AsteroidImpactKind::Explosive, .impact_velocity = {.x = 900.0F, .y = 0.0F}, .pieces = 4}
   );
 
-  REQUIRE(fragments.size() == 4U);
+  REQUIRE(fragments.size() == 3U);
   CHECK(std::ranges::any_of(fragments, [&](entt::entity fragment) {
     return registry.get<hyperverse::AsteroidBody>(fragment).velocity.x > 100.0F;
   }));
   CHECK(std::ranges::any_of(fragments, [&](entt::entity fragment) {
-    return registry.get<hyperverse::AsteroidBody>(fragment).velocity.x < -100.0F;
+    return registry.get<hyperverse::AsteroidBody>(fragment).velocity.x < -60.0F;
   }));
   CHECK(std::ranges::any_of(fragments, [&](entt::entity fragment) {
     return registry.get<hyperverse::AsteroidBody>(fragment).velocity.y > 100.0F;

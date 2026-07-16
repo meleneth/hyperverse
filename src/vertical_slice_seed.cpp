@@ -10,6 +10,7 @@
 #include "hyperverse/collision.hpp"
 #include "hyperverse/drone.hpp"
 #include "hyperverse/flight.hpp"
+#include "hyperverse/harpoon.hpp"
 #include "hyperverse/hud_notice.hpp"
 #include "hyperverse/mining.hpp"
 #include "hyperverse/pressure.hpp"
@@ -40,7 +41,7 @@ constexpr float AsteroidStartScale = 6.0F;
     .velocity = velocity,
     .radius = starting_radius,
     .base_radius = starting_radius,
-    .angular_velocity = angular_velocity,
+    .angular_velocity = angular_velocity * 2.4F,
     .scan_confidence = scan_confidence,
   };
 }
@@ -58,6 +59,8 @@ VerticalSliceEntities seed_vertical_slice(AccountCtx& account) {
   account.registry().emplace<RoundTimer>(entities.player);
   account.registry().emplace<HudNotice>(entities.player);
   account.registry().emplace<TargetLockModel>(entities.player);
+  account.registry().emplace<HarpoonModel>(entities.player);
+  account.registry().emplace<HarpoonHudSnapshot>(entities.player);
   account.registry().emplace<MiningHudSnapshot>(entities.player);
   account.registry().emplace<CargoManifest>(entities.player);
   account.registry().emplace<CargoHudSnapshot>(entities.player);

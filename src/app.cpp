@@ -12,6 +12,7 @@
 #include "hyperverse/fixed_timestep.hpp"
 #include "hyperverse/flight.hpp"
 #include "hyperverse/game_session.hpp"
+#include "hyperverse/harpoon.hpp"
 #include "hyperverse/hud_notice.hpp"
 #include "hyperverse/input.hpp"
 #include "hyperverse/mining.hpp"
@@ -23,6 +24,7 @@
 #include "hyperverse/ship_status.hpp"
 #include "hyperverse/sprite_frame_builder.hpp"
 #include "hyperverse/targeting.hpp"
+#include "hyperverse/universe_clock.hpp"
 #include "hyperverse/version.hpp"
 #include "hyperverse/vertical_slice_seed.hpp"
 #include "hyperverse/vulkan_renderer.hpp"
@@ -52,7 +54,7 @@ int App::run(AccountCtx& account) {
 
     GamepadSlot gamepad;
     gamepad.open_first_available();
-    FixedTimestep timestep{1.0F / 60.0F};
+    FixedTimestep timestep{UniverseClock::FixedTickSeconds};
     const SectorTuning sector = sector_from_viewport(static_cast<float>(renderer.width()), static_cast<float>(renderer.height()));
     const FlightTuning flight{};
     const CameraTuning camera_tuning{};
@@ -65,6 +67,7 @@ int App::run(AccountCtx& account) {
     account.registry().emplace_or_replace<ExtractionSite>(player, gathering_site);
     const SectorPressureTuning pressure_tuning{.escalation_interval_seconds = 60.0F};
     const MiningDroneTuning mining_drone_tuning{};
+    const HarpoonTuning harpoon_tuning{};
     const ParticleCannonTuning particle_cannon_tuning{};
     const RaiderTuning raider_tuning{};
     const RadarHudTuning radar_tuning{
@@ -124,6 +127,8 @@ int App::run(AccountCtx& account) {
 
         CameraState& camera = account.registry().get<CameraState>(player);
         TargetLockModel& target_lock = account.registry().get<TargetLockModel>(player);
+        HarpoonModel& harpoon = account.registry().get<HarpoonModel>(player);
+        HarpoonHudSnapshot& harpoon_hud = account.registry().get<HarpoonHudSnapshot>(player);
         HudNotice& hud_notice = account.registry().get<HudNotice>(player);
         ShipHealth& ship_health = account.registry().get<ShipHealth>(player);
         RoundTimer& round_timer = account.registry().get<RoundTimer>(player);
@@ -155,6 +160,8 @@ int App::run(AccountCtx& account) {
         update_target_lock(target_lock, account.registry(), ship.position, ship.velocity, latest_intent, sector, {}, tracked_targets);
         mining_hud =
           update_mining_laser(account.registry(), target_lock, ship, latest_intent, sector, mining_laser, timestep.tick_seconds());
+        harpoon_hud =
+          update_harpoon(harpoon, account.registry(), target_lock, ship, latest_intent, sector, timestep.tick_seconds(), harpoon_tuning);
 
         drone_hud = {};
         for (entt::entity drone_entity : entities.mining_drones) {
@@ -233,18 +240,24 @@ int App::run(AccountCtx& account) {
         if (recovery_hud.recovered) {
           raider_hud = {};
         }
-        update_player_particle_cannon(
-          WeaponCtx{tick_ctx.entity_context(player)},
-          WeaponTrigger{.aim = latest_intent.primary_aim, .active = latest_intent.particle_fire_active},
-          particle_cannon_tuning
-        );
+        WeaponCtx player_weapon{tick_ctx.entity_context(player)};
+        if (const std::optional<ParticleCannonFireCommand> player_fire = request_player_particle_fire(
+              player_weapon,
+              WeaponTrigger{.aim = latest_intent.primary_aim, .active = latest_intent.particle_fire_active},
+              particle_cannon_tuning
+            )) {
+          spawn_requested_particle_fire(player_weapon, *player_fire, particle_cannon_tuning);
+        }
         for (const auto& [raider_entity, current_raider] : active_raiders) {
-          update_raider_particle_cannon(
-            WeaponCtx{tick_ctx.entity_context(raider_entity)},
-            tick_ctx.entity_context(player),
-            WeaponTrigger{.active = current_raider.active},
-            particle_cannon_tuning
-          );
+          WeaponCtx raider_weapon{tick_ctx.entity_context(raider_entity)};
+          if (const std::optional<ParticleCannonFireCommand> raider_fire = request_raider_particle_fire(
+                raider_weapon,
+                tick_ctx.entity_context(player),
+                WeaponTrigger{.active = current_raider.active},
+                particle_cannon_tuning
+              )) {
+            spawn_requested_particle_fire(raider_weapon, *raider_fire, particle_cannon_tuning);
+          }
         }
         particle_hud = update_particle_projectiles(ProjectileSimCtx{tick_ctx, player}, particle_cannon_tuning);
         account.event_bus().process();
@@ -260,6 +273,7 @@ int App::run(AccountCtx& account) {
         entities.mining_drones,
         entities.raider,
         hud,
+        latest_intent,
         sector,
         renderer.width(),
         renderer.height()

@@ -9,6 +9,7 @@
 #include "hyperverse/cargo_train.hpp"
 #include "hyperverse/collision.hpp"
 #include "hyperverse/drone.hpp"
+#include "hyperverse/harpoon.hpp"
 #include "hyperverse/hud_notice.hpp"
 #include "hyperverse/mining.hpp"
 #include "hyperverse/pressure.hpp"
@@ -182,6 +183,31 @@ void add_hud_bar(
   const float clamped = std::clamp(fraction, 0.0F, 1.0F);
   lines.push_back({.start_x_ndc = left_ndc, .start_y_ndc = y_ndc, .end_x_ndc = left_ndc + width_ndc, .end_y_ndc = y_ndc, .r = 0.16F, .g = 0.20F, .b = 0.24F, .a = 0.88F});
   lines.push_back({.start_x_ndc = left_ndc, .start_y_ndc = y_ndc, .end_x_ndc = left_ndc + (width_ndc * clamped), .end_y_ndc = y_ndc, .r = r, .g = g, .b = b, .a = 1.0F});
+}
+
+void add_face_button_legend(std::vector<hyperverse::SpriteDraw>& sprites, const hyperverse::SemanticInputFrame& input) {
+  const bool tool_modal = input.tool_intensity > 0.05F;
+  const float left = 0.58F;
+  float y = -0.955F;
+  add_hud_text(sprites, tool_modal ? "RT TOOL" : "FACE", left, y, 0.026F, 0.78F, 0.92F, 1.0F);
+  y += 0.034F;
+  if (tool_modal) {
+    add_hud_text(sprites, "A DRONE", left, y, 0.024F, 0.72F, 1.0F, 0.72F);
+    y += 0.03F;
+    add_hud_text(sprites, "B BOOST", left, y, 0.024F, 0.72F, 0.92F, 1.0F);
+    y += 0.03F;
+    add_hud_text(sprites, "X PCANNON", left, y, 0.024F, 0.72F, 0.92F, 1.0F);
+    y += 0.03F;
+    add_hud_text(sprites, "Y HARPOON", left, y, 0.024F, 0.95F, 0.82F, 1.0F);
+  } else {
+    add_hud_text(sprites, "A ESCORT", left, y, 0.024F, 0.72F, 1.0F, 0.72F);
+    y += 0.03F;
+    add_hud_text(sprites, "B BOOST", left, y, 0.024F, 0.72F, 0.92F, 1.0F);
+    y += 0.03F;
+    add_hud_text(sprites, "X PCANNON", left, y, 0.024F, 0.72F, 0.92F, 1.0F);
+    y += 0.03F;
+    add_hud_text(sprites, "Y HARPOON", left, y, 0.024F, 0.95F, 0.82F, 1.0F);
+  }
 }
 
 void add_composition_line(
@@ -375,6 +401,7 @@ SpriteFrame build_sprite_frame(
   const std::vector<entt::entity>& mining_drones,
   entt::entity raider_entity,
   const FlightHudSnapshot& hud,
+  const SemanticInputFrame& input,
   const SectorTuning& sector,
   std::uint32_t width,
   std::uint32_t height
@@ -385,6 +412,7 @@ SpriteFrame build_sprite_frame(
   const RoundTimer& round_timer = account.registry().get<RoundTimer>(player);
   const CameraState& camera = account.registry().get<CameraState>(player);
   const TargetLockModel& target_lock = account.registry().get<TargetLockModel>(player);
+  const HarpoonHudSnapshot& harpoon_hud = account.registry().get<HarpoonHudSnapshot>(player);
   const MiningHudSnapshot& mining_hud = account.registry().get<MiningHudSnapshot>(player);
   const CargoHudSnapshot& cargo_hud = account.registry().get<CargoHudSnapshot>(player);
   const CargoEscortHudSnapshot& escort_hud = account.registry().get<CargoEscortHudSnapshot>(player);
@@ -502,6 +530,7 @@ SpriteFrame build_sprite_frame(
     add_gathering_edge_indicator(frame.sprites, frame.lines, ship.position, gathering_site->position, sector, width, height);
   }
 
+  add_face_button_legend(frame.sprites, input);
   add_hud_text(frame.sprites, "MINERALS", -0.96F, -0.955F, 0.026F, 0.78F, 0.92F, 1.0F);
   std::array<float, 7> mineral_mass{};
   for (auto [entity, composition, mass] : account.registry().view<MineralComposition, AsteroidMass>().each()) {
@@ -579,6 +608,9 @@ SpriteFrame build_sprite_frame(
   if (particle_hud.active_particles > 0 || particle_hud.impacts > 0) {
     add_hud_text(frame.sprites, "PCN " + std::to_string(particle_hud.active_particles), 0.56F, 0.68F, 0.045F, 0.72F, 0.92F, 1.0F);
   }
+  if (harpoon_hud.latched) {
+    add_hud_text(frame.sprites, "HRP " + std::to_string(static_cast<int>(harpoon_hud.target_speed)), 0.56F, 0.63F, 0.04F, 0.95F, 0.82F, 1.0F);
+  }
   if (escort_hud.cargo_train_active) {
     add_hud_text(frame.sprites, "GATE " + std::to_string(static_cast<int>(route_hud.gate_distance)), 0.48F, 0.80F, 0.045F);
     add_hud_text(frame.sprites, "TRN " + std::to_string(static_cast<int>(train_hud.train_length)) + " STR " + std::to_string(static_cast<int>(train_hud.max_coupling_stress * 100.0F)), 0.48F, 0.75F, 0.035F);
@@ -640,6 +672,10 @@ SpriteFrame build_sprite_frame(
       add_box_lines(frame.lines, gate_bounds, 0.35F, 0.9F, 1.0F);
     }
     add_world_link_line(frame.lines, ship.position, route_hud.gate_position, camera.position, sector, width, height, 0.2F, 0.55F, 0.85F);
+  }
+  if (harpoon_hud.latched && account.registry().valid(harpoon_hud.target) && account.registry().all_of<AsteroidBody>(harpoon_hud.target)) {
+    const AsteroidBody& target = account.registry().get<AsteroidBody>(harpoon_hud.target);
+    add_world_link_line(frame.lines, ship.position, target.position, camera.position, sector, width, height, 0.95F, 0.82F, 1.0F);
   }
   for (auto [entity, box] : account.registry().view<CargoBox>().each()) {
     (void)entity;

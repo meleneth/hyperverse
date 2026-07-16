@@ -141,11 +141,19 @@ Initial sprites come from `meleneth/sector7`, branch `master`.
 
 Asteroids start large and can break into smaller child asteroids.
 
-The impact source determines fragment motion. Laser breakup stays coherent, kinetic impacts transfer projectile velocity, and explosive impacts scatter fragments radially.
+The impact source determines fragment motion. Laser breakup stays coherent, kinetic impacts transfer projectile velocity, and explosive impacts scatter fragments radially. Glancing kinetic impacts also impart angular velocity based on impact offset and projectile velocity.
 
 Large asteroids should support chemical scanning. Composition should influence breakup output with tunable distributions and deliberate loss, not exact hard-coded equal partitions.
 
-## D023: Weapon Firing Architecture
+Current breakup creates recoverable component chunks rather than cloning the parent composition onto every child.
+
+## D023: Harpoon Tether
+
+The harpoon latches to locked asteroids and uses the ship engine as the asteroid slowdown force.
+
+It is not a magic brake. The ship is pulled toward the asteroid surface velocity, including spin, so large spinners are dangerous. Burst speed detaches the harpoon immediately.
+
+## D024: Weapon Firing Architecture
 
 Particle beam firing should be event-driven and modeled as a small FSM.
 
@@ -153,8 +161,8 @@ The particle beam is a dual-fire weapon with two side-by-side shots. Each shot h
 
 The FSM should consume semantic fire intent and simulation-clock events, then emit projectile spawn events.
 
-## D024: Universe Clock
+## D025: Universe Clock
 
-The project needs one documented canonical simulation clock.
+The canonical simulation clock is 60 Hz.
 
-Fixed timestep simulation exists, but the exact base tick and scheduling policy remain a pending decision for weapon FSMs, cooldowns, AI, escalation, and HUD animation.
+`UniverseClock::FixedTickSeconds` is the shared base tick for fixed simulation, weapon FSMs, cooldowns, AI, escalation, and HUD animation. Rendering may interpolate between fixed simulation ticks.

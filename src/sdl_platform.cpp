@@ -116,6 +116,7 @@ RawInputFrame GamepadSlot::sample() const {
     raw.confirm = key_down(SDL_SCANCODE_SPACE);
     raw.cancel = key_down(SDL_SCANCODE_ESCAPE);
     raw.target_cycle = key_down(SDL_SCANCODE_TAB);
+    raw.harpoon = key_down(SDL_SCANCODE_Q);
     raw.particle_fire = key_down(SDL_SCANCODE_E);
     raw.tool_intensity = key_down(SDL_SCANCODE_F) ? 1.0F : 0.0F;
   }
@@ -132,6 +133,7 @@ RawInputFrame GamepadSlot::sample() const {
     };
     raw.confirm = raw.confirm || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_SOUTH);
     raw.boost = raw.boost || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_EAST);
+    raw.harpoon = raw.harpoon || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_NORTH);
     raw.target_cycle = raw.target_cycle || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER) ||
                        SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
     raw.particle_fire = raw.particle_fire || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_WEST);

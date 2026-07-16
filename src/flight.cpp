@@ -27,6 +27,13 @@ namespace {
   return std::min({position.x, sector.width - position.x, position.y, sector.height - position.y});
 }
 
+[[nodiscard]] float boost_extra_speed(const hyperverse::FlightTuning& flight, float seconds_remaining) {
+  const float duration = std::max(flight.boost_duration_seconds, std::numeric_limits<float>::epsilon());
+  const float remaining_fraction = std::clamp(seconds_remaining / duration, 0.0F, 1.0F);
+  const float slow_then_fast = 1.0F - std::pow(1.0F - remaining_fraction, 3.0F);
+  return flight.max_speed * std::max(0.0F, flight.boost_speed_multiplier - 1.0F) * slow_then_fast;
+}
+
 }  // namespace
 
 namespace hyperverse {
@@ -48,10 +55,11 @@ void simulate_assisted_flight(
       length(input.desired_movement) > 0.0F ? normalize_or_zero(input.desired_movement) :
       length(input.primary_aim) > 0.0F ? normalize_or_zero(input.primary_aim) :
       Vec2{.x = std::cos(ship.facing_radians), .y = std::sin(ship.facing_radians)};
-    ship.boost_speed = std::max(ship.boost_speed, flight.boost_extra_speed);
-    ship.velocity += boost_direction * flight.boost_impulse;
+    ship.boost_seconds_remaining = std::max(ship.boost_seconds_remaining, flight.boost_duration_seconds);
+    ship.velocity = boost_direction * (flight.max_speed * std::max(1.0F, flight.boost_speed_multiplier));
   }
-  ship.boost_speed = std::max(0.0F, ship.boost_speed - (flight.boost_decay_per_second * std::max(0.0F, dt_seconds)));
+  ship.boost_seconds_remaining = std::max(0.0F, ship.boost_seconds_remaining - std::max(0.0F, dt_seconds));
+  ship.boost_speed = boost_extra_speed(flight, ship.boost_seconds_remaining);
   ship.velocity = clamp_length(ship.velocity, flight.max_speed + ship.boost_speed);
   ctx.physics().integrate_ship(ship, sector, dt_seconds);
 
