@@ -12,7 +12,7 @@ namespace {
   int selected_index = std::numeric_limits<int>::min();
 
   for (auto [entity, box] : registry.view<CargoBox>().each()) {
-    if (box.index > selected_index) {
+    if (box.state == CargoBoxState::Linked && box.index > selected_index) {
       selected = entity;
       selected_index = box.index;
     }
@@ -27,6 +27,7 @@ RaiderHudSnapshot update_raider_threat(
   RaiderShip& raider,
   entt::registry& registry,
   const CargoEscortState& escort,
+  const ShipMotion& ship,
   const SectorTuning& sector,
   float dt_seconds,
   const RaiderTuning& tuning
@@ -50,11 +51,13 @@ RaiderHudSnapshot update_raider_threat(
     return {.active = true};
   }
 
-  const CargoBox& target = registry.get<CargoBox>(raider.target_box);
+  CargoBox& target = registry.get<CargoBox>(raider.target_box);
   const Vec2 to_target = wrapped_delta(raider.position, target.position, sector);
   const float target_distance = length(to_target);
 
-  if (target_distance > tuning.disruption_range) {
+  if (target.state == CargoBoxState::Stolen || raider.phase == RaiderPhase::Towing) {
+    raider.phase = RaiderPhase::Towing;
+  } else if (target_distance > tuning.disruption_range) {
     raider.phase = RaiderPhase::Approaching;
     raider.disruption_seconds = 0.0F;
     raider.velocity = normalize_or_zero(to_target) * tuning.max_speed;
@@ -63,6 +66,21 @@ RaiderHudSnapshot update_raider_threat(
     raider.phase = RaiderPhase::Disrupting;
     raider.velocity = {};
     raider.disruption_seconds = std::min(tuning.disruption_seconds, raider.disruption_seconds + dt_seconds);
+    if (raider.disruption_seconds >= tuning.disruption_seconds) {
+      target.state = CargoBoxState::Stolen;
+      raider.phase = RaiderPhase::Towing;
+    }
+  }
+
+  if (raider.phase == RaiderPhase::Towing) {
+    Vec2 escape_direction = normalize_or_zero(wrapped_delta(ship.position, raider.position, sector));
+    if (length(escape_direction) <= 0.0001F) {
+      escape_direction = {.x = 1.0F, .y = 0.0F};
+    }
+    raider.velocity = escape_direction * tuning.max_speed;
+    raider.position = wrap_position(raider.position + (raider.velocity * dt_seconds), sector);
+    target.position = raider.position;
+    target.velocity = raider.velocity;
   }
 
   return {
@@ -70,6 +88,7 @@ RaiderHudSnapshot update_raider_threat(
     .phase = raider.phase,
     .target_distance = target_distance,
     .disruption_fraction = raider.disruption_seconds / std::max(tuning.disruption_seconds, std::numeric_limits<float>::epsilon()),
+    .escape_distance = raider.phase == RaiderPhase::Towing ? wrapped_distance(ship.position, target.position, sector) : 0.0F,
     .active = true,
   };
 }

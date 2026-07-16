@@ -740,6 +740,7 @@ TEST_CASE("raider acquires and approaches the rearmost cargo box during escort")
     raider,
     registry,
     {.phase = hyperverse::CargoEscortPhase::EscortActive},
+    {.position = {.x = 0.0F, .y = 100.0F}},
     {.width = 9000.0F, .height = 9000.0F},
     1.0F,
     {.max_speed = 100.0F, .disruption_range = 50.0F}
@@ -765,6 +766,7 @@ TEST_CASE("raider disrupts cargo coupling when inside range") {
     raider,
     registry,
     {.phase = hyperverse::CargoEscortPhase::EscortActive},
+    {.position = {.x = 0.0F, .y = 100.0F}},
     {.width = 9000.0F, .height = 9000.0F},
     0.25F,
     {.disruption_range = 50.0F, .disruption_seconds = 0.5F}
@@ -773,6 +775,62 @@ TEST_CASE("raider disrupts cargo coupling when inside range") {
   CHECK(hud.phase == hyperverse::RaiderPhase::Disrupting);
   CHECK(hud.disruption_fraction == Catch::Approx(0.5F));
   CHECK(raider.disruption_seconds == Catch::Approx(0.25F));
+}
+
+TEST_CASE("raider steals and tows a cargo box after disruption completes") {
+  entt::registry registry;
+  const entt::entity box_entity = registry.create();
+  registry.emplace<hyperverse::CargoBox>(
+    box_entity,
+    hyperverse::CargoBox{.position = {.x = 120.0F, .y = 100.0F}, .index = 0}
+  );
+  hyperverse::RaiderShip raider{.position = {.x = 100.0F, .y = 100.0F}};
+
+  const hyperverse::RaiderHudSnapshot hud = hyperverse::update_raider_threat(
+    raider,
+    registry,
+    {.phase = hyperverse::CargoEscortPhase::EscortActive},
+    {.position = {.x = 0.0F, .y = 100.0F}},
+    {.width = 9000.0F, .height = 9000.0F},
+    0.5F,
+    {.max_speed = 100.0F, .disruption_range = 50.0F, .disruption_seconds = 0.5F}
+  );
+
+  const hyperverse::CargoBox& box = registry.get<hyperverse::CargoBox>(box_entity);
+  CHECK(hud.phase == hyperverse::RaiderPhase::Towing);
+  CHECK(hud.escape_distance == Catch::Approx(150.0F));
+  CHECK(box.state == hyperverse::CargoBoxState::Stolen);
+  CHECK(box.position.x == Catch::Approx(150.0F));
+  CHECK(raider.position.x == Catch::Approx(150.0F));
+}
+
+TEST_CASE("active cargo train ignores stolen boxes") {
+  entt::registry registry;
+  const entt::entity linked = registry.create();
+  registry.emplace<hyperverse::CargoBox>(
+    linked,
+    hyperverse::CargoBox{.position = {.x = 1000.0F, .y = 1000.0F}, .index = 0}
+  );
+  const entt::entity stolen = registry.create();
+  registry.emplace<hyperverse::CargoBox>(
+    stolen,
+    hyperverse::CargoBox{.position = {.x = 1200.0F, .y = 1000.0F}, .index = 1, .state = hyperverse::CargoBoxState::Stolen}
+  );
+
+  const hyperverse::CargoTrainHudSnapshot hud = hyperverse::update_cargo_train(
+    registry,
+    {.phase = hyperverse::CargoEscortPhase::EscortActive},
+    {.position = {.x = 1000.0F, .y = 1000.0F}, .velocity = {.x = 100.0F, .y = 0.0F}},
+    {.width = 9000.0F, .height = 9000.0F},
+    1.0F,
+    {.link_spacing = 100.0F, .follow_rate = 1.0F, .max_speed = 1000.0F}
+  );
+
+  const hyperverse::CargoBox& linked_box = registry.get<hyperverse::CargoBox>(linked);
+  const hyperverse::CargoBox& stolen_box = registry.get<hyperverse::CargoBox>(stolen);
+  CHECK(hud.linked_boxes == 1);
+  CHECK(linked_box.position.x == Catch::Approx(900.0F));
+  CHECK(stolen_box.position.x == Catch::Approx(1200.0F));
 }
 
 TEST_CASE("mining drone acquires the locked asteroid as its priority") {

@@ -102,7 +102,9 @@ CargoTrainHudSnapshot update_cargo_train(
   std::vector<CargoBox*> boxes;
   for (auto [entity, box] : registry.view<CargoBox>().each()) {
     (void)entity;
-    boxes.push_back(&box);
+    if (box.state == CargoBoxState::Linked) {
+      boxes.push_back(&box);
+    }
   }
   std::ranges::sort(boxes, [](const CargoBox* lhs, const CargoBox* rhs) { return lhs->index < rhs->index; });
 

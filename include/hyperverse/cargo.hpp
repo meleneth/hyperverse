@@ -18,11 +18,17 @@ struct ExtractionSite {
   Vec2 position{};
 };
 
+enum class CargoBoxState {
+  Linked,
+  Stolen,
+};
+
 struct CargoBox {
   Vec2 position{};
   Vec2 velocity{};
   float mass{0.0F};
   int index{0};
+  CargoBoxState state{CargoBoxState::Linked};
 };
 
 struct CargoBoxTuning {

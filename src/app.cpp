@@ -308,8 +308,13 @@ void log_gamepad_state() {
       raider_phase = "approach";
     } else if (raider.phase == hyperverse::RaiderPhase::Disrupting) {
       raider_phase = "disrupt";
+    } else if (raider.phase == hyperverse::RaiderPhase::Towing) {
+      raider_phase = "towing";
     }
     title << " | raider " << raider_phase << " d" << raider.target_distance << " hack " << (raider.disruption_fraction * 100.0F) << "%";
+    if (raider.phase == hyperverse::RaiderPhase::Towing) {
+      title << " escape " << raider.escape_distance;
+    }
   }
   if (collision.contact) {
     title << " | COLLISION " << collision.impact_speed;
@@ -618,7 +623,7 @@ int App::run() {
         escort_hud = update_cargo_escort_arrival(cargo_escort, cargo_hud, route_hud);
         train_hud = update_cargo_train(account.registry(), cargo_escort, ship, sector, timestep.tick_seconds());
         raider_hud =
-          update_raider_threat(account.registry().get<RaiderShip>(raider_entity), account.registry(), cargo_escort, sector, timestep.tick_seconds(), raider_tuning);
+          update_raider_threat(account.registry().get<RaiderShip>(raider_entity), account.registry(), cargo_escort, ship, sector, timestep.tick_seconds(), raider_tuning);
         pressure_hud = update_sector_pressure(pressure, timestep.tick_seconds(), pressure_tuning);
         collision_hud = predict_ship_asteroid_collision(ship, account.registry(), sector);
       }
@@ -801,7 +806,11 @@ int App::run() {
               28.0F
             );
             if (escort_hud.cargo_train_active) {
-              add_box_lines(lines, box_bounds, 0.35F, 0.9F, 1.0F);
+              if (box.state == CargoBoxState::Stolen) {
+                add_box_lines(lines, box_bounds, 1.0F, 0.2F, 0.15F);
+              } else {
+                add_box_lines(lines, box_bounds, 0.35F, 0.9F, 1.0F);
+              }
             } else {
               add_box_lines(lines, box_bounds, 0.4F, 1.0F, 0.52F);
             }
@@ -810,7 +819,9 @@ int App::run() {
             std::vector<const CargoBox*> linked_boxes;
             for (auto [entity, box] : account.registry().view<CargoBox>().each()) {
               (void)entity;
-              linked_boxes.push_back(&box);
+              if (box.state == CargoBoxState::Linked) {
+                linked_boxes.push_back(&box);
+              }
             }
             std::ranges::sort(linked_boxes, [](const CargoBox* lhs, const CargoBox* rhs) { return lhs->index < rhs->index; });
 

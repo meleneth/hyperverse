@@ -11,6 +11,7 @@ enum class RaiderPhase {
   Idle,
   Approaching,
   Disrupting,
+  Towing,
 };
 
 struct RaiderShip {
@@ -32,6 +33,7 @@ struct RaiderHudSnapshot {
   RaiderPhase phase{RaiderPhase::Idle};
   float target_distance{0.0F};
   float disruption_fraction{0.0F};
+  float escape_distance{0.0F};
   bool active{false};
 };
 
@@ -39,6 +41,7 @@ struct RaiderHudSnapshot {
   RaiderShip& raider,
   entt::registry& registry,
   const CargoEscortState& escort,
+  const ShipMotion& ship,
   const SectorTuning& sector,
   float dt_seconds,
   const RaiderTuning& tuning = {}
