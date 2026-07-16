@@ -76,6 +76,18 @@ struct CargoTrainHudSnapshot {
   bool active{false};
 };
 
+struct CargoEscortRoute {
+  Vec2 gate_position{};
+  float gate_radius{160.0F};
+};
+
+struct CargoEscortRouteHudSnapshot {
+  Vec2 gate_position{};
+  float gate_distance{0.0F};
+  bool active{false};
+  bool gate_reached{false};
+};
+
 [[nodiscard]] CargoHudSnapshot update_cargo_manifest(
   CargoManifest& manifest,
   entt::registry& registry,
@@ -102,6 +114,13 @@ int sync_cargo_boxes(
   const SectorTuning& sector,
   float dt_seconds,
   const CargoTrainTuning& tuning = {}
+);
+
+[[nodiscard]] CargoEscortRouteHudSnapshot update_cargo_escort_route(
+  const CargoEscortState& escort,
+  const CargoEscortRoute& route,
+  const ShipMotion& ship,
+  const SectorTuning& sector
 );
 
 }  // namespace hyperverse

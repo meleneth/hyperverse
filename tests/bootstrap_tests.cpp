@@ -677,6 +677,30 @@ TEST_CASE("active cargo train links boxes behind the ship in slot order") {
   CHECK(second_box.position.y == Catch::Approx(1000.0F));
 }
 
+TEST_CASE("cargo escort route reports wrapped gate distance only while active") {
+  const hyperverse::CargoEscortRouteHudSnapshot inactive = hyperverse::update_cargo_escort_route(
+    {},
+    {.gate_position = {.x = 25.0F, .y = 4500.0F}, .gate_radius = 80.0F},
+    {.position = {.x = 8950.0F, .y = 4500.0F}},
+    {.width = 9000.0F, .height = 9000.0F}
+  );
+
+  CHECK_FALSE(inactive.active);
+  CHECK_FALSE(inactive.gate_reached);
+  CHECK(inactive.gate_distance == Catch::Approx(75.0F));
+
+  const hyperverse::CargoEscortRouteHudSnapshot active = hyperverse::update_cargo_escort_route(
+    {.phase = hyperverse::CargoEscortPhase::EscortActive},
+    {.gate_position = {.x = 25.0F, .y = 4500.0F}, .gate_radius = 80.0F},
+    {.position = {.x = 8950.0F, .y = 4500.0F}},
+    {.width = 9000.0F, .height = 9000.0F}
+  );
+
+  CHECK(active.active);
+  CHECK(active.gate_reached);
+  CHECK(active.gate_distance == Catch::Approx(75.0F));
+}
+
 TEST_CASE("mining drone acquires the locked asteroid as its priority") {
   entt::registry registry;
   const entt::entity asteroid = registry.create();
