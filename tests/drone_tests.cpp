@@ -116,3 +116,41 @@ TEST_CASE("mining drone work angles rotate slowly over time") {
 
   CHECK(drone.work_angle_radians == Catch::Approx(0.1168146F));
 }
+
+TEST_CASE("mining drone releases targets that move beyond operating range") {
+  entt::registry registry;
+  hyperverse::DomainEventBus event_bus;
+  int release_events = 0;
+  event_bus.appendListener(
+    hyperverse::DomainEventType::DroneTargetReleased,
+    [&](const hyperverse::DomainEvent& event) {
+      CHECK(event.type == hyperverse::DomainEventType::DroneTargetReleased);
+      ++release_events;
+    }
+  );
+  const entt::entity asteroid = registry.create();
+  registry.emplace<hyperverse::AsteroidBody>(
+    asteroid,
+    hyperverse::AsteroidBody{.position = {.x = 2000.0F, .y = 100.0F}, .radius = 80.0F}
+  );
+  registry.emplace<hyperverse::MiningResource>(asteroid);
+  hyperverse::MiningDrone drone{.position = {.x = 100.0F, .y = 100.0F}, .target = asteroid};
+  const hyperverse::ShipMotion ship{.position = {.x = 100.0F, .y = 100.0F}};
+
+  const hyperverse::MiningDroneHudSnapshot hud = hyperverse::update_mining_drone(
+    drone,
+    registry,
+    {},
+    ship,
+    {.width = 9000.0F, .height = 9000.0F},
+    0.25F,
+    {.max_speed = 100.0F, .max_target_distance_from_ship = 500.0F},
+    &event_bus
+  );
+  event_bus.process();
+
+  CHECK_FALSE(registry.valid(drone.target));
+  CHECK(drone.phase == hyperverse::MiningDronePhase::Idle);
+  CHECK_FALSE(registry.valid(hud.target));
+  CHECK(release_events == 1);
+}

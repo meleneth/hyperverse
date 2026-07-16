@@ -152,7 +152,8 @@ int App::run(AccountCtx& account) {
             ship,
             sector,
             timestep.tick_seconds(),
-            mining_drone_tuning
+            mining_drone_tuning,
+            &account.event_bus()
           );
           drone_hud.extracted_mass += current_drone.extracted_mass;
           if (current_drone.phase == MiningDronePhase::Mining) {

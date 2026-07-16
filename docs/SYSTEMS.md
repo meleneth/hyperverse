@@ -8,6 +8,8 @@ The control fantasy is desired motion rather than raw thruster micromanagement.
 
 The flight model should preserve inertia and mass while allowing the player to feel precise and competent.
 
+Default ship tuning should stay nimble enough for the player to get ahead of moving asteroids, fire kinetic shots back into their path, and reduce their velocity before committing mining drones.
+
 Primary tuning dimensions:
 
 - acceleration
@@ -67,6 +69,19 @@ Once lock is established, other systems may become available:
 Locking is not itself mining.
 
 ## Mining
+
+Asteroids start as large moving bodies with an explicit mass model and two levels of fragmentation.
+
+Lifecycle:
+
+- a seeded asteroid starts with two remaining break levels
+- the first depletion/impact breakup creates medium fragments with one remaining break level
+- the second breakup creates small mineable fragments with zero remaining break levels
+- further depletion consumes the fragment instead of creating more pieces
+
+Kinetic particle impacts apply projectile velocity into the asteroid mass, so firing from ahead of a moving rock can slow it down. Laser, kinetic, and explosive breakup patterns remain separate tuning/behavior paths.
+
+Asteroid lifecycle facts should be event-visible. Current domain events include damage, fragmentation, consumption, particle fire/impact, and drone target release. New behavior should prefer subscribing/responding to those facts over threading direct calls across unrelated systems.
 
 Mining is a family of interacting systems rather than one fixed minigame.
 

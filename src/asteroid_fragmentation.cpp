@@ -58,10 +58,50 @@ namespace {
   return parent.velocity;
 }
 
-}  // namespace
+[[nodiscard]] int remaining_breaks_for(entt::registry& registry, entt::entity asteroid) {
+  const AsteroidFragmentation* fragmentation = registry.try_get<AsteroidFragmentation>(asteroid);
+  return fragmentation != nullptr ? fragmentation->remaining_breaks : 0;
+}
 
-std::vector<entt::entity> fragment_asteroid(
+void emit_consumed(DomainEventBus* event_bus, entt::entity asteroid, Vec2 position) {
+  if (event_bus == nullptr) {
+    return;
+  }
+  event_bus->enqueue(
+    DomainEventType::AsteroidConsumed,
+    DomainEvent{
+      .type = DomainEventType::AsteroidConsumed,
+      .subject = asteroid,
+      .position = position,
+    }
+  );
+}
+
+void emit_fragmented(
+  DomainEventBus* event_bus,
+  entt::entity asteroid,
+  Vec2 position,
+  int fragment_count,
+  int child_remaining_breaks
+) {
+  if (event_bus == nullptr) {
+    return;
+  }
+  event_bus->enqueue(
+    DomainEventType::AsteroidFragmented,
+    DomainEvent{
+      .type = DomainEventType::AsteroidFragmented,
+      .subject = asteroid,
+      .position = position,
+      .amount = static_cast<float>(child_remaining_breaks),
+      .count = fragment_count,
+    }
+  );
+}
+
+[[nodiscard]] std::vector<entt::entity> fragment_asteroid_impl(
   entt::registry& registry,
+  DomainEventBus* event_bus,
   entt::entity asteroid,
   const AsteroidFragmentationRequest& request
 ) {
@@ -70,15 +110,18 @@ std::vector<entt::entity> fragment_asteroid(
   }
 
   const AsteroidBody parent = registry.get<AsteroidBody>(asteroid);
-  const MiningResource* parent_resource = registry.try_get<MiningResource>(asteroid);
-  const MineralComposition* parent_composition = registry.try_get<MineralComposition>(asteroid);
-  const AsteroidMass* parent_mass = registry.try_get<AsteroidMass>(asteroid);
+  const int parent_remaining_breaks = remaining_breaks_for(registry, asteroid);
   const float child_radius = std::max(8.0F, parent.radius / std::sqrt(static_cast<float>(request.pieces)));
-  if (child_radius < MinimumPlayableAsteroidRadius) {
+  if (parent_remaining_breaks <= 0 || child_radius < MinimumPlayableAsteroidRadius) {
     registry.destroy(asteroid);
+    emit_consumed(event_bus, asteroid, parent.position);
     return {};
   }
 
+  const MiningResource* parent_resource = registry.try_get<MiningResource>(asteroid);
+  const MineralComposition* parent_composition = registry.try_get<MineralComposition>(asteroid);
+  const AsteroidMass* parent_mass = registry.try_get<AsteroidMass>(asteroid);
+  const int child_remaining_breaks = parent_remaining_breaks - 1;
   const float placement_radius = std::max(child_radius, parent.radius - child_radius);
   std::vector<entt::entity> fragments;
   fragments.reserve(static_cast<std::size_t>(request.pieces));
@@ -99,6 +142,7 @@ std::vector<entt::entity> fragment_asteroid(
         .scan_confidence = parent.scan_confidence,
       }
     );
+    registry.emplace<AsteroidFragmentation>(fragment, AsteroidFragmentation{.remaining_breaks = child_remaining_breaks});
     const float child_mass = parent_mass != nullptr ? parent_mass->remaining_mass / static_cast<float>(request.pieces) : child_radius;
     registry.emplace<AsteroidMass>(fragment, AsteroidMass{.initial_mass = child_mass, .remaining_mass = child_mass});
     if (parent_resource != nullptr) {
@@ -118,7 +162,27 @@ std::vector<entt::entity> fragment_asteroid(
   }
 
   registry.destroy(asteroid);
+  emit_fragmented(event_bus, asteroid, parent.position, static_cast<int>(fragments.size()), child_remaining_breaks);
   return fragments;
+}
+
+}  // namespace
+
+std::vector<entt::entity> fragment_asteroid(
+  entt::registry& registry,
+  entt::entity asteroid,
+  const AsteroidFragmentationRequest& request
+) {
+  return fragment_asteroid_impl(registry, nullptr, asteroid, request);
+}
+
+std::vector<entt::entity> fragment_asteroid(
+  entt::registry& registry,
+  DomainEventBus& event_bus,
+  entt::entity asteroid,
+  const AsteroidFragmentationRequest& request
+) {
+  return fragment_asteroid_impl(registry, &event_bus, asteroid, request);
 }
 
 }  // namespace hyperverse

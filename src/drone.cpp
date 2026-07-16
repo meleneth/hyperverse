@@ -13,6 +13,21 @@ constexpr float TauRadians = 6.28318530718F;
          registry.get<MiningResource>(target).integrity > 0.0F;
 }
 
+void emit_target_released(DomainEventBus* event_bus, entt::entity drone_entity, entt::entity target, Vec2 position) {
+  if (event_bus == nullptr || target == entt::null) {
+    return;
+  }
+  event_bus->enqueue(
+    DomainEventType::DroneTargetReleased,
+    DomainEvent{
+      .type = DomainEventType::DroneTargetReleased,
+      .subject = drone_entity,
+      .target = target,
+      .position = position,
+    }
+  );
+}
+
 [[nodiscard]] Vec2 direction_from_angle(float radians) {
   return {.x = std::cos(radians), .y = std::sin(radians)};
 }
@@ -40,7 +55,8 @@ MiningDroneHudSnapshot update_mining_drone(
   const ShipMotion& ship,
   const SectorTuning& sector,
   float dt_seconds,
-  const MiningDroneTuning& tuning
+  const MiningDroneTuning& tuning,
+  DomainEventBus* event_bus
 ) {
   const float scaled_dt = std::max(0.0F, dt_seconds);
   drone.work_angle_radians = std::fmod(drone.work_angle_radians + (tuning.work_angle_rotation_radians_per_second * scaled_dt), TauRadians);
@@ -51,7 +67,16 @@ MiningDroneHudSnapshot update_mining_drone(
   if (has_locked_target(mining_priority) && valid_mining_target(registry, mining_priority.target)) {
     drone.target = mining_priority.target;
   } else if (!valid_mining_target(registry, drone.target)) {
+    emit_target_released(event_bus, entt::null, drone.target, drone.position);
     drone.target = entt::null;
+  }
+
+  if (valid_mining_target(registry, drone.target)) {
+    const AsteroidBody& target_body = registry.get<AsteroidBody>(drone.target);
+    if (length(wrapped_delta(ship.position, target_body.position, sector)) > tuning.max_target_distance_from_ship) {
+      emit_target_released(event_bus, entt::null, drone.target, drone.position);
+      drone.target = entt::null;
+    }
   }
 
   MiningDroneHudSnapshot hud{.phase = drone.phase, .target = drone.target, .extracted_mass = drone.extracted_mass};

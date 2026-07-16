@@ -86,6 +86,7 @@ TEST_CASE("mining depletion keeps asteroids at one sixth of base radius") {
     asteroid,
     hyperverse::AsteroidBody{.position = {.x = 350.0F, .y = 100.0F}, .radius = 1200.0F, .base_radius = 1200.0F}
   );
+  registry.emplace<hyperverse::AsteroidFragmentation>(asteroid, hyperverse::AsteroidFragmentation{.remaining_breaks = 2});
   registry.emplace<hyperverse::MiningResource>(asteroid);
 
   (void)hyperverse::update_mining_laser(
@@ -108,6 +109,7 @@ TEST_CASE("mining depletion breaks an asteroid into laser-coherent fragments") {
     asteroid,
     hyperverse::AsteroidBody{.position = {.x = 350.0F, .y = 100.0F}, .radius = 1200.0F, .base_radius = 1200.0F}
   );
+  registry.emplace<hyperverse::AsteroidFragmentation>(asteroid, hyperverse::AsteroidFragmentation{.remaining_breaks = 2});
   registry.emplace<hyperverse::MiningResource>(asteroid);
 
   const hyperverse::MiningHudSnapshot hud = hyperverse::update_mining_laser(

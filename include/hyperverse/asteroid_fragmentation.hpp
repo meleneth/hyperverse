@@ -1,5 +1,6 @@
 #pragma once
 
+#include "hyperverse/domain_events.hpp"
 #include "hyperverse/math.hpp"
 #include "hyperverse/targeting.hpp"
 
@@ -23,10 +24,21 @@ struct AsteroidFragmentationRequest {
   int pieces{4};
 };
 
+struct AsteroidFragmentation {
+  int remaining_breaks{2};
+};
+
 inline constexpr float MinimumPlayableAsteroidRadius = 75.0F;
 
 [[nodiscard]] std::vector<entt::entity> fragment_asteroid(
   entt::registry& registry,
+  entt::entity asteroid,
+  const AsteroidFragmentationRequest& request
+);
+
+[[nodiscard]] std::vector<entt::entity> fragment_asteroid(
+  entt::registry& registry,
+  DomainEventBus& event_bus,
   entt::entity asteroid,
   const AsteroidFragmentationRequest& request
 );

@@ -10,6 +10,10 @@ namespace hyperverse {
 enum class DomainEventType {
   ParticleFired,
   ParticleImpact,
+  AsteroidDamaged,
+  AsteroidFragmented,
+  AsteroidConsumed,
+  DroneTargetReleased,
 };
 
 struct DomainEvent {
@@ -18,6 +22,7 @@ struct DomainEvent {
   entt::entity target{entt::null};
   Vec2 position{};
   float amount{0.0F};
+  int count{0};
 };
 
 using DomainEventBus = eventpp::EventQueue<DomainEventType, void(const DomainEvent&)>;

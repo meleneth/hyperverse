@@ -15,10 +15,10 @@ struct ShipMotion {
 };
 
 struct FlightTuning {
-  float max_speed{760.0F};
-  float acceleration{1800.0F};
-  float braking{2400.0F};
-  float turn_rate{9.0F};
+  float max_speed{920.0F};
+  float acceleration{2400.0F};
+  float braking{3200.0F};
+  float turn_rate{11.0F};
 };
 
 struct FlightHudTuning {

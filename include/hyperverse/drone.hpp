@@ -1,5 +1,6 @@
 #pragma once
 
+#include "hyperverse/domain_events.hpp"
 #include "hyperverse/flight.hpp"
 #include "hyperverse/mining.hpp"
 #include "hyperverse/sector.hpp"
@@ -37,6 +38,7 @@ struct MiningDroneTuning {
   float extraction_per_second{3.5F};
   float work_angle_rotation_radians_per_second{0.18F};
   float facing_dead_stick_speed{24.0F};
+  float max_target_distance_from_ship{2200.0F};
 };
 
 struct MiningDroneHudSnapshot {
@@ -53,7 +55,8 @@ struct MiningDroneHudSnapshot {
   const ShipMotion& ship,
   const SectorTuning& sector,
   float dt_seconds,
-  const MiningDroneTuning& tuning = {}
+  const MiningDroneTuning& tuning = {},
+  DomainEventBus* event_bus = nullptr
 );
 
 }  // namespace hyperverse

@@ -18,6 +18,7 @@ namespace {
       .scan_confidence = 0.5F,
     }
   );
+  registry.emplace<hyperverse::AsteroidFragmentation>(asteroid, hyperverse::AsteroidFragmentation{.remaining_breaks = 2});
   registry.emplace<hyperverse::AsteroidMass>(asteroid, hyperverse::AsteroidMass{.initial_mass = 240.0F, .remaining_mass = 160.0F});
   registry.emplace<hyperverse::MiningResource>(asteroid, hyperverse::MiningResource{.tier = hyperverse::OreTier::Rare});
   registry.emplace<hyperverse::MineralComposition>(asteroid, hyperverse::mineral_composition_for_tier(hyperverse::OreTier::Rare));
@@ -44,10 +45,92 @@ TEST_CASE("laser fragmentation keeps child vectors nearly coherent") {
     CHECK(body.velocity.x == Catch::Approx(50.0F));
     CHECK(body.velocity.y > -5.0F);
     CHECK(body.velocity.y < 20.0F);
+    CHECK(registry.get<hyperverse::AsteroidFragmentation>(fragment).remaining_breaks == 1);
     CHECK(registry.get<hyperverse::AsteroidMass>(fragment).remaining_mass == Catch::Approx(40.0F));
     CHECK(registry.get<hyperverse::MiningResource>(fragment).tier == hyperverse::OreTier::Rare);
     CHECK(registry.all_of<hyperverse::MineralComposition>(fragment));
   }
+}
+
+TEST_CASE("asteroids only break into multiples for two levels") {
+  entt::registry registry;
+  const entt::entity root = make_fragmentable_asteroid(registry);
+  hyperverse::AsteroidBody& root_body = registry.get<hyperverse::AsteroidBody>(root);
+  root_body.radius = 600.0F;
+  root_body.base_radius = 600.0F;
+
+  const std::vector<entt::entity> first_level = hyperverse::fragment_asteroid(
+    registry,
+    root,
+    {.impact_kind = hyperverse::AsteroidImpactKind::Kinetic, .impact_velocity = {.x = 100.0F, .y = 0.0F}, .pieces = 4}
+  );
+
+  REQUIRE(first_level.size() == 4U);
+  const std::vector<entt::entity> second_level = hyperverse::fragment_asteroid(
+    registry,
+    first_level.front(),
+    {.impact_kind = hyperverse::AsteroidImpactKind::Kinetic, .impact_velocity = {.x = 100.0F, .y = 0.0F}, .pieces = 4}
+  );
+
+  REQUIRE(second_level.size() == 4U);
+  CHECK(registry.get<hyperverse::AsteroidFragmentation>(second_level.front()).remaining_breaks == 0);
+
+  const std::vector<entt::entity> terminal = hyperverse::fragment_asteroid(
+    registry,
+    second_level.front(),
+    {.impact_kind = hyperverse::AsteroidImpactKind::Kinetic, .impact_velocity = {.x = 100.0F, .y = 0.0F}, .pieces = 4}
+  );
+
+  CHECK(terminal.empty());
+  CHECK_FALSE(registry.valid(second_level.front()));
+}
+
+TEST_CASE("asteroid fragmentation emits lifecycle events") {
+  entt::registry registry;
+  hyperverse::DomainEventBus event_bus;
+  int fragmented_events = 0;
+  int consumed_events = 0;
+  event_bus.appendListener(
+    hyperverse::DomainEventType::AsteroidFragmented,
+    [&](const hyperverse::DomainEvent& event) {
+      CHECK(event.type == hyperverse::DomainEventType::AsteroidFragmented);
+      CHECK(event.count == 4);
+      CHECK(event.amount == Catch::Approx(0.0F));
+      ++fragmented_events;
+    }
+  );
+  event_bus.appendListener(
+    hyperverse::DomainEventType::AsteroidConsumed,
+    [&](const hyperverse::DomainEvent& event) {
+      CHECK(event.type == hyperverse::DomainEventType::AsteroidConsumed);
+      ++consumed_events;
+    }
+  );
+
+  const entt::entity splitting = make_fragmentable_asteroid(registry);
+  registry.get<hyperverse::AsteroidFragmentation>(splitting).remaining_breaks = 1;
+  const std::vector<entt::entity> fragments = hyperverse::fragment_asteroid(
+    registry,
+    event_bus,
+    splitting,
+    {.impact_kind = hyperverse::AsteroidImpactKind::Kinetic, .impact_velocity = {.x = 100.0F, .y = 0.0F}, .pieces = 4}
+  );
+
+  REQUIRE(fragments.size() == 4U);
+  event_bus.process();
+  CHECK(fragmented_events == 1);
+  CHECK(consumed_events == 0);
+
+  (void)hyperverse::fragment_asteroid(
+    registry,
+    event_bus,
+    fragments.front(),
+    {.impact_kind = hyperverse::AsteroidImpactKind::Kinetic, .impact_velocity = {.x = 100.0F, .y = 0.0F}, .pieces = 4}
+  );
+  event_bus.process();
+
+  CHECK(fragmented_events == 1);
+  CHECK(consumed_events == 1);
 }
 
 TEST_CASE("kinetic fragmentation transfers projectile velocity into every child") {

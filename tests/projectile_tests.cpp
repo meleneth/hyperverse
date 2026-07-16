@@ -81,14 +81,6 @@ TEST_CASE("held particle fire uses a four hertz FSM cadence") {
 TEST_CASE("particle cannon damages and shrinks asteroids on Jolt overlap") {
   TestAccountWorld world;
   hyperverse::AccountCtx account = world.account_context();
-  hyperverse::ParticleCannonHudSnapshot event_hud{};
-  account.event_bus().appendListener(
-    hyperverse::DomainEventType::ParticleImpact,
-    [&](const hyperverse::DomainEvent& event) {
-      CHECK(event.type == hyperverse::DomainEventType::ParticleImpact);
-      ++event_hud.impacts;
-    }
-  );
   const entt::entity asteroid = account.registry().create();
   account.registry().emplace<hyperverse::AsteroidBody>(
     asteroid,
@@ -96,6 +88,23 @@ TEST_CASE("particle cannon damages and shrinks asteroids on Jolt overlap") {
   );
   account.registry().emplace<hyperverse::MiningResource>(asteroid);
   account.registry().emplace<hyperverse::AsteroidMass>(asteroid, hyperverse::AsteroidMass{.initial_mass = 80.0F, .remaining_mass = 80.0F});
+  hyperverse::ParticleCannonHudSnapshot event_hud{};
+  int asteroid_damage_events = 0;
+  account.event_bus().appendListener(
+    hyperverse::DomainEventType::ParticleImpact,
+    [&](const hyperverse::DomainEvent& event) {
+      CHECK(event.type == hyperverse::DomainEventType::ParticleImpact);
+      ++event_hud.impacts;
+    }
+  );
+  account.event_bus().appendListener(
+    hyperverse::DomainEventType::AsteroidDamaged,
+    [&](const hyperverse::DomainEvent& event) {
+      CHECK(event.type == hyperverse::DomainEventType::AsteroidDamaged);
+      CHECK(event.subject == asteroid);
+      ++asteroid_damage_events;
+    }
+  );
   const entt::entity particle = account.registry().create();
   account.registry().emplace<hyperverse::ParticleShot>(
     particle,
@@ -110,10 +119,46 @@ TEST_CASE("particle cannon damages and shrinks asteroids on Jolt overlap") {
 
   CHECK(hud.impacts == 0);
   CHECK(event_hud.impacts == 1);
+  CHECK(asteroid_damage_events == 1);
   CHECK(account.registry().get<hyperverse::MiningResource>(asteroid).integrity == Catch::Approx(75.0F));
   CHECK(account.registry().get<hyperverse::AsteroidMass>(asteroid).remaining_mass == Catch::Approx(60.0F));
   CHECK(account.registry().get<hyperverse::AsteroidBody>(asteroid).radius == Catch::Approx(75.0F));
   CHECK(particle_count(account.registry()) == 0);
+}
+
+TEST_CASE("kinetic particle impacts can slow an asteroid from the front") {
+  TestAccountWorld world;
+  hyperverse::AccountCtx account = world.account_context();
+  const entt::entity asteroid = account.registry().create();
+  account.registry().emplace<hyperverse::AsteroidBody>(
+    asteroid,
+    hyperverse::AsteroidBody{
+      .position = {.x = 120.0F, .y = 100.0F},
+      .velocity = {.x = 90.0F, .y = 0.0F},
+      .radius = 80.0F,
+      .base_radius = 80.0F,
+    }
+  );
+  account.registry().emplace<hyperverse::MiningResource>(asteroid);
+  account.registry().emplace<hyperverse::AsteroidMass>(asteroid, hyperverse::AsteroidMass{.initial_mass = 80.0F, .remaining_mass = 80.0F});
+  const entt::entity particle = account.registry().create();
+  account.registry().emplace<hyperverse::ParticleShot>(
+    particle,
+    hyperverse::ParticleShot{
+      .position = {.x = 110.0F, .y = 100.0F},
+      .velocity = {.x = -400.0F, .y = 0.0F},
+      .damage = 25.0F,
+      .radius = 10.0F,
+    }
+  );
+  const entt::entity player = make_player(world, {.x = 100.0F, .y = 100.0F});
+
+  (void)hyperverse::update_particle_projectiles(
+    hyperverse::ProjectileSimCtx{tick_context(account, 0.0F), player},
+    {.asteroid_kinetic_impulse_scale = 0.20F, .impact_kind = hyperverse::AsteroidImpactKind::Kinetic}
+  );
+
+  CHECK(account.registry().get<hyperverse::AsteroidBody>(asteroid).velocity.x < 90.0F);
 }
 
 TEST_CASE("player particle shots damage raiders") {
