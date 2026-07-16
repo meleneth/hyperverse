@@ -24,10 +24,13 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <numbers>
 #include <thread>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace hyperverse {
@@ -95,15 +98,109 @@ void ensure_jolt_physics_ready() {
   return std::max(1.0F, length(velocity) + 1.0F);
 }
 
+[[nodiscard]] JPH::Quat rotation_z(float radians) {
+  return JPH::Quat::sRotation(JPH::Vec3::sAxisZ(), radians);
+}
+
+[[nodiscard]] JPH::Vec3 linear_velocity(Vec2 velocity) {
+  return JPH::Vec3(velocity.x, velocity.y, 0.0F);
+}
+
+[[nodiscard]] JPH::BodyID create_dynamic_sphere(
+  JPH::PhysicsSystem& physics_system,
+  float radius,
+  Vec2 position,
+  float rotation_radians,
+  Vec2 velocity,
+  float angular_velocity = 0.0F
+) {
+  JPH::BodyCreationSettings settings(
+    new JPH::SphereShape(radius),
+    JPH::RVec3(position.x, position.y, 0.0F),
+    rotation_z(rotation_radians),
+    JPH::EMotionType::Dynamic,
+    Layers::Moving
+  );
+  settings.mGravityFactor = 0.0F;
+  settings.mLinearDamping = 0.0F;
+  settings.mAngularDamping = 0.0F;
+  settings.mMaxLinearVelocity = jolt_velocity_limit(velocity);
+  settings.mMaxAngularVelocity = std::max(1.0F, std::abs(angular_velocity) + 1.0F);
+  settings.mLinearVelocity = linear_velocity(velocity);
+  settings.mAngularVelocity = JPH::Vec3(0.0F, 0.0F, angular_velocity);
+  return physics_system.GetBodyInterface().CreateAndAddBody(settings, JPH::EActivation::Activate);
+}
+
+void destroy_body(JPH::PhysicsSystem& physics_system, JPH::BodyID body_id) {
+  if (body_id.IsInvalid()) {
+    return;
+  }
+
+  JPH::BodyInterface& body_interface = physics_system.GetBodyInterface();
+  body_interface.RemoveBody(body_id);
+  body_interface.DestroyBody(body_id);
+}
+
+void sync_body_motion(
+  JPH::PhysicsSystem& physics_system,
+  JPH::BodyID body_id,
+  Vec2 position,
+  float rotation_radians,
+  Vec2 velocity,
+  float angular_velocity = 0.0F
+) {
+  JPH::BodyInterface& body_interface = physics_system.GetBodyInterface();
+  body_interface.SetMaxLinearVelocity(body_id, jolt_velocity_limit(velocity));
+  body_interface.SetMaxAngularVelocity(body_id, std::max(1.0F, std::abs(angular_velocity) + 1.0F));
+  body_interface.SetPositionRotationAndVelocity(
+    body_id,
+    JPH::RVec3(position.x, position.y, 0.0F),
+    rotation_z(rotation_radians),
+    linear_velocity(velocity),
+    JPH::Vec3(0.0F, 0.0F, angular_velocity)
+  );
+}
+
+struct AsteroidBodyHandle {
+  JPH::BodyID body_id{};
+  float radius{0.0F};
+};
+
 }  // namespace
 
 struct PhysicsWorld::Runtime {
   Runtime()
       : temp_allocator{2 * 1024 * 1024},
-        job_system{JPH::cMaxPhysicsJobs, JPH::cMaxPhysicsBarriers, worker_count()} {}
+        job_system{JPH::cMaxPhysicsJobs, JPH::cMaxPhysicsBarriers, worker_count()} {
+    ship_system.Init(1, 0, 1, 1, broad_phase_layer_interface, object_vs_broadphase_layer_filter, object_layer_pair_filter);
+    asteroid_system.Init(
+      256,
+      0,
+      1024,
+      1024,
+      broad_phase_layer_interface,
+      object_vs_broadphase_layer_filter,
+      object_layer_pair_filter
+    );
+  }
 
+  ~Runtime() {
+    destroy_body(ship_system, ship_body);
+    for (auto& [entity, body] : asteroid_bodies) {
+      (void)entity;
+      destroy_body(asteroid_system, body.body_id);
+    }
+  }
+
+  BroadPhaseLayerInterface broad_phase_layer_interface;
+  ObjectVsBroadPhaseLayerFilter object_vs_broadphase_layer_filter;
+  ObjectLayerPairFilter object_layer_pair_filter;
+  JPH::PhysicsSystem ship_system;
+  JPH::PhysicsSystem asteroid_system;
   JPH::TempAllocatorImpl temp_allocator;
   JPH::JobSystemThreadPool job_system;
+  JPH::BodyID ship_body{};
+  std::unordered_map<entt::entity, AsteroidBodyHandle> asteroid_bodies;
 };
 
 PhysicsWorld::PhysicsWorld() {
@@ -114,90 +211,93 @@ PhysicsWorld::PhysicsWorld() {
 PhysicsWorld::~PhysicsWorld() = default;
 
 void PhysicsWorld::integrate_ship(ShipMotion& ship, const SectorTuning& sector, float dt_seconds) {
-  BroadPhaseLayerInterface broad_phase_layer_interface;
-  ObjectVsBroadPhaseLayerFilter object_vs_broadphase_layer_filter;
-  ObjectLayerPairFilter object_layer_pair_filter;
-  JPH::PhysicsSystem physics_system;
-  physics_system.Init(1, 0, 1, 1, broad_phase_layer_interface, object_vs_broadphase_layer_filter, object_layer_pair_filter);
+  if (runtime_->ship_body.IsInvalid()) {
+    runtime_->ship_body = create_dynamic_sphere(runtime_->ship_system, 32.0F, ship.position, ship.facing_radians, ship.velocity);
+    runtime_->ship_system.OptimizeBroadPhase();
+  } else {
+    sync_body_motion(runtime_->ship_system, runtime_->ship_body, ship.position, ship.facing_radians, ship.velocity);
+  }
 
-  JPH::BodyInterface& body_interface = physics_system.GetBodyInterface();
-  JPH::BodyCreationSettings settings(
-    new JPH::SphereShape(32.0F),
-    JPH::RVec3(ship.position.x, ship.position.y, 0.0F),
-    JPH::Quat::sRotation(JPH::Vec3::sAxisZ(), ship.facing_radians),
-    JPH::EMotionType::Dynamic,
-    Layers::Moving
-  );
-  settings.mGravityFactor = 0.0F;
-  settings.mLinearDamping = 0.0F;
-  settings.mAngularDamping = 0.0F;
-  settings.mMaxLinearVelocity = jolt_velocity_limit(ship.velocity);
-  settings.mLinearVelocity = JPH::Vec3(ship.velocity.x, ship.velocity.y, 0.0F);
+  runtime_->ship_system.Update(dt_seconds, 1, &runtime_->temp_allocator, &runtime_->job_system);
 
-  const JPH::BodyID body_id = body_interface.CreateAndAddBody(settings, JPH::EActivation::Activate);
-  physics_system.Update(dt_seconds, 1, &runtime_->temp_allocator, &runtime_->job_system);
-
-  const JPH::RVec3 position = body_interface.GetPosition(body_id);
-  const JPH::Vec3 velocity = body_interface.GetLinearVelocity(body_id);
+  JPH::BodyInterface& body_interface = runtime_->ship_system.GetBodyInterface();
+  const JPH::RVec3 position = body_interface.GetPosition(runtime_->ship_body);
+  const JPH::Vec3 velocity = body_interface.GetLinearVelocity(runtime_->ship_body);
   ship.position = wrap_position({.x = static_cast<float>(position.GetX()), .y = static_cast<float>(position.GetY())}, sector);
   ship.velocity = {.x = velocity.GetX(), .y = velocity.GetY()};
 }
 
 void PhysicsWorld::integrate_asteroids(entt::registry& registry, const SectorTuning& sector, float dt_seconds) {
   std::vector<entt::entity> entities;
+  std::unordered_set<entt::entity> live_entities;
   for (auto [entity, asteroid] : registry.view<AsteroidBody>().each()) {
     (void)asteroid;
     entities.push_back(entity);
+    live_entities.insert(entity);
   }
+
+  for (auto iterator = runtime_->asteroid_bodies.begin(); iterator != runtime_->asteroid_bodies.end();) {
+    if (live_entities.contains(iterator->first)) {
+      ++iterator;
+      continue;
+    }
+
+    destroy_body(runtime_->asteroid_system, iterator->second.body_id);
+    iterator = runtime_->asteroid_bodies.erase(iterator);
+  }
+
   if (entities.empty()) {
     return;
   }
 
-  BroadPhaseLayerInterface broad_phase_layer_interface;
-  ObjectVsBroadPhaseLayerFilter object_vs_broadphase_layer_filter;
-  ObjectLayerPairFilter object_layer_pair_filter;
-  JPH::PhysicsSystem physics_system;
-  physics_system.Init(
-    static_cast<JPH::uint>(entities.size()),
-    0,
-    static_cast<JPH::uint>(entities.size() * entities.size()),
-    static_cast<JPH::uint>(entities.size() * entities.size()),
-    broad_phase_layer_interface,
-    object_vs_broadphase_layer_filter,
-    object_layer_pair_filter
-  );
-
-  JPH::BodyInterface& body_interface = physics_system.GetBodyInterface();
-  std::vector<JPH::BodyID> body_ids;
-  body_ids.reserve(entities.size());
+  JPH::BodyInterface& body_interface = runtime_->asteroid_system.GetBodyInterface();
+  bool broadphase_dirty = false;
 
   for (entt::entity entity : entities) {
     AsteroidBody& asteroid = registry.get<AsteroidBody>(entity);
-    JPH::BodyCreationSettings settings(
-      new JPH::SphereShape(asteroid.radius),
-      JPH::RVec3(asteroid.position.x, asteroid.position.y, 0.0F),
-      JPH::Quat::sRotation(JPH::Vec3::sAxisZ(), asteroid.rotation_radians),
-      JPH::EMotionType::Dynamic,
-      Layers::Moving
-    );
-    settings.mGravityFactor = 0.0F;
-    settings.mLinearDamping = 0.0F;
-    settings.mAngularDamping = 0.0F;
-    settings.mMaxLinearVelocity = jolt_velocity_limit(asteroid.velocity);
-    settings.mLinearVelocity = JPH::Vec3(asteroid.velocity.x, asteroid.velocity.y, 0.0F);
-    settings.mAngularVelocity = JPH::Vec3(0.0F, 0.0F, asteroid.angular_velocity);
-    body_ids.push_back(body_interface.CreateAndAddBody(settings, JPH::EActivation::Activate));
+    auto [iterator, inserted] = runtime_->asteroid_bodies.try_emplace(entity);
+    AsteroidBodyHandle& body = iterator->second;
+
+    if (inserted || body.body_id.IsInvalid()) {
+      body.body_id = create_dynamic_sphere(
+        runtime_->asteroid_system,
+        asteroid.radius,
+        asteroid.position,
+        asteroid.rotation_radians,
+        asteroid.velocity,
+        asteroid.angular_velocity
+      );
+      body.radius = asteroid.radius;
+      broadphase_dirty = true;
+    } else {
+      if (std::abs(body.radius - asteroid.radius) > std::numeric_limits<float>::epsilon()) {
+        body_interface.SetShape(body.body_id, new JPH::SphereShape(asteroid.radius), true, JPH::EActivation::Activate);
+        body.radius = asteroid.radius;
+        broadphase_dirty = true;
+      }
+      sync_body_motion(
+        runtime_->asteroid_system,
+        body.body_id,
+        asteroid.position,
+        asteroid.rotation_radians,
+        asteroid.velocity,
+        asteroid.angular_velocity
+      );
+    }
   }
 
-  physics_system.OptimizeBroadPhase();
-  physics_system.Update(dt_seconds, 1, &runtime_->temp_allocator, &runtime_->job_system);
+  if (broadphase_dirty) {
+    runtime_->asteroid_system.OptimizeBroadPhase();
+  }
+  runtime_->asteroid_system.Update(dt_seconds, 1, &runtime_->temp_allocator, &runtime_->job_system);
 
   constexpr float full_turn = std::numbers::pi_v<float> * 2.0F;
-  for (std::size_t index = 0; index < entities.size(); ++index) {
-    AsteroidBody& asteroid = registry.get<AsteroidBody>(entities[index]);
-    const JPH::RVec3 position = body_interface.GetPosition(body_ids[index]);
-    const JPH::Vec3 velocity = body_interface.GetLinearVelocity(body_ids[index]);
-    const JPH::Vec3 angular_velocity = body_interface.GetAngularVelocity(body_ids[index]);
+  for (entt::entity entity : entities) {
+    AsteroidBody& asteroid = registry.get<AsteroidBody>(entity);
+    const JPH::BodyID body_id = runtime_->asteroid_bodies.at(entity).body_id;
+    const JPH::RVec3 position = body_interface.GetPosition(body_id);
+    const JPH::Vec3 velocity = body_interface.GetLinearVelocity(body_id);
+    const JPH::Vec3 angular_velocity = body_interface.GetAngularVelocity(body_id);
     asteroid.position = wrap_position({.x = static_cast<float>(position.GetX()), .y = static_cast<float>(position.GetY())}, sector);
     asteroid.velocity = {.x = velocity.GetX(), .y = velocity.GetY()};
     asteroid.angular_velocity = angular_velocity.GetZ();
