@@ -24,6 +24,20 @@ TEST_CASE("sector pressure escalates on a tunable interval") {
   CHECK(after.escalation_announced);
 }
 
+TEST_CASE("sector pressure eventually opens a terminal space tear") {
+  hyperverse::SectorPressureModel pressure;
+
+  const hyperverse::SectorPressureHudSnapshot hud = hyperverse::update_sector_pressure(
+    pressure,
+    30.0F,
+    {.escalation_interval_seconds = 10.0F, .universe_tear_level = 3}
+  );
+
+  CHECK(hud.escalation_level == 3);
+  CHECK(hud.universe_tear_open);
+  CHECK(pressure.universe_tear_open);
+}
+
 TEST_CASE("sector pressure announcement expires after the HUD window") {
   hyperverse::SectorPressureModel pressure;
   const hyperverse::SectorPressureTuning tuning{

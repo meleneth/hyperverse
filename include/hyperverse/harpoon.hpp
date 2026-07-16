@@ -25,6 +25,7 @@ struct HarpoonTuning {
   float release_range{2400.0F};
   float asteroid_brake_per_second{2400.0F};
   float ship_pull_per_second{720.0F};
+  float ship_effective_mass{120.0F};
 };
 
 struct HarpoonHudSnapshot {

@@ -82,7 +82,8 @@ meaningful component groups.
 The harpoon latches to the locked asteroid. While latched, the ship is pulled toward the rock's
 surface motion, including spin, and the asteroid receives full-engine-power velocity matching
 toward the ship velocity. This makes fast spinners dangerous and gives the player a tool for
-slowing rocks enough for drones to mine.
+slowing rocks enough for drones to mine. Harpoon influence is mass-limited; very large rocks are
+wrangled over time rather than stopped outright.
 
 Mining drones operate autonomously against valid target sizes, spread around work targets, return
 to formation, and break off when their target is invalid. The current prototype still starts with
@@ -90,7 +91,8 @@ eight strong drones so high-end behavior is visible before progression is design
 
 Cargo is generated from extracted mass and ore value, inherits ore color, follows the ship as a
 train during escort, stages as a group near the jump gate, and extracts sequentially. Raiders can
-attack cargo and the player; gate arrival can spawn combat raiders.
+attack cargo and the player; gate arrival can spawn combat raiders. Raider AI now tracks explicit
+tasks including cargo theft, player harassment, covering an active thief, and full aggression.
 
 The HUD reports position, speed, ship health, round timer, threat level, target state, target mass,
 ore rarity value, mineral composition, extracted ore, cargo quota, sector pressure, drone state,
@@ -103,10 +105,10 @@ current threat level, next threat countdown, and progress toward the next escala
 
 - Ore value is tiered and color-coded by rarity. Cheap bulk ore is intentionally much less important than premium rare, exotic, and anomalous material.
 - Asteroid mass and structural damage are separate. Damage means "how close this rock is to breaking up"; extraction means "how much useful mass has been removed."
-- Round timer and threat escalation are primary pressure systems. Threat level advances on the development one-minute cadence and is visible as a countdown/progress bar.
+- Round timer and threat escalation are primary pressure systems. Threat level advances on the development one-minute cadence and is visible as a countdown/progress bar. Mining eventually destabilizes local space enough to open a terminal space tear.
 - Large asteroids have two break levels. Breakup creates recoverable component chunks from the parent mineral distribution, with some material deliberately lost when the parent has several meaningful components.
 - Kinetic particle impacts transfer velocity into asteroid mass. Glancing kinetic hits also impart rotational velocity from impact angle, so spinning rocks become a real hazard.
-- The harpoon latches to locked asteroids, pulls the ship toward the rock's surface motion, and applies full-engine-power velocity matching to help slow a rock for drone harvesting. Boosting detaches the harpoon.
+- The harpoon latches to locked asteroids, pulls the ship toward the rock's surface motion, and applies mass-limited full-engine-power velocity matching to help slow a rock for drone harvesting. Boosting detaches the harpoon.
 - Mining drones cannot work the largest asteroid tier. The player must break big rocks into medium or small pieces before drones can safely mine them.
 - Mined cargo starts at the gathering site. The extraction gate is derived as the furthest wrapped-sector point from that gathering site.
 - During escort, cargo follows the player as a train. Once the player reaches the extraction gate, cargo remains gate-bound and stages as a group near the gate before loading starts.
@@ -124,7 +126,7 @@ current threat level, next threat countdown, and progress toward the next escala
 - Expand asteroid scanning into real pre-breakup decision making with chemical makeup, fracture maps, volatile hazards, and tool recommendations.
 - Add more asteroid families and hazards: heat, gas, radiation, brittle fracture, controlled detonation, debris, and material-specific reactions.
 - Add additional projectile/tool behavior: laser-coherent breakup, kinetic velocity transfer, explosive radial fragmentation, and richer harpoon/tether stress.
-- Turn threat level into more than HUD pressure: escalating raider spawns, combat intensity, contract modifiers, and gate danger.
+- Expand threat level effects: escalating raider spawns, combat intensity, contract modifiers, gate danger, and pre-tear warning behaviors.
 - Improve cargo escort state machines: detached cargo recovery, tow stress, extraction sequencing, and loss/payment consequences.
 - Move more lifecycle behavior behind EventPP responders and typed contexts; keep shrinking `App` toward platform setup plus `GrandCentral` startup.
 - Replace placeholder art and temporary tuning with reviewed production assets, data-driven tuning, and richer feedback.

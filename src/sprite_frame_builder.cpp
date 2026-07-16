@@ -221,7 +221,8 @@ void add_urgency_hud(
   add_hud_text(sprites, "ROUND " + std::to_string(round_remaining), -0.20F, -0.955F, 0.034F, 0.92F, 1.0F, 0.72F);
   add_hud_text(
     sprites,
-    "THREAT " + std::to_string(pressure_hud.escalation_level) + " NEXT " + std::to_string(next_threat),
+    pressure_hud.universe_tear_open ? "SPACE TEAR OPEN" :
+                                      "THREAT " + std::to_string(pressure_hud.escalation_level) + " NEXT " + std::to_string(next_threat),
     -0.26F,
     -0.912F,
     0.03F,

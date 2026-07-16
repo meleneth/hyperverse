@@ -22,6 +22,7 @@ SectorPressureHudSnapshot update_sector_pressure(
     pressure.announcement_seconds_remaining =
       std::max(0.0F, pressure.announcement_seconds_remaining - std::max(0.0F, dt_seconds));
   }
+  pressure.universe_tear_open = pressure.escalation_level >= tuning.universe_tear_level;
 
   const float next_boundary = static_cast<float>(pressure.escalation_level + 1) * interval;
   const float level_elapsed = pressure.elapsed_seconds - (static_cast<float>(pressure.escalation_level) * interval);
@@ -32,6 +33,7 @@ SectorPressureHudSnapshot update_sector_pressure(
     .pressure_fraction = std::clamp(static_cast<float>(pressure.escalation_level) * tuning.pressure_per_level, 0.0F, 1.0F),
     .escalation_progress_fraction = std::clamp(level_elapsed / interval, 0.0F, 1.0F),
     .escalation_announced = pressure.announcement_seconds_remaining > 0.0F,
+    .universe_tear_open = pressure.universe_tear_open,
   };
 }
 

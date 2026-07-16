@@ -32,6 +32,7 @@ TEST_CASE("latched harpoon bleeds asteroid velocity toward ship velocity") {
     asteroid,
     hyperverse::AsteroidBody{.position = {.x = 500.0F, .y = 100.0F}, .velocity = {.x = 300.0F, .y = 0.0F}}
   );
+  registry.emplace<hyperverse::AsteroidMass>(asteroid, hyperverse::AsteroidMass{.initial_mass = 100.0F, .remaining_mass = 100.0F});
   hyperverse::HarpoonModel harpoon{.phase = hyperverse::HarpoonPhase::Latched, .target = asteroid};
   hyperverse::ShipMotion ship{.position = {.x = 100.0F, .y = 100.0F}, .velocity = {.x = 0.0F, .y = 0.0F}};
 
@@ -47,6 +48,31 @@ TEST_CASE("latched harpoon bleeds asteroid velocity toward ship velocity") {
   );
 
   CHECK(registry.get<hyperverse::AsteroidBody>(asteroid).velocity.x == Catch::Approx(250.0F));
+}
+
+TEST_CASE("harpoon has limited authority over high mass asteroids") {
+  entt::registry registry;
+  const entt::entity asteroid = registry.create();
+  registry.emplace<hyperverse::AsteroidBody>(
+    asteroid,
+    hyperverse::AsteroidBody{.position = {.x = 500.0F, .y = 100.0F}, .velocity = {.x = 300.0F, .y = 0.0F}}
+  );
+  registry.emplace<hyperverse::AsteroidMass>(asteroid, hyperverse::AsteroidMass{.initial_mass = 1200.0F, .remaining_mass = 1200.0F});
+  hyperverse::HarpoonModel harpoon{.phase = hyperverse::HarpoonPhase::Latched, .target = asteroid};
+  hyperverse::ShipMotion ship{.position = {.x = 100.0F, .y = 100.0F}, .velocity = {.x = 0.0F, .y = 0.0F}};
+
+  (void)hyperverse::update_harpoon(
+    harpoon,
+    registry,
+    {},
+    ship,
+    {},
+    {.width = 9000.0F, .height = 9000.0F},
+    0.5F,
+    {.asteroid_brake_per_second = 100.0F, .ship_pull_per_second = 0.0F, .ship_effective_mass = 120.0F}
+  );
+
+  CHECK(registry.get<hyperverse::AsteroidBody>(asteroid).velocity.x == Catch::Approx(295.0F));
 }
 
 TEST_CASE("latched spinning asteroid can hurl the ship") {

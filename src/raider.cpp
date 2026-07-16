@@ -24,6 +24,32 @@ namespace {
   return selected;
 }
 
+[[nodiscard]] bool cargo_thief_needs_cover(entt::registry& registry) {
+  for (auto [entity, raider] : registry.view<RaiderShip>().each()) {
+    (void)entity;
+    if (
+      raider.role == RaiderRole::CargoThief &&
+      (raider.phase == RaiderPhase::Disrupting || raider.phase == RaiderPhase::Towing)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+[[nodiscard]] RaiderTask select_raider_task(const RaiderShip& raider, entt::registry& registry, const CargoEscortState& escort) {
+  if (raider.role == RaiderRole::CargoThief) {
+    return RaiderTask::StealCargo;
+  }
+  if (escort.phase == CargoEscortPhase::Extracting || escort.phase == CargoEscortPhase::Complete) {
+    return RaiderTask::FullAggression;
+  }
+  if (cargo_thief_needs_cover(registry)) {
+    return RaiderTask::CoverThief;
+  }
+  return RaiderTask::HarassPlayer;
+}
+
 }  // namespace
 
 void spawn_gate_combat_raiders(
@@ -47,6 +73,7 @@ void spawn_gate_combat_raiders(
       RaiderShip{
         .position = wrap_position(gate_position + offset, sector),
         .role = RaiderRole::Combat,
+        .task = RaiderTask::FullAggression,
         .integrity = 90.0F,
         .max_integrity = 90.0F,
       }
@@ -72,10 +99,15 @@ RaiderHudSnapshot update_raider_threat(
     return {};
   }
 
+  raider.task = select_raider_task(raider, registry, escort);
   if (raider.role == RaiderRole::Combat) {
     const Vec2 to_player = wrapped_delta(raider.position, ship.position, sector);
     const float player_distance = length(to_player);
-    if (player_distance > tuning.combat_standoff) {
+    const float standoff =
+      raider.task == RaiderTask::FullAggression ? tuning.combat_standoff * 0.55F :
+      raider.task == RaiderTask::CoverThief ? tuning.combat_standoff * 1.25F :
+      tuning.combat_standoff;
+    if (player_distance > standoff) {
       raider.phase = RaiderPhase::Approaching;
       raider.velocity = normalize_or_zero(to_player) * tuning.max_speed;
       raider.position = wrap_position(raider.position + (raider.velocity * dt_seconds), sector);
@@ -85,6 +117,7 @@ RaiderHudSnapshot update_raider_threat(
     }
     return {
       .phase = raider.phase,
+      .task = raider.task,
       .target_distance = player_distance,
       .active = true,
     };
@@ -152,6 +185,7 @@ RaiderHudSnapshot update_raider_threat(
   return {
     .target_box = raider.target_box,
     .phase = raider.phase,
+    .task = raider.task,
     .target_distance = target_distance,
     .disruption_fraction = raider.disruption_seconds / std::max(tuning.disruption_seconds, std::numeric_limits<float>::epsilon()),
     .escape_distance =

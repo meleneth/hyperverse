@@ -153,7 +153,21 @@ The harpoon latches to locked asteroids and uses the ship engine as the asteroid
 
 It is not a magic brake. The ship is pulled toward the asteroid surface velocity, including spin, so large spinners are dangerous. Burst speed detaches the harpoon immediately.
 
-## D024: Weapon Firing Architecture
+Harpoon influence on the asteroid is mass-limited. Large rocks can be wrangled over time, but they should not stop as if the ship were all-powerful.
+
+## D024: Threat Terminal State
+
+Mining degrades local space. If the player stays alive indefinitely, pressure eventually opens a terminal space tear that consumes the ship.
+
+This gives the round an absolute endpoint and keeps optimal play from becoming "survive forever."
+
+## D025: Raider Tasks
+
+Raiders carry an explicit current task separate from coarse movement phase.
+
+Initial tasks are cargo theft, player harassment, cover for an active thief, and full aggression. This gives raider groups room to coordinate without encoding all behavior in one theft path.
+
+## D026: Weapon Firing Architecture
 
 Particle beam firing should be event-driven and modeled as a small FSM.
 
@@ -161,7 +175,7 @@ The particle beam is a dual-fire weapon with two side-by-side shots. Each shot h
 
 The FSM should consume semantic fire intent and simulation-clock events, then emit projectile spawn events.
 
-## D025: Universe Clock
+## D027: Universe Clock
 
 The canonical simulation clock is 60 Hz.
 

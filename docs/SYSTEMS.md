@@ -147,12 +147,42 @@ The harpoon is fired at the currently locked asteroid.
 
 While latched:
 
-- the asteroid receives full-engine-power velocity matching toward the ship velocity
+- the asteroid receives mass-limited full-engine-power velocity matching toward the ship velocity
 - the ship is pulled toward the asteroid surface velocity, including spin
 - excessive range releases the tether
 - burst speed releases the tether immediately
 
-The intended use is to get ahead of a moving rock, latch it, and use the ship's engine to bleed enough speed for drones to harvest safely. The intended risk is that a large or fast-spinning rock can throw the ship around.
+The intended use is to get ahead of a moving rock, latch it, and use the ship's engine to bleed enough speed for drones to harvest safely. The intended risk is that a large or fast-spinning rock can throw the ship around. The player is a wrangler taming something larger, not an all-powerful stopping machine.
+
+## Threat Pressure
+
+Mining destabilizes local space.
+
+Threat level advances on the canonical simulation clock. Development builds currently use a one-minute escalation cadence so pressure behavior is observable quickly. The design target can stretch this for longer contracts.
+
+Escalation should affect:
+
+- raider count
+- raider task mix
+- raider aggression
+- gate danger
+- contract modifiers
+- HUD warning intensity
+
+If the player stays indefinitely, local space eventually tears open and consumes the ship. This terminal state prevents survival from becoming an infinite optimization problem.
+
+## Raiders
+
+Raiders have a role and a current task.
+
+Current tasks:
+
+- steal cargo
+- harass the player
+- cover an active cargo thief
+- full aggression
+
+Cargo thieves prioritize cargo pod theft. Combat raiders harass the player by default, switch to cover behavior when a thief is actively disrupting or towing cargo, and switch to full aggression during extraction or terminal gate pressure.
 
 ## Weapons
 

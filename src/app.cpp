@@ -266,6 +266,11 @@ int App::run(AccountCtx& account) {
         if (pressure.escalation_level > previous_pressure_level) {
           push_hud_notice(hud_notice, "THREAT LEVEL INCREASED");
         }
+        if (pressure_hud.universe_tear_open) {
+          push_hud_notice(hud_notice, "SPACE TEAR CONSUMING YOU");
+          ship_health.shields = 0.0F;
+          ship_health.armor = 0.0F;
+        }
         collision_hud = predict_ship_asteroid_collision(ship, account.registry(), sector);
       }
 

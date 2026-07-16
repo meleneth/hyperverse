@@ -6,12 +6,14 @@ struct SectorPressureModel {
   float elapsed_seconds{0.0F};
   int escalation_level{0};
   float announcement_seconds_remaining{0.0F};
+  bool universe_tear_open{false};
 };
 
 struct SectorPressureTuning {
   float escalation_interval_seconds{60.0F};
   float announcement_duration_seconds{8.0F};
   float pressure_per_level{0.18F};
+  int universe_tear_level{8};
 };
 
 struct SectorPressureHudSnapshot {
@@ -21,6 +23,7 @@ struct SectorPressureHudSnapshot {
   float pressure_fraction{0.0F};
   float escalation_progress_fraction{0.0F};
   bool escalation_announced{false};
+  bool universe_tear_open{false};
 };
 
 [[nodiscard]] SectorPressureHudSnapshot update_sector_pressure(

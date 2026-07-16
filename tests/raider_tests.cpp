@@ -28,6 +28,7 @@ TEST_CASE("raider acquires and approaches the rearmost cargo box during escort")
 
   CHECK(hud.active);
   CHECK(hud.phase == hyperverse::RaiderPhase::Approaching);
+  CHECK(hud.task == hyperverse::RaiderTask::StealCargo);
   CHECK(hud.target_box == rear);
   CHECK(raider.target_box == rear);
   CHECK(raider.position.x == Catch::Approx(200.0F));
@@ -177,9 +178,55 @@ TEST_CASE("gate combat raiders spawn as player attackers with particle cannons")
   int combat_raiders = 0;
   for (auto [entity, raider] : registry.view<hyperverse::RaiderShip>().each()) {
     CHECK(raider.role == hyperverse::RaiderRole::Combat);
+    CHECK(raider.task == hyperverse::RaiderTask::FullAggression);
     CHECK(registry.all_of<hyperverse::ParticleCannonModel>(entity));
     ++combat_raiders;
   }
 
   CHECK(combat_raiders == 3);
+}
+
+TEST_CASE("combat raiders switch to cover when a thief is stealing cargo") {
+  entt::registry registry;
+  const entt::entity thief_entity = registry.create();
+  registry.emplace<hyperverse::RaiderShip>(
+    thief_entity,
+    hyperverse::RaiderShip{.phase = hyperverse::RaiderPhase::Towing, .role = hyperverse::RaiderRole::CargoThief}
+  );
+  hyperverse::RaiderShip combat{
+    .position = {.x = 100.0F, .y = 100.0F},
+    .role = hyperverse::RaiderRole::Combat,
+  };
+
+  const hyperverse::RaiderHudSnapshot hud = hyperverse::update_raider_threat(
+    combat,
+    registry,
+    {.phase = hyperverse::CargoEscortPhase::EscortActive},
+    {.position = {.x = 400.0F, .y = 100.0F}},
+    {.width = 9000.0F, .height = 9000.0F},
+    0.0F
+  );
+
+  CHECK(hud.task == hyperverse::RaiderTask::CoverThief);
+  CHECK(combat.task == hyperverse::RaiderTask::CoverThief);
+}
+
+TEST_CASE("combat raiders switch to full aggression during extraction") {
+  entt::registry registry;
+  hyperverse::RaiderShip combat{
+    .position = {.x = 100.0F, .y = 100.0F},
+    .role = hyperverse::RaiderRole::Combat,
+  };
+
+  const hyperverse::RaiderHudSnapshot hud = hyperverse::update_raider_threat(
+    combat,
+    registry,
+    {.phase = hyperverse::CargoEscortPhase::Extracting},
+    {.position = {.x = 400.0F, .y = 100.0F}},
+    {.width = 9000.0F, .height = 9000.0F},
+    0.0F
+  );
+
+  CHECK(hud.task == hyperverse::RaiderTask::FullAggression);
+  CHECK(combat.task == hyperverse::RaiderTask::FullAggression);
 }

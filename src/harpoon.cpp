@@ -1,5 +1,7 @@
 #include "hyperverse/harpoon.hpp"
 
+#include "hyperverse/asteroid_mass.hpp"
+
 #include <algorithm>
 
 namespace hyperverse {
@@ -13,6 +15,12 @@ namespace {
   const Vec2 radial = normalize_or_zero(wrapped_delta(asteroid.position, ship.position, sector));
   const Vec2 tangent{.x = -radial.y, .y = radial.x};
   return asteroid.velocity + (tangent * asteroid.angular_velocity * asteroid.radius);
+}
+
+[[nodiscard]] float asteroid_influence_scale(entt::registry& registry, entt::entity target, const HarpoonTuning& tuning) {
+  const AsteroidMass* mass = registry.try_get<AsteroidMass>(target);
+  const float target_mass = std::max(mass != nullptr ? mass->remaining_mass : tuning.ship_effective_mass, 1.0F);
+  return std::clamp(tuning.ship_effective_mass / target_mass, 0.02F, 1.0F);
 }
 
 }  // namespace
@@ -55,7 +63,8 @@ HarpoonHudSnapshot update_harpoon(
   }
 
   const Vec2 velocity_delta = ship.velocity - asteroid.velocity;
-  asteroid.velocity += clamp_length(velocity_delta, tuning.asteroid_brake_per_second * std::max(0.0F, dt_seconds));
+  const float asteroid_authority = tuning.asteroid_brake_per_second * asteroid_influence_scale(registry, model.target, tuning);
+  asteroid.velocity += clamp_length(velocity_delta, asteroid_authority * std::max(0.0F, dt_seconds));
   const Vec2 ship_tow_velocity = surface_velocity_at_ship(asteroid, ship, sector);
   ship.velocity += clamp_length(ship_tow_velocity - ship.velocity, tuning.ship_pull_per_second * std::max(0.0F, dt_seconds));
 

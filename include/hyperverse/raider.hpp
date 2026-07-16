@@ -23,12 +23,20 @@ enum class RaiderRole {
   Combat,
 };
 
+enum class RaiderTask {
+  HarassPlayer,
+  CoverThief,
+  StealCargo,
+  FullAggression,
+};
+
 struct RaiderShip {
   Vec2 position{};
   Vec2 velocity{};
   entt::entity target_box{entt::null};
   RaiderPhase phase{RaiderPhase::Idle};
   RaiderRole role{RaiderRole::CargoThief};
+  RaiderTask task{RaiderTask::StealCargo};
   float disruption_seconds{0.0F};
   float integrity{120.0F};
   float max_integrity{120.0F};
@@ -53,6 +61,7 @@ void spawn_gate_combat_raiders(
 struct RaiderHudSnapshot {
   entt::entity target_box{entt::null};
   RaiderPhase phase{RaiderPhase::Idle};
+  RaiderTask task{RaiderTask::StealCargo};
   float target_distance{0.0F};
   float disruption_fraction{0.0F};
   float escape_distance{0.0F};
