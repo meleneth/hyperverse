@@ -12,6 +12,7 @@
 #include "hyperverse/pressure.hpp"
 #include "hyperverse/projectile.hpp"
 #include "hyperverse/raider.hpp"
+#include "hyperverse/ship_status.hpp"
 #include "hyperverse/targeting.hpp"
 
 #include <cmath>
@@ -48,6 +49,9 @@ VerticalSliceEntities seed_vertical_slice(AccountCtx& account) {
   auto& ship = account.registry().emplace<ShipMotion>(entities.player);
   ship.position = {.x = 4500.0F, .y = 4500.0F};
   account.registry().emplace<CameraState>(entities.player, CameraState{.position = ship.position});
+  account.registry().emplace<ShipHealth>(entities.player);
+  account.registry().emplace<ShipComputer>(entities.player);
+  account.registry().emplace<RoundTimer>(entities.player);
   account.registry().emplace<TargetLockModel>(entities.player);
   account.registry().emplace<MiningHudSnapshot>(entities.player);
   account.registry().emplace<CargoManifest>(entities.player);
@@ -76,6 +80,7 @@ VerticalSliceEntities seed_vertical_slice(AccountCtx& account) {
       MiningDrone{
         .position = {.x = ship.position.x + (std::cos(angle) * 180.0F), .y = ship.position.y + (std::sin(angle) * 180.0F)},
         .facing_radians = angle,
+        .work_angle_radians = angle,
       }
     );
     entities.mining_drones.push_back(drone_entity);

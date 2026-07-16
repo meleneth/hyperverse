@@ -121,7 +121,9 @@ add_library(
   src/sector.cpp
   src/scoped_log.cpp
   src/sdl_platform.cpp
+  src/ship_status.cpp
   src/jolt_shape_queries.cpp
+  src/sprite_collision_shape_data.cpp
   src/sprite_collision_shape.cpp
   src/targeting.cpp
   src/sprite_frame_builder.cpp
@@ -200,6 +202,7 @@ if(HYPERVERSE_BUILD_TESTS)
     tests/raider_tests.cpp
     tests/render_frame_tests.cpp
     tests/sector_tests.cpp
+    tests/ship_status_tests.cpp
     tests/sprite_collision_shape_tests.cpp
     tests/targeting_tests.cpp
   )

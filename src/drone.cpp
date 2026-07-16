@@ -11,6 +11,10 @@ namespace {
          registry.get<MiningResource>(target).integrity > 0.0F;
 }
 
+[[nodiscard]] Vec2 direction_from_angle(float radians) {
+  return {.x = std::cos(radians), .y = std::sin(radians)};
+}
+
 }  // namespace
 
 MiningDroneHudSnapshot update_mining_drone(
@@ -37,13 +41,15 @@ MiningDroneHudSnapshot update_mining_drone(
 
   AsteroidBody& asteroid = registry.get<AsteroidBody>(drone.target);
   MiningResource& resource = registry.get<MiningResource>(drone.target);
+  const float work_radius = asteroid.radius + tuning.work_standoff;
+  const Vec2 work_position = wrap_position(asteroid.position + (direction_from_angle(drone.work_angle_radians) * work_radius), sector);
+  const Vec2 to_work_position = wrapped_delta(drone.position, work_position, sector);
   const Vec2 to_target = wrapped_delta(drone.position, asteroid.position, sector);
-  const float distance = length(to_target);
-  hud.target_distance = distance;
+  hud.target_distance = length(to_target);
 
-  if (distance > tuning.mining_range) {
+  if (length(to_work_position) > tuning.arrival_tolerance) {
     drone.phase = MiningDronePhase::Travelling;
-    drone.velocity = normalize_or_zero(to_target) * tuning.max_speed;
+    drone.velocity = normalize_or_zero(to_work_position) * tuning.max_speed;
     drone.facing_radians = std::atan2(drone.velocity.y, drone.velocity.x);
     drone.position = wrap_position(drone.position + (drone.velocity * dt_seconds), sector);
   } else {

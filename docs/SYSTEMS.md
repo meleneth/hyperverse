@@ -122,6 +122,21 @@ The universe needs one canonical simulation clock.
 
 Current code uses fixed timestep simulation, but the project still needs an explicit base tick decision that gameplay schedulers, weapon FSMs, AI, escalation, cooldowns, and HUD timings can share.
 
+## Ship Status and Computers
+
+The ship has two survivability pools:
+
+- shields regenerate over time
+- armor does not regenerate and requires repair
+
+The HUD is not assumed to be perfectly effective forever. Ship computer upgrades should determine HUD effectiveness, scan resolution, prediction quality, warning clarity, and how much hidden calculation is exposed. Development starts with maxed-out computer capability so the full information model can be built and tuned first; game flow should later start the player with weak equipment that improves through farming and upgrades.
+
+## Collision Shapes
+
+Sprite collision shapes are generated from alpha masks rather than hand-authored boxes.
+
+`scripts/generate-sprite-collision-shapes.py` reads transparent areas from sprite PNGs and emits checked-in C++ data. Runtime Jolt queries build compound shapes from that generated data. This keeps collision reviewable and avoids decoding image files during collision setup.
+
 ## Drones
 
 Drones are mostly autonomous.

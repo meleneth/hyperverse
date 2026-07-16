@@ -1,6 +1,6 @@
 #include "jolt_shape_queries.hpp"
 
-#include "png_rgba.hpp"
+#include "hyperverse/sprite_collision_shape_data.hpp"
 
 #if defined(__GNUC__) || defined(__clang__)
 #pragma GCC diagnostic push
@@ -18,6 +18,7 @@
 #include <Jolt/Physics/Collision/Shape/Shape.h>
 #include <Jolt/Physics/Collision/Shape/ConvexHullShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
+#include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
 #include <Jolt/RegisterTypes.h>
 #if defined(__GNUC__) || defined(__clang__)
 #pragma GCC diagnostic pop
@@ -43,44 +44,48 @@ void ensure_jolt_shape_queries_ready() {
   });
 }
 
-[[nodiscard]] const char* sprite_path(SpriteCollisionShape shape) {
-  switch (shape) {
-    case SpriteCollisionShape::Ship:
-      return "assets/sector7/sprites/ship.png";
-    case SpriteCollisionShape::Rock:
-      return "assets/sector7/sprites/rock1.png";
-    case SpriteCollisionShape::Particle:
-      return "assets/sector7/sprites/particle.png";
-  }
-  return "assets/sector7/sprites/rock1.png";
-}
-
 [[nodiscard]] int shape_key(SpriteCollisionShape shape, float radius) {
   return (static_cast<int>(shape) * 1'000'000'000) + static_cast<int>(std::lround(radius * 1000.0F));
 }
 
-[[nodiscard]] JPH::Array<JPH::Vec3> extruded_hull_points(const SpriteSilhouette& silhouette) {
+[[nodiscard]] JPH::Array<JPH::Vec3> extruded_hull_points(const SpriteCollisionPartView& part) {
   JPH::Array<JPH::Vec3> points;
   constexpr float half_thickness = 0.04F;
-  points.reserve(static_cast<JPH::uint>(silhouette.hull.size() * 2U));
-  for (Vec2 point : silhouette.hull) {
+  points.reserve(static_cast<JPH::uint>(part.point_count * 2U));
+  for (std::size_t index = 0; index < part.point_count; ++index) {
+    const Vec2 point = part.points[index];
     points.push_back(JPH::Vec3(point.x, point.y, -half_thickness));
     points.push_back(JPH::Vec3(point.x, point.y, half_thickness));
   }
   return points;
 }
 
-[[nodiscard]] JPH::ShapeRefC create_sprite_shape(SpriteCollisionShape shape) {
-  const SpriteSilhouette silhouette = extract_sprite_silhouette(load_png_rgba(sprite_path(shape)));
-  if (silhouette.hull.size() < 3U) {
-    return new JPH::SphereShape(1.0F);
-  }
-
-  const JPH::Array<JPH::Vec3> points = extruded_hull_points(silhouette);
+[[nodiscard]] JPH::ShapeRefC create_convex_part(const SpriteCollisionPartView& part) {
+  const JPH::Array<JPH::Vec3> points = extruded_hull_points(part);
   const JPH::ConvexHullShapeSettings settings{points, 0.0F};
   JPH::ShapeSettings::ShapeResult result = settings.Create();
   if (!result.IsValid()) {
     throw std::runtime_error("failed to create sprite collision shape");
+  }
+  return result.Get();
+}
+
+[[nodiscard]] JPH::ShapeRefC create_sprite_shape(SpriteCollisionShape shape) {
+  const SpriteCollisionShapeView view = sprite_collision_shape_data(shape);
+  if (view.part_count == 0U) {
+    return new JPH::SphereShape(1.0F);
+  }
+  if (view.part_count == 1U) {
+    return create_convex_part(view.parts[0]);
+  }
+
+  JPH::StaticCompoundShapeSettings settings;
+  for (std::size_t index = 0; index < view.part_count; ++index) {
+    settings.AddShape(JPH::Vec3::sZero(), JPH::Quat::sIdentity(), create_convex_part(view.parts[index]));
+  }
+  JPH::ShapeSettings::ShapeResult result = settings.Create();
+  if (!result.IsValid()) {
+    throw std::runtime_error("failed to create compound sprite collision shape");
   }
   return result.Get();
 }

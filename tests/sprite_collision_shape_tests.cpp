@@ -1,6 +1,7 @@
 #include "test_common.hpp"
 
 #include "hyperverse/sprite_collision_shape.hpp"
+#include "hyperverse/sprite_collision_shape_data.hpp"
 
 #include <algorithm>
 
@@ -37,4 +38,15 @@ TEST_CASE("sprite silhouettes extract a normalized alpha hull") {
   CHECK(std::ranges::any_of(silhouette.hull, [](hyperverse::Vec2 point) { return point.y < -0.7F; }));
   CHECK(std::ranges::any_of(silhouette.hull, [](hyperverse::Vec2 point) { return point.x < -0.7F; }));
   CHECK(std::ranges::any_of(silhouette.hull, [](hyperverse::Vec2 point) { return point.x > 0.7F; }));
+}
+
+TEST_CASE("generated sprite collision data contains multipart hulls") {
+  const hyperverse::SpriteCollisionShapeView rock = hyperverse::sprite_collision_shape_data(hyperverse::SpriteCollisionShape::Rock);
+  const hyperverse::SpriteCollisionShapeView ship = hyperverse::sprite_collision_shape_data(hyperverse::SpriteCollisionShape::Ship);
+
+  REQUIRE(rock.part_count > 1U);
+  REQUIRE(ship.part_count > 1U);
+  for (std::size_t index = 0; index < rock.part_count; ++index) {
+    CHECK(rock.parts[index].point_count >= 3U);
+  }
 }

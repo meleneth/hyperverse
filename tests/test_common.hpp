@@ -22,6 +22,7 @@
 #include "hyperverse/raider.hpp"
 #include "hyperverse/render_frame.hpp"
 #include "hyperverse/sector.hpp"
+#include "hyperverse/ship_status.hpp"
 #include "hyperverse/targeting.hpp"
 
 #include <filesystem>

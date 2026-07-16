@@ -21,12 +21,15 @@ struct MiningDrone {
   entt::entity target{entt::null};
   MiningDronePhase phase{MiningDronePhase::Idle};
   float facing_radians{0.0F};
+  float work_angle_radians{0.0F};
   float extracted_mass{0.0F};
 };
 
 struct MiningDroneTuning {
   float max_speed{520.0F};
   float mining_range{220.0F};
+  float work_standoff{320.0F};
+  float arrival_tolerance{36.0F};
   float integrity_damage_per_second{5.0F};
   float extraction_per_second{3.5F};
 };

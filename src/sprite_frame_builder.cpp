@@ -12,6 +12,7 @@
 #include "hyperverse/pressure.hpp"
 #include "hyperverse/projectile.hpp"
 #include "hyperverse/raider.hpp"
+#include "hyperverse/ship_status.hpp"
 #include "hyperverse/targeting.hpp"
 
 #include <algorithm>
@@ -161,6 +162,21 @@ void add_box_lines(std::vector<hyperverse::LineDraw>& lines, const hyperverse::S
   add_line(left, bottom, left, top);
 }
 
+void add_hud_bar(
+  std::vector<hyperverse::LineDraw>& lines,
+  float left_ndc,
+  float y_ndc,
+  float width_ndc,
+  float fraction,
+  float r,
+  float g,
+  float b
+) {
+  const float clamped = std::clamp(fraction, 0.0F, 1.0F);
+  lines.push_back({.start_x_ndc = left_ndc, .start_y_ndc = y_ndc, .end_x_ndc = left_ndc + width_ndc, .end_y_ndc = y_ndc, .r = 0.16F, .g = 0.20F, .b = 0.24F, .a = 0.88F});
+  lines.push_back({.start_x_ndc = left_ndc, .start_y_ndc = y_ndc, .end_x_ndc = left_ndc + (width_ndc * clamped), .end_y_ndc = y_ndc, .r = r, .g = g, .b = b, .a = 1.0F});
+}
+
 void add_world_link_line(
   std::vector<hyperverse::LineDraw>& lines,
   hyperverse::Vec2 from,
@@ -251,6 +267,9 @@ SpriteFrame build_sprite_frame(
   std::uint32_t height
 ) {
   const ShipMotion& ship = account.registry().get<ShipMotion>(player);
+  const ShipHealth& ship_health = account.registry().get<ShipHealth>(player);
+  const ShipComputer& ship_computer = account.registry().get<ShipComputer>(player);
+  const RoundTimer& round_timer = account.registry().get<RoundTimer>(player);
   const CameraState& camera = account.registry().get<CameraState>(player);
   const TargetLockModel& target_lock = account.registry().get<TargetLockModel>(player);
   const MiningHudSnapshot& mining_hud = account.registry().get<MiningHudSnapshot>(player);
@@ -349,6 +368,13 @@ SpriteFrame build_sprite_frame(
   }
   frame.sprites.push_back(make_world_sprite(SpriteTexture::Ship, ship.position, camera.position, sector, width, height, 56.0F, ship_sprite_rotation(ship.facing_radians)));
   add_hud_text(frame.sprites, "SPD " + std::to_string(static_cast<int>(hud.speed)), -0.96F, 0.92F, 0.045F);
+  add_hud_text(frame.sprites, "SHD", -0.96F, 0.52F, 0.033F, 0.45F, 0.85F, 1.0F);
+  add_hud_bar(frame.lines, -0.86F, 0.497F, 0.28F, ship_health.shields / std::max(ship_health.max_shields, 1.0F), 0.3F, 0.85F, 1.0F);
+  add_hud_text(frame.sprites, "ARM", -0.96F, 0.47F, 0.033F, 1.0F, 0.72F, 0.34F);
+  add_hud_bar(frame.lines, -0.86F, 0.447F, 0.28F, ship_health.armor / std::max(ship_health.max_armor, 1.0F), 1.0F, 0.58F, 0.24F);
+  add_hud_text(frame.sprites, "RND", -0.96F, 0.42F, 0.033F, 0.72F, 1.0F, 0.72F);
+  add_hud_bar(frame.lines, -0.86F, 0.397F, 0.28F, round_timer.elapsed_seconds / std::max(round_timer.duration_seconds, 1.0F), 0.72F, 1.0F, 0.72F);
+  add_hud_text(frame.sprites, "HUD " + std::to_string(static_cast<int>(ship_computer.hud_effectiveness * 100.0F)), -0.96F, 0.37F, 0.033F, 0.72F, 0.92F, 1.0F);
   add_hud_text(frame.sprites, "POS " + std::to_string(static_cast<int>(ship.position.x)) + " " + std::to_string(static_cast<int>(ship.position.y)), -0.96F, 0.68F, 0.035F);
   add_hud_text(frame.sprites, "ORE " + std::to_string(static_cast<int>(cargo_hud.delivered_mass)), -0.96F, 0.86F, 0.045F, 0.72F, 1.0F, 0.72F);
   add_hud_text(frame.sprites, "BOX " + std::to_string(cargo_hud.cargo_boxes), -0.96F, 0.80F, 0.045F, 0.72F, 1.0F, 0.72F);

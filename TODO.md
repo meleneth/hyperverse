@@ -4,6 +4,8 @@
 
 - Pick and document the base universe clock. The current simulation uses a fixed timestep, but the design still needs an explicit canonical simulation tick duration and policy for scheduling gameplay events.
 - Convert particle cannon firing into an event-driven FSM. Firing cadence, cooldown, dual-barrel alternation/synchronization, and projectile spawn events should be transition-driven rather than ad hoc button handling.
+- Replace the current maxed-out ship computer defaults with progression. Early equipment should degrade HUD accuracy/detail, scan resolution, prediction quality, and warning clarity; upgrades should restore the maxed-out HUD currently used for development.
+- Keep sprite collision data generated from alpha masks. Re-run `scripts/generate-sprite-collision-shapes.py` whenever collision-relevant sprites change.
 
 ## Weapons
 

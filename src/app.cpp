@@ -16,6 +16,7 @@
 #include "hyperverse/projectile.hpp"
 #include "hyperverse/raider.hpp"
 #include "hyperverse/sdl_platform.hpp"
+#include "hyperverse/ship_status.hpp"
 #include "hyperverse/sprite_frame_builder.hpp"
 #include "hyperverse/targeting.hpp"
 #include "hyperverse/version.hpp"
@@ -27,6 +28,7 @@
 #include <chrono>
 #include <exception>
 #include <iostream>
+#include <string>
 
 namespace hyperverse {
 
@@ -98,6 +100,8 @@ int App::run(AccountCtx& account) {
 
         CameraState& camera = account.registry().get<CameraState>(player);
         TargetLockModel& target_lock = account.registry().get<TargetLockModel>(player);
+        ShipHealth& ship_health = account.registry().get<ShipHealth>(player);
+        RoundTimer& round_timer = account.registry().get<RoundTimer>(player);
         MiningHudSnapshot& mining_hud = account.registry().get<MiningHudSnapshot>(player);
         CargoManifest& cargo_manifest = account.registry().get<CargoManifest>(player);
         CargoHudSnapshot& cargo_hud = account.registry().get<CargoHudSnapshot>(player);
@@ -114,6 +118,7 @@ int App::run(AccountCtx& account) {
         CollisionHudSnapshot& collision_hud = account.registry().get<CollisionHudSnapshot>(player);
 
         update_camera_anchor(camera, ship, sector, camera_tuning, timestep.tick_seconds());
+        update_ship_status(ship_health, round_timer, timestep.tick_seconds());
         update_target_lock(target_lock, account.registry(), ship.position, ship.velocity, latest_intent, sector);
         mining_hud =
           update_mining_laser(account.registry(), target_lock, ship, latest_intent, sector, mining_laser, timestep.tick_seconds());
