@@ -339,7 +339,11 @@ SpriteFrame build_sprite_frame(
   for (auto [entity, particle] : account.registry().view<ParticleShot>().each()) {
     (void)entity;
     SpriteDraw particle_sprite = make_world_sprite(SpriteTexture::Particle, particle.position, camera.position, sector, width, height, 16.0F);
-    tint_sprite(particle_sprite, 0.72F, 0.92F, 1.0F);
+    if (particle.owner == ProjectileOwner::Raider) {
+      tint_sprite(particle_sprite, 1.0F, 0.24F, 0.18F);
+    } else {
+      tint_sprite(particle_sprite, 0.72F, 0.92F, 1.0F);
+    }
     frame.sprites.push_back(particle_sprite);
   }
   for (entt::entity drone_entity : mining_drones) {

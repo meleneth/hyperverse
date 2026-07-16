@@ -2,25 +2,48 @@
 
 #include "hyperverse/asteroid_fragmentation.hpp"
 #include "hyperverse/flight.hpp"
+#include "hyperverse/game_context.hpp"
 #include "hyperverse/input.hpp"
 #include "hyperverse/mining.hpp"
+#include "hyperverse/raider.hpp"
 #include "hyperverse/sector.hpp"
+#include "hyperverse/ship_status.hpp"
 #include "hyperverse/targeting.hpp"
 
 namespace hyperverse {
 
-class AccountCtx;
+enum class ParticleCannonPhase {
+  Ready,
+  Cooling,
+};
+
+enum class ProjectileOwner {
+  Player,
+  Raider,
+};
+
+struct ParticleCannonModel {
+  ParticleCannonPhase phase{ParticleCannonPhase::Ready};
+  float cooldown_seconds{0.0F};
+};
 
 struct ParticleShot {
   Vec2 position{};
   Vec2 velocity{};
   float ttl_seconds{1.8F};
+  float damage{22.0F};
+  float radius{10.0F};
+  ProjectileOwner owner{ProjectileOwner::Player};
 };
 
 struct ParticleCannonTuning {
   float projectile_speed{1450.0F};
   float projectile_radius{10.0F};
   float damage{22.0F};
+  float fire_interval_seconds{0.25F};
+  float muzzle_forward_offset{46.0F};
+  float muzzle_side_offset{14.0F};
+  float raider_fire_range{1800.0F};
   float asteroid_min_radius_fraction{1.0F / 6.0F};
   AsteroidImpactKind impact_kind{AsteroidImpactKind::Kinetic};
 };
@@ -30,12 +53,59 @@ struct ParticleCannonHudSnapshot {
   int impacts{0};
 };
 
-[[nodiscard]] ParticleCannonHudSnapshot update_particle_cannon(
-  AccountCtx& ctx,
-  const ShipMotion& ship,
-  const SemanticInputFrame& input,
-  const SectorTuning& sector,
-  float dt_seconds,
+struct WeaponTrigger {
+  Vec2 aim{};
+  bool active{false};
+};
+
+class WeaponCtx {
+public:
+  explicit WeaponCtx(EntityCtx entity);
+
+  [[nodiscard]] EntityCtx entity_context() const;
+  [[nodiscard]] entt::entity self() const;
+  [[nodiscard]] entt::registry& registry() const;
+  [[nodiscard]] DomainEventBus& event_bus() const;
+  [[nodiscard]] const SectorTuning& sector() const;
+  [[nodiscard]] float dt() const;
+  [[nodiscard]] ParticleCannonModel& cannon() const;
+
+private:
+  EntityCtx entity_;
+};
+
+class ProjectileSimCtx {
+public:
+  ProjectileSimCtx(SectorTickCtx tick, entt::entity player);
+
+  [[nodiscard]] entt::registry& registry() const;
+  [[nodiscard]] DomainEventBus& event_bus() const;
+  [[nodiscard]] const SectorTuning& sector() const;
+  [[nodiscard]] float dt() const;
+  [[nodiscard]] entt::entity player() const;
+  [[nodiscard]] const ShipMotion& player_motion() const;
+  [[nodiscard]] ShipHealth& player_health() const;
+
+private:
+  SectorTickCtx tick_;
+  entt::entity player_;
+};
+
+void update_player_particle_cannon(
+  WeaponCtx ctx,
+  WeaponTrigger trigger,
+  const ParticleCannonTuning& tuning = {}
+);
+
+void update_raider_particle_cannon(
+  WeaponCtx ctx,
+  EntityCtx target,
+  WeaponTrigger trigger,
+  const ParticleCannonTuning& tuning = {}
+);
+
+[[nodiscard]] ParticleCannonHudSnapshot update_particle_projectiles(
+  ProjectileSimCtx ctx,
   const ParticleCannonTuning& tuning = {}
 );
 

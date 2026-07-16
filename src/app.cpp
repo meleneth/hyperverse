@@ -95,6 +95,7 @@ int App::run(AccountCtx& account) {
       }
 
       while (timestep.consume_tick()) {
+        SectorTickCtx tick_ctx{account, sector, timestep.tick_seconds()};
         latest_intent = input_mapper.map(gamepad.sample());
         simulate_assisted_flight(account, ship, latest_intent, flight, sector, timestep.tick_seconds());
         update_asteroid_motion(account, sector, timestep.tick_seconds());
@@ -182,7 +183,18 @@ int App::run(AccountCtx& account) {
         if (recovery_hud.recovered) {
           raider_hud = {};
         }
-        particle_hud = update_particle_cannon(account, ship, latest_intent, sector, timestep.tick_seconds(), particle_cannon_tuning);
+        update_player_particle_cannon(
+          WeaponCtx{tick_ctx.entity_context(player)},
+          WeaponTrigger{.aim = latest_intent.primary_aim, .active = latest_intent.particle_fire_active},
+          particle_cannon_tuning
+        );
+        update_raider_particle_cannon(
+          WeaponCtx{tick_ctx.entity_context(entities.raider)},
+          tick_ctx.entity_context(player),
+          WeaponTrigger{.active = raider_hud.active},
+          particle_cannon_tuning
+        );
+        particle_hud = update_particle_projectiles(ProjectileSimCtx{tick_ctx, player}, particle_cannon_tuning);
         account.event_bus().process();
         pressure_hud = update_sector_pressure(pressure, timestep.tick_seconds(), pressure_tuning);
         collision_hud = predict_ship_asteroid_collision(ship, account.registry(), sector);

@@ -109,6 +109,7 @@ add_library(
   src/drone.cpp
   src/fixed_timestep.cpp
   src/flight.cpp
+  src/game_context.cpp
   src/grand_central.cpp
   src/hud_notice.cpp
   src/input.cpp

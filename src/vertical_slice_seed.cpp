@@ -65,6 +65,7 @@ VerticalSliceEntities seed_vertical_slice(AccountCtx& account) {
   account.registry().emplace<SectorPressureModel>(entities.player);
   account.registry().emplace<SectorPressureHudSnapshot>(entities.player);
   account.registry().emplace<MiningDroneHudSnapshot>(entities.player);
+  account.registry().emplace<ParticleCannonModel>(entities.player);
   account.registry().emplace<ParticleCannonHudSnapshot>(entities.player);
   account.event_bus().appendListener(DomainEventType::ParticleImpact, [&account, player = entities.player](const DomainEvent&) {
     account.registry().get<ParticleCannonHudSnapshot>(player).impacts += 1;
@@ -93,6 +94,7 @@ VerticalSliceEntities seed_vertical_slice(AccountCtx& account) {
     entities.raider,
     RaiderShip{.position = {.x = ship.position.x + 640.0F, .y = ship.position.y - 420.0F}}
   );
+  account.registry().emplace<ParticleCannonModel>(entities.raider);
 
   const std::vector<AsteroidBody> asteroid_field{
     seed_asteroid({.x = 5650.0F, .y = 3850.0F}, {.x = -22.0F, .y = 16.0F}, 220.0F, 0.18F, 0.34F),

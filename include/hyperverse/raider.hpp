@@ -24,6 +24,8 @@ struct RaiderShip {
   entt::entity target_box{entt::null};
   RaiderPhase phase{RaiderPhase::Idle};
   float disruption_seconds{0.0F};
+  float integrity{120.0F};
+  float max_integrity{120.0F};
 };
 
 struct RaiderTuning {

@@ -46,3 +46,18 @@ TEST_CASE("composition root header is only included by startup and its implement
     }
   }
 }
+
+TEST_CASE("projectile combat APIs use typed contexts") {
+  const std::filesystem::path test_file{__FILE__};
+  const std::filesystem::path repo_root = test_file.parent_path().parent_path();
+  const std::filesystem::path projectile_header = repo_root / "include" / "hyperverse" / "projectile.hpp";
+
+  std::ifstream input{projectile_header};
+  const std::string contents{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
+
+  CHECK(contents.find("AccountCtx") == std::string::npos);
+  CHECK(contents.find("const RaiderShip& raider") == std::string::npos);
+  CHECK(contents.find("const ShipMotion& ship") == std::string::npos);
+  CHECK(contents.find("ShipHealth& ship_health") == std::string::npos);
+  CHECK(contents.find("update_raider_particle_cannon(\n  WeaponCtx ctx,\n  EntityCtx target,\n  WeaponTrigger trigger") != std::string::npos);
+}

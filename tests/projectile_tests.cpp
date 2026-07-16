@@ -2,9 +2,31 @@
 
 using hyperverse::test::TestAccountWorld;
 
+namespace {
+
+[[nodiscard]] std::ptrdiff_t particle_count(entt::registry& registry) {
+  return std::distance(registry.view<hyperverse::ParticleShot>().begin(), registry.view<hyperverse::ParticleShot>().end());
+}
+
+[[nodiscard]] entt::entity make_player(TestAccountWorld& world, hyperverse::Vec2 position) {
+  const entt::entity player = world.registry.create();
+  world.registry.emplace<hyperverse::ShipMotion>(player, hyperverse::ShipMotion{.position = position});
+  world.registry.emplace<hyperverse::ShipHealth>(player);
+  world.registry.emplace<hyperverse::ParticleCannonModel>(player);
+  return player;
+}
+
+[[nodiscard]] hyperverse::SectorTickCtx tick_context(hyperverse::AccountCtx& account, float dt_seconds) {
+  static constexpr hyperverse::SectorTuning sector{.width = 9000.0F, .height = 9000.0F};
+  return {account, sector, dt_seconds};
+}
+
+}  // namespace
+
 TEST_CASE("particle cannon spawns a shot from semantic fire") {
   TestAccountWorld world;
   hyperverse::AccountCtx account = world.account_context();
+  const entt::entity player = make_player(world, {.x = 100.0F, .y = 100.0F});
   int fired_events = 0;
   account.event_bus().appendListener(
     hyperverse::DomainEventType::ParticleFired,
@@ -14,19 +36,46 @@ TEST_CASE("particle cannon spawns a shot from semantic fire") {
     }
   );
 
-  const hyperverse::ParticleCannonHudSnapshot hud = hyperverse::update_particle_cannon(
-    account,
-    {.position = {.x = 100.0F, .y = 100.0F}, .facing_radians = 0.0F},
-    {.particle_fire_requested = true},
-    {.width = 9000.0F, .height = 9000.0F},
-    0.0F,
+  hyperverse::update_player_particle_cannon(
+    hyperverse::WeaponCtx{tick_context(account, 0.0F).entity_context(player)},
+    {.active = true},
     {.projectile_speed = 100.0F}
+  );
+  world.registry.get<hyperverse::ShipMotion>(player).position = {.x = 1000.0F, .y = 1000.0F};
+  const hyperverse::ParticleCannonHudSnapshot hud = hyperverse::update_particle_projectiles(
+    hyperverse::ProjectileSimCtx{tick_context(account, 0.0F), player}
   );
   account.event_bus().process();
 
-  CHECK(hud.active_particles == 1);
-  CHECK(fired_events == 1);
-  CHECK(std::distance(account.registry().view<hyperverse::ParticleShot>().begin(), account.registry().view<hyperverse::ParticleShot>().end()) == 1);
+  CHECK(hud.active_particles == 2);
+  CHECK(fired_events == 2);
+  CHECK(particle_count(account.registry()) == 2);
+}
+
+TEST_CASE("held particle fire uses a four hertz FSM cadence") {
+  TestAccountWorld world;
+  hyperverse::AccountCtx account = world.account_context();
+  const entt::entity player = make_player(world, {.x = 100.0F, .y = 100.0F});
+
+  hyperverse::update_player_particle_cannon(
+    hyperverse::WeaponCtx{tick_context(account, 0.0F).entity_context(player)},
+    {.active = true},
+    {.fire_interval_seconds = 0.25F}
+  );
+  hyperverse::update_player_particle_cannon(
+    hyperverse::WeaponCtx{tick_context(account, 0.20F).entity_context(player)},
+    {.active = true},
+    {.fire_interval_seconds = 0.25F}
+  );
+  CHECK(particle_count(account.registry()) == 2);
+
+  hyperverse::update_player_particle_cannon(
+    hyperverse::WeaponCtx{tick_context(account, 0.05F).entity_context(player)},
+    {.active = true},
+    {.fire_interval_seconds = 0.25F}
+  );
+  CHECK(particle_count(account.registry()) == 4);
+  CHECK(account.registry().get<hyperverse::ParticleCannonModel>(player).phase == hyperverse::ParticleCannonPhase::Cooling);
 }
 
 TEST_CASE("particle cannon damages and shrinks asteroids on Jolt overlap") {
@@ -47,15 +96,14 @@ TEST_CASE("particle cannon damages and shrinks asteroids on Jolt overlap") {
   );
   account.registry().emplace<hyperverse::MiningResource>(asteroid);
   const entt::entity particle = account.registry().create();
-  account.registry().emplace<hyperverse::ParticleShot>(particle, hyperverse::ParticleShot{.position = {.x = 110.0F, .y = 100.0F}});
+  account.registry().emplace<hyperverse::ParticleShot>(
+    particle,
+    hyperverse::ParticleShot{.position = {.x = 110.0F, .y = 100.0F}, .damage = 25.0F, .radius = 10.0F}
+  );
+  const entt::entity player = make_player(world, {.x = 100.0F, .y = 100.0F});
 
-  const hyperverse::ParticleCannonHudSnapshot hud = hyperverse::update_particle_cannon(
-    account,
-    {.position = {.x = 100.0F, .y = 100.0F}},
-    {},
-    {.width = 9000.0F, .height = 9000.0F},
-    0.0F,
-    {.projectile_radius = 10.0F, .damage = 25.0F}
+  const hyperverse::ParticleCannonHudSnapshot hud = hyperverse::update_particle_projectiles(
+    hyperverse::ProjectileSimCtx{tick_context(account, 0.0F), player}
   );
   account.event_bus().process();
 
@@ -63,5 +111,77 @@ TEST_CASE("particle cannon damages and shrinks asteroids on Jolt overlap") {
   CHECK(event_hud.impacts == 1);
   CHECK(account.registry().get<hyperverse::MiningResource>(asteroid).integrity == Catch::Approx(75.0F));
   CHECK(account.registry().get<hyperverse::AsteroidBody>(asteroid).radius == Catch::Approx(75.0F));
-  CHECK(std::distance(account.registry().view<hyperverse::ParticleShot>().begin(), account.registry().view<hyperverse::ParticleShot>().end()) == 0);
+  CHECK(particle_count(account.registry()) == 0);
+}
+
+TEST_CASE("player particle shots damage raiders") {
+  TestAccountWorld world;
+  hyperverse::AccountCtx account = world.account_context();
+  const entt::entity raider_entity = account.registry().create();
+  account.registry().emplace<hyperverse::RaiderShip>(
+    raider_entity,
+    hyperverse::RaiderShip{.position = {.x = 120.0F, .y = 100.0F}, .integrity = 40.0F, .max_integrity = 40.0F}
+  );
+  const entt::entity particle = account.registry().create();
+  account.registry().emplace<hyperverse::ParticleShot>(
+    particle,
+    hyperverse::ParticleShot{.position = {.x = 120.0F, .y = 100.0F}, .damage = 25.0F, .radius = 10.0F}
+  );
+  const entt::entity player = make_player(world, {.x = 1000.0F, .y = 1000.0F});
+
+  (void)hyperverse::update_particle_projectiles(
+    hyperverse::ProjectileSimCtx{tick_context(account, 0.0F), player}
+  );
+
+  CHECK(account.registry().get<hyperverse::RaiderShip>(raider_entity).integrity == Catch::Approx(15.0F));
+  CHECK(particle_count(account.registry()) == 0);
+}
+
+TEST_CASE("raider particle shots damage player shields before armor") {
+  TestAccountWorld world;
+  hyperverse::AccountCtx account = world.account_context();
+  const entt::entity particle = account.registry().create();
+  account.registry().emplace<hyperverse::ParticleShot>(
+    particle,
+    hyperverse::ParticleShot{
+      .position = {.x = 100.0F, .y = 100.0F},
+      .damage = 30.0F,
+      .radius = 10.0F,
+      .owner = hyperverse::ProjectileOwner::Raider,
+    }
+  );
+  const entt::entity player = make_player(world, {.x = 100.0F, .y = 100.0F});
+  world.registry.get<hyperverse::ShipHealth>(player) = {.armor = 100.0F, .shields = 12.0F};
+
+  (void)hyperverse::update_particle_projectiles(
+    hyperverse::ProjectileSimCtx{tick_context(account, 0.0F), player}
+  );
+
+  const hyperverse::ShipHealth& health = world.registry.get<hyperverse::ShipHealth>(player);
+  CHECK(health.shields == Catch::Approx(0.0F));
+  CHECK(health.armor == Catch::Approx(82.0F));
+  CHECK(particle_count(account.registry()) == 0);
+}
+
+TEST_CASE("active raiders fire particle pairs toward the player") {
+  TestAccountWorld world;
+  hyperverse::AccountCtx account = world.account_context();
+  const entt::entity player = make_player(world, {.x = 300.0F, .y = 100.0F});
+  const entt::entity raider = world.registry.create();
+  world.registry.emplace<hyperverse::RaiderShip>(raider, hyperverse::RaiderShip{.position = {.x = 100.0F, .y = 100.0F}});
+  world.registry.emplace<hyperverse::ParticleCannonModel>(raider);
+
+  hyperverse::update_raider_particle_cannon(
+    hyperverse::WeaponCtx{tick_context(account, 0.0F).entity_context(raider)},
+    tick_context(account, 0.0F).entity_context(player),
+    {.active = true},
+    {.projectile_speed = 100.0F}
+  );
+
+  CHECK(particle_count(account.registry()) == 2);
+  for (auto [entity, shot] : account.registry().view<hyperverse::ParticleShot>().each()) {
+    (void)entity;
+    CHECK(shot.owner == hyperverse::ProjectileOwner::Raider);
+    CHECK(shot.velocity.x > 0.0F);
+  }
 }

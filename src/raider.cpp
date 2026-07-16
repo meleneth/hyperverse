@@ -32,6 +32,14 @@ RaiderHudSnapshot update_raider_threat(
   float dt_seconds,
   const RaiderTuning& tuning
 ) {
+  if (raider.integrity <= 0.0F) {
+    raider.phase = RaiderPhase::Idle;
+    raider.velocity = {};
+    raider.target_box = entt::null;
+    raider.disruption_seconds = 0.0F;
+    return {};
+  }
+
   if (escort.phase != CargoEscortPhase::EscortActive) {
     if (raider.phase != RaiderPhase::Escaped) {
       raider.phase = RaiderPhase::Idle;

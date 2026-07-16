@@ -27,6 +27,7 @@ struct SemanticInputFrame {
   bool cancel_requested{false};
   bool target_cycle_requested{false};
   bool particle_fire_requested{false};
+  bool particle_fire_active{false};
   float tool_intensity{0.0F};
   ControlMapping control_mapping{ControlMapping::Keyboard};
 };
