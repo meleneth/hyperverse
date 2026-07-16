@@ -281,6 +281,8 @@ void log_gamepad_state() {
     if (route.gate_reached) {
       title << " ARRIVED";
     }
+  } else if (escort.phase == hyperverse::CargoEscortPhase::Complete) {
+    title << " DELIVERED";
   } else if (escort.phase == hyperverse::CargoEscortPhase::Authorized) {
     title << " ESCORT ARMED";
   } else if (cargo.extraction_authorized) {
@@ -591,8 +593,9 @@ int App::run() {
         cargo_hud = update_cargo_manifest(cargo_manifest, account.registry(), quota);
         (void)sync_cargo_boxes(account.registry(), cargo_manifest, extraction_site, cargo_box_tuning);
         escort_hud = update_cargo_escort_state(cargo_escort, cargo_hud, latest_intent);
-        train_hud = update_cargo_train(account.registry(), cargo_escort, ship, sector, timestep.tick_seconds());
         route_hud = update_cargo_escort_route(cargo_escort, escort_route, ship, sector);
+        escort_hud = update_cargo_escort_arrival(cargo_escort, cargo_hud, route_hud);
+        train_hud = update_cargo_train(account.registry(), cargo_escort, ship, sector, timestep.tick_seconds());
         pressure_hud = update_sector_pressure(pressure, timestep.tick_seconds(), pressure_tuning);
         collision_hud = predict_ship_asteroid_collision(ship, account.registry(), sector);
       }

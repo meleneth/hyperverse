@@ -701,6 +701,26 @@ TEST_CASE("cargo escort route reports wrapped gate distance only while active") 
   CHECK(active.gate_distance == Catch::Approx(75.0F));
 }
 
+TEST_CASE("cargo escort completes when the active train reaches the gate") {
+  hyperverse::CargoEscortState escort{.phase = hyperverse::CargoEscortPhase::EscortActive};
+  const hyperverse::CargoHudSnapshot cargo{.extraction_authorized = true};
+
+  const hyperverse::CargoEscortHudSnapshot delivered = hyperverse::update_cargo_escort_arrival(
+    escort,
+    cargo,
+    {.gate_distance = 20.0F, .active = true, .gate_reached = true}
+  );
+
+  CHECK(escort.phase == hyperverse::CargoEscortPhase::Complete);
+  CHECK(delivered.phase == hyperverse::CargoEscortPhase::Complete);
+  CHECK_FALSE(delivered.cargo_train_active);
+
+  const hyperverse::CargoEscortHudSnapshot persistent = hyperverse::update_cargo_escort_state(escort, {}, {});
+
+  CHECK(persistent.phase == hyperverse::CargoEscortPhase::Complete);
+  CHECK_FALSE(persistent.cargo_train_active);
+}
+
 TEST_CASE("mining drone acquires the locked asteroid as its priority") {
   entt::registry registry;
   const entt::entity asteroid = registry.create();

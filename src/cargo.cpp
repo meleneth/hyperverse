@@ -74,7 +74,7 @@ CargoEscortHudSnapshot update_cargo_escort_state(
   const CargoHudSnapshot& cargo,
   const SemanticInputFrame& input
 ) {
-  if (escort.phase != CargoEscortPhase::EscortActive) {
+  if (escort.phase != CargoEscortPhase::EscortActive && escort.phase != CargoEscortPhase::Complete) {
     if (!cargo.extraction_authorized) {
       escort.phase = CargoEscortPhase::Mining;
     } else if (input.confirm_requested) {
@@ -148,6 +148,22 @@ CargoEscortRouteHudSnapshot update_cargo_escort_route(
     .gate_distance = distance,
     .active = active,
     .gate_reached = active && distance <= route.gate_radius,
+  };
+}
+
+CargoEscortHudSnapshot update_cargo_escort_arrival(
+  CargoEscortState& escort,
+  const CargoHudSnapshot& cargo,
+  const CargoEscortRouteHudSnapshot& route
+) {
+  if (escort.phase == CargoEscortPhase::EscortActive && route.gate_reached) {
+    escort.phase = CargoEscortPhase::Complete;
+  }
+
+  return {
+    .phase = escort.phase,
+    .extraction_authorized = cargo.extraction_authorized,
+    .cargo_train_active = escort.phase == CargoEscortPhase::EscortActive,
   };
 }
 

@@ -51,6 +51,7 @@ enum class CargoEscortPhase {
   Mining,
   Authorized,
   EscortActive,
+  Complete,
 };
 
 struct CargoEscortState {
@@ -121,6 +122,12 @@ int sync_cargo_boxes(
   const CargoEscortRoute& route,
   const ShipMotion& ship,
   const SectorTuning& sector
+);
+
+[[nodiscard]] CargoEscortHudSnapshot update_cargo_escort_arrival(
+  CargoEscortState& escort,
+  const CargoHudSnapshot& cargo,
+  const CargoEscortRouteHudSnapshot& route
 );
 
 }  // namespace hyperverse
