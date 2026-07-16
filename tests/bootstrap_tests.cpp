@@ -620,6 +620,63 @@ TEST_CASE("cargo escort activates on confirm after authorization") {
   CHECK(persistent.cargo_train_active);
 }
 
+TEST_CASE("inactive cargo train leaves extraction boxes parked") {
+  entt::registry registry;
+  const entt::entity box_entity = registry.create();
+  registry.emplace<hyperverse::CargoBox>(
+    box_entity,
+    hyperverse::CargoBox{.position = {.x = 1000.0F, .y = 1000.0F}, .index = 0}
+  );
+
+  const hyperverse::CargoTrainHudSnapshot hud = hyperverse::update_cargo_train(
+    registry,
+    {},
+    {.position = {.x = 1200.0F, .y = 1000.0F}, .velocity = {.x = 100.0F, .y = 0.0F}},
+    {.width = 9000.0F, .height = 9000.0F},
+    1.0F
+  );
+
+  const hyperverse::CargoBox& box = registry.get<hyperverse::CargoBox>(box_entity);
+  CHECK_FALSE(hud.active);
+  CHECK(hud.linked_boxes == 1);
+  CHECK(box.position.x == Catch::Approx(1000.0F));
+  CHECK(box.position.y == Catch::Approx(1000.0F));
+}
+
+TEST_CASE("active cargo train links boxes behind the ship in slot order") {
+  entt::registry registry;
+  const entt::entity second = registry.create();
+  registry.emplace<hyperverse::CargoBox>(
+    second,
+    hyperverse::CargoBox{.position = {.x = 900.0F, .y = 1000.0F}, .index = 1}
+  );
+  const entt::entity first = registry.create();
+  registry.emplace<hyperverse::CargoBox>(
+    first,
+    hyperverse::CargoBox{.position = {.x = 1000.0F, .y = 1000.0F}, .index = 0}
+  );
+
+  const hyperverse::CargoTrainHudSnapshot hud = hyperverse::update_cargo_train(
+    registry,
+    {.phase = hyperverse::CargoEscortPhase::EscortActive},
+    {.position = {.x = 1000.0F, .y = 1000.0F}, .velocity = {.x = 100.0F, .y = 0.0F}},
+    {.width = 9000.0F, .height = 9000.0F},
+    1.0F,
+    {.link_spacing = 100.0F, .follow_rate = 1.0F, .max_speed = 1000.0F}
+  );
+
+  const hyperverse::CargoBox& first_box = registry.get<hyperverse::CargoBox>(first);
+  const hyperverse::CargoBox& second_box = registry.get<hyperverse::CargoBox>(second);
+  CHECK(hud.active);
+  CHECK(hud.linked_boxes == 2);
+  CHECK(hud.train_length == Catch::Approx(200.0F));
+  CHECK(hud.max_coupling_stress == Catch::Approx(1.0F));
+  CHECK(first_box.position.x == Catch::Approx(900.0F));
+  CHECK(first_box.position.y == Catch::Approx(1000.0F));
+  CHECK(second_box.position.x == Catch::Approx(800.0F));
+  CHECK(second_box.position.y == Catch::Approx(1000.0F));
+}
+
 TEST_CASE("mining drone acquires the locked asteroid as its priority") {
   entt::registry registry;
   const entt::entity asteroid = registry.create();

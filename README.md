@@ -56,11 +56,14 @@ These assets are temporary implementation scaffolding, not a permanent visual co
 - Aim/facing assist: arrow keys or right stick
 - Cycle/lock asteroid target: `Tab` or right shoulder
 - Fire mining laser at locked asteroid: `F` or right trigger
+- Activate cargo escort after quota authorization: `Space` or south face button
 - Cancel/quit: `Escape` or east face button
 
-The current Vulkan prototype still uses clear-pass visual feedback rather than sprite drawing. The
-window title is the active HUD: it reports position, speed, camera anchor, edge warning, target
-distance, scan confidence, closing speed, rock integrity, heat, extracted ore, and laser range.
+The current Vulkan prototype draws Sector7-derived sprites, hardware-uploaded textures, line HUD
+brackets, mining beams, cargo boxes, and active cargo train links. The window title is the active
+HUD: it reports position, speed, camera anchor, edge warning, target distance, scan confidence,
+closing speed, rock integrity, heat, extracted ore, cargo quota, sector pressure, drone state,
+collision warnings, and escort train state.
 
 ## Core Fantasy
 
