@@ -212,9 +212,9 @@ void add_target_inspection_panel(
   const hyperverse::MiningResource* resource,
   const hyperverse::MineralComposition* composition
 ) {
-  constexpr float left = -0.30F;
-  constexpr float top = 0.88F;
-  constexpr float width = 0.60F;
+  constexpr float left = -0.43F;
+  constexpr float top = -0.68F;
+  constexpr float width = 0.86F;
   constexpr float height = 0.30F;
   add_box_lines(
     lines,
