@@ -59,10 +59,12 @@ public:
     return BroadPhaseLayers::Moving;
   }
 
+#if defined(JPH_EXTERNAL_PROFILE) || defined(JPH_PROFILE_ENABLED)
   [[nodiscard]] const char* GetBroadPhaseLayerName(JPH::BroadPhaseLayer layer) const override {
     (void)layer;
     return "MOVING";
   }
+#endif
 };
 
 class ObjectVsBroadPhaseLayerFilter final : public JPH::ObjectVsBroadPhaseLayerFilter {
