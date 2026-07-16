@@ -40,3 +40,28 @@ TEST_CASE("vertical slice asteroids start six times their depleted size") {
 
   CHECK(found_asteroid);
 }
+
+TEST_CASE("vertical slice asteroid field is spread across the sector and visibly moving") {
+  TestAccountWorld world;
+  hyperverse::AccountCtx account = world.account_context();
+  (void)hyperverse::seed_vertical_slice(account);
+
+  int asteroid_count = 0;
+  int initially_visible_count = 0;
+  constexpr float left = 2670.0F;
+  constexpr float right = 6330.0F;
+  constexpr float top = 2950.0F;
+  constexpr float bottom = 5020.0F;
+
+  for (auto [entity, asteroid] : account.registry().view<hyperverse::AsteroidBody>().each()) {
+    (void)entity;
+    ++asteroid_count;
+    CHECK(hyperverse::length(asteroid.velocity) >= 180.0F);
+    if (asteroid.position.x >= left && asteroid.position.x <= right && asteroid.position.y >= top && asteroid.position.y <= bottom) {
+      ++initially_visible_count;
+    }
+  }
+
+  CHECK(asteroid_count >= 24);
+  CHECK(initially_visible_count <= 4);
+}
