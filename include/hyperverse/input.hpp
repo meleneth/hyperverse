@@ -40,10 +40,12 @@ struct InputTuning {
 class FlightInputMapper {
 public:
   [[nodiscard]] SemanticInputFrame map(const RawInputFrame& raw, const InputTuning& tuning = {});
+  [[nodiscard]] ControlMapping active_mapping() const;
 
 private:
   RawInputFrame previous_{};
   bool has_previous_{false};
+  ControlMapping active_mapping_{ControlMapping::Keyboard};
 };
 
 }  // namespace hyperverse

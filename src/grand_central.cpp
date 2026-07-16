@@ -26,9 +26,10 @@ AccountCtx::AccountCtx(
   std::mt19937& rng,
   ScopedLog& log,
   AccountState& account,
-  PhysicsWorld& physics
+  PhysicsWorld& physics,
+  DomainEventBus& event_bus
 )
-    : registry_{&registry}, rng_{&rng}, log_{&log}, account_{&account}, physics_{&physics} {}
+    : registry_{&registry}, rng_{&rng}, log_{&log}, account_{&account}, physics_{&physics}, event_bus_{&event_bus} {}
 
 entt::registry& AccountCtx::registry() const {
   return *registry_;
@@ -50,11 +51,15 @@ PhysicsWorld& AccountCtx::physics() const {
   return *physics_;
 }
 
+DomainEventBus& AccountCtx::event_bus() const {
+  return *event_bus_;
+}
+
 GrandCentral::GrandCentral(std::ostream& log_output)
     : rng_{0x48595045U}, log_{log_output, "account"}, account_{"Pioneer"} {}
 
 AccountCtx GrandCentral::account_context() {
-  return {registry_, rng_, log_, account_, physics_};
+  return {registry_, rng_, log_, account_, physics_, event_bus_};
 }
 
 }  // namespace hyperverse

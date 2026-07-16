@@ -6,9 +6,9 @@
 #include "hyperverse/sector.hpp"
 #include "hyperverse/targeting.hpp"
 
-#include <entt/entity/registry.hpp>
-
 namespace hyperverse {
+
+class AccountCtx;
 
 struct ParticleShot {
   Vec2 position{};
@@ -29,7 +29,7 @@ struct ParticleCannonHudSnapshot {
 };
 
 [[nodiscard]] ParticleCannonHudSnapshot update_particle_cannon(
-  entt::registry& registry,
+  AccountCtx& ctx,
   const ShipMotion& ship,
   const SemanticInputFrame& input,
   const SectorTuning& sector,

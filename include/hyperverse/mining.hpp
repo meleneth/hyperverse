@@ -23,6 +23,16 @@ struct OreTint {
   float b{0.82F};
 };
 
+struct MineralComposition {
+  float silicate{0.0F};
+  float ferrite{0.0F};
+  float nickel{0.0F};
+  float cobalt{0.0F};
+  float iridium{0.0F};
+  float exotic_crystal{0.0F};
+  float anomalous_matter{0.0F};
+};
+
 struct MiningResource {
   OreTier tier{OreTier::Common};
   float integrity{100.0F};
@@ -33,7 +43,9 @@ struct MiningResource {
   bool venting{false};
 };
 
+[[nodiscard]] MineralComposition mineral_composition_for_tier(OreTier tier);
 [[nodiscard]] OreTint ore_tint(OreTier tier);
+[[nodiscard]] OreTint ore_tint(const MineralComposition& composition);
 
 struct MiningLaserTuning {
   float range{1250.0F};

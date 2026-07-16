@@ -1,5 +1,7 @@
 #include "hyperverse/projectile.hpp"
 
+#include "hyperverse/grand_central.hpp"
+
 #if defined(__GNUC__) || defined(__clang__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
@@ -69,7 +71,7 @@ void apply_projectile_damage(AsteroidBody& asteroid, MiningResource& resource, c
 }  // namespace
 
 ParticleCannonHudSnapshot update_particle_cannon(
-  entt::registry& registry,
+  AccountCtx& ctx,
   const ShipMotion& ship,
   const SemanticInputFrame& input,
   const SectorTuning& sector,
@@ -77,6 +79,7 @@ ParticleCannonHudSnapshot update_particle_cannon(
   const ParticleCannonTuning& tuning
 ) {
   ensure_jolt_projectile_ready();
+  entt::registry& registry = ctx.registry();
 
   if (input.particle_fire_requested) {
     const Vec2 direction = length(input.primary_aim) > 0.0F ? normalize_or_zero(input.primary_aim) : facing_direction(ship.facing_radians);
@@ -86,6 +89,15 @@ ParticleCannonHudSnapshot update_particle_cannon(
       ParticleShot{
         .position = ship.position + (direction * 46.0F),
         .velocity = (direction * tuning.projectile_speed) + ship.velocity,
+      }
+    );
+    ctx.event_bus().enqueue(
+      DomainEventType::ParticleFired,
+      DomainEvent{
+        .type = DomainEventType::ParticleFired,
+        .subject = projectile,
+        .position = ship.position,
+        .amount = tuning.projectile_speed,
       }
     );
   }
@@ -98,7 +110,6 @@ ParticleCannonHudSnapshot update_particle_cannon(
     bool hit = false;
 
     for (auto [asteroid_entity, asteroid, resource] : registry.view<AsteroidBody, MiningResource>().each()) {
-      (void)asteroid_entity;
       if (resource.integrity <= 0.0F) {
         continue;
       }
@@ -106,8 +117,17 @@ ParticleCannonHudSnapshot update_particle_cannon(
       const Vec2 relative_position = wrapped_delta(projectile.position, asteroid.position, sector);
       if (jolt_spheres_overlap(tuning.projectile_radius, asteroid.radius, relative_position)) {
         apply_projectile_damage(asteroid, resource, tuning);
+        ctx.event_bus().enqueue(
+          DomainEventType::ParticleImpact,
+          DomainEvent{
+            .type = DomainEventType::ParticleImpact,
+            .subject = projectile_entity,
+            .target = asteroid_entity,
+            .position = projectile.position,
+            .amount = tuning.damage,
+          }
+        );
         hit = true;
-        ++hud.impacts;
         break;
       }
     }

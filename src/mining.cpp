@@ -99,21 +99,47 @@ void populate_hud_from_resource(MiningHudSnapshot& hud, const MiningResource& re
 
 }  // namespace
 
-OreTint ore_tint(OreTier tier) {
+MineralComposition mineral_composition_for_tier(OreTier tier) {
   switch (tier) {
     case OreTier::Common:
-      return {.r = 0.76F, .g = 0.78F, .b = 0.80F};
+      return {.silicate = 0.62F, .ferrite = 0.28F, .nickel = 0.10F};
     case OreTier::Industrial:
-      return {.r = 0.95F, .g = 0.74F, .b = 0.38F};
+      return {.silicate = 0.18F, .ferrite = 0.42F, .nickel = 0.28F, .cobalt = 0.12F};
     case OreTier::Rare:
-      return {.r = 0.35F, .g = 0.92F, .b = 1.0F};
+      return {.silicate = 0.12F, .ferrite = 0.16F, .nickel = 0.20F, .cobalt = 0.32F, .iridium = 0.20F};
     case OreTier::Exotic:
-      return {.r = 1.0F, .g = 0.35F, .b = 0.92F};
+      return {.silicate = 0.08F, .cobalt = 0.17F, .iridium = 0.30F, .exotic_crystal = 0.45F};
     case OreTier::Anomalous:
-      return {.r = 0.42F, .g = 1.0F, .b = 0.36F};
+      return {.silicate = 0.05F, .iridium = 0.18F, .exotic_crystal = 0.27F, .anomalous_matter = 0.50F};
   }
 
   return {};
+}
+
+OreTint ore_tint(OreTier tier) {
+  return ore_tint(mineral_composition_for_tier(tier));
+}
+
+OreTint ore_tint(const MineralComposition& composition) {
+  return {
+    .r = std::clamp(
+      0.48F + (composition.ferrite * 0.35F) + (composition.nickel * 0.28F) + (composition.iridium * 0.55F) +
+        (composition.exotic_crystal * 0.80F) + (composition.anomalous_matter * -0.12F),
+      0.0F,
+      1.0F
+    ),
+    .g = std::clamp(
+      0.50F + (composition.silicate * 0.30F) + (composition.cobalt * 0.45F) + (composition.anomalous_matter * 1.0F),
+      0.0F,
+      1.0F
+    ),
+    .b = std::clamp(
+      0.52F + (composition.nickel * 0.16F) + (composition.cobalt * 0.48F) + (composition.iridium * 0.35F) +
+        (composition.exotic_crystal * 0.62F) + (composition.anomalous_matter * -0.16F),
+      0.0F,
+      1.0F
+    ),
+  };
 }
 
 MiningHudSnapshot update_mining_laser(

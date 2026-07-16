@@ -88,6 +88,15 @@ TEST_CASE("stateful flight input mapper emits button requests on rising edges") 
   CHECK_FALSE(held_fire.particle_fire_requested);
 }
 
+TEST_CASE("flight input mapper uses a state machine for active device mapping") {
+  hyperverse::FlightInputMapper mapper;
+
+  CHECK(mapper.active_mapping() == hyperverse::ControlMapping::Keyboard);
+  CHECK(mapper.map({.control_mapping = hyperverse::ControlMapping::Gamepad}).control_mapping == hyperverse::ControlMapping::Gamepad);
+  CHECK(mapper.active_mapping() == hyperverse::ControlMapping::Gamepad);
+  CHECK(mapper.map({.control_mapping = hyperverse::ControlMapping::Keyboard}).control_mapping == hyperverse::ControlMapping::Keyboard);
+}
+
 TEST_CASE("wrapped sector distance uses the shortest edge crossing") {
   const hyperverse::SectorTuning sector{.width = 9000.0F, .height = 9000.0F};
   const hyperverse::Vec2 from{.x = 8950.0F, .y = 100.0F};
@@ -469,46 +478,79 @@ TEST_CASE("ore tiers expose distinct asteroid tint colors") {
   CHECK(anomalous.g == Catch::Approx(1.0F));
 }
 
+TEST_CASE("mineral composition is an explicit asteroid component input") {
+  const hyperverse::MineralComposition exotic = hyperverse::mineral_composition_for_tier(hyperverse::OreTier::Exotic);
+  const hyperverse::MineralComposition anomalous = hyperverse::mineral_composition_for_tier(hyperverse::OreTier::Anomalous);
+
+  CHECK(exotic.exotic_crystal > exotic.silicate);
+  CHECK(anomalous.anomalous_matter > 0.0F);
+  CHECK(hyperverse::ore_tint(anomalous).g > hyperverse::ore_tint(exotic).g);
+}
+
 TEST_CASE("particle cannon spawns a shot from semantic fire") {
-  entt::registry registry;
+  std::ostringstream output;
+  hyperverse::GrandCentral grand_central{output};
+  hyperverse::AccountCtx account = grand_central.account_context();
+  int fired_events = 0;
+  account.event_bus().appendListener(
+    hyperverse::DomainEventType::ParticleFired,
+    [&](const hyperverse::DomainEvent& event) {
+      CHECK(event.type == hyperverse::DomainEventType::ParticleFired);
+      ++fired_events;
+    }
+  );
 
   const hyperverse::ParticleCannonHudSnapshot hud = hyperverse::update_particle_cannon(
-    registry,
+    account,
     {.position = {.x = 100.0F, .y = 100.0F}, .facing_radians = 0.0F},
     {.particle_fire_requested = true},
     {.width = 9000.0F, .height = 9000.0F},
     0.0F,
     {.projectile_speed = 100.0F}
   );
+  account.event_bus().process();
 
   CHECK(hud.active_particles == 1);
-  CHECK(std::distance(registry.view<hyperverse::ParticleShot>().begin(), registry.view<hyperverse::ParticleShot>().end()) == 1);
+  CHECK(fired_events == 1);
+  CHECK(std::distance(account.registry().view<hyperverse::ParticleShot>().begin(), account.registry().view<hyperverse::ParticleShot>().end()) == 1);
 }
 
 TEST_CASE("particle cannon damages and shrinks asteroids on Jolt overlap") {
-  entt::registry registry;
-  const entt::entity asteroid = registry.create();
-  registry.emplace<hyperverse::AsteroidBody>(
+  std::ostringstream output;
+  hyperverse::GrandCentral grand_central{output};
+  hyperverse::AccountCtx account = grand_central.account_context();
+  hyperverse::ParticleCannonHudSnapshot event_hud{};
+  account.event_bus().appendListener(
+    hyperverse::DomainEventType::ParticleImpact,
+    [&](const hyperverse::DomainEvent& event) {
+      CHECK(event.type == hyperverse::DomainEventType::ParticleImpact);
+      ++event_hud.impacts;
+    }
+  );
+  const entt::entity asteroid = account.registry().create();
+  account.registry().emplace<hyperverse::AsteroidBody>(
     asteroid,
     hyperverse::AsteroidBody{.position = {.x = 120.0F, .y = 100.0F}, .radius = 80.0F, .base_radius = 80.0F}
   );
-  registry.emplace<hyperverse::MiningResource>(asteroid);
-  const entt::entity particle = registry.create();
-  registry.emplace<hyperverse::ParticleShot>(particle, hyperverse::ParticleShot{.position = {.x = 110.0F, .y = 100.0F}});
+  account.registry().emplace<hyperverse::MiningResource>(asteroid);
+  const entt::entity particle = account.registry().create();
+  account.registry().emplace<hyperverse::ParticleShot>(particle, hyperverse::ParticleShot{.position = {.x = 110.0F, .y = 100.0F}});
 
   const hyperverse::ParticleCannonHudSnapshot hud = hyperverse::update_particle_cannon(
-    registry,
+    account,
     {.position = {.x = 100.0F, .y = 100.0F}},
     {},
     {.width = 9000.0F, .height = 9000.0F},
     0.0F,
     {.projectile_radius = 10.0F, .damage = 25.0F}
   );
+  account.event_bus().process();
 
-  CHECK(hud.impacts == 1);
-  CHECK(registry.get<hyperverse::MiningResource>(asteroid).integrity == Catch::Approx(75.0F));
-  CHECK(registry.get<hyperverse::AsteroidBody>(asteroid).radius == Catch::Approx(60.0F));
-  CHECK(std::distance(registry.view<hyperverse::ParticleShot>().begin(), registry.view<hyperverse::ParticleShot>().end()) == 0);
+  CHECK(hud.impacts == 0);
+  CHECK(event_hud.impacts == 1);
+  CHECK(account.registry().get<hyperverse::MiningResource>(asteroid).integrity == Catch::Approx(75.0F));
+  CHECK(account.registry().get<hyperverse::AsteroidBody>(asteroid).radius == Catch::Approx(60.0F));
+  CHECK(std::distance(account.registry().view<hyperverse::ParticleShot>().begin(), account.registry().view<hyperverse::ParticleShot>().end()) == 0);
 }
 
 TEST_CASE("mining laser can acquire an asteroid from aim without a target lock") {
@@ -1130,6 +1172,7 @@ TEST_CASE("grand central derives a minimal account context without exposing owne
 
   CHECK((entity != entt::null));
   CHECK(physics != nullptr);
+  CHECK(&account.event_bus() != nullptr);
   CHECK(account.log().scope() == "account");
   CHECK(output.str().find("[account] Pioneer") != std::string::npos);
 }

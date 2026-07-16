@@ -582,6 +582,9 @@ int App::run() {
     account.registry().emplace<SectorPressureHudSnapshot>(player);
     account.registry().emplace<MiningDroneHudSnapshot>(player);
     account.registry().emplace<ParticleCannonHudSnapshot>(player);
+    account.event_bus().appendListener(DomainEventType::ParticleImpact, [&](const DomainEvent&) {
+      account.registry().get<ParticleCannonHudSnapshot>(player).impacts += 1;
+    });
     account.registry().emplace<RaiderHudSnapshot>(player);
     account.registry().emplace<CargoRecoveryHudSnapshot>(player);
     account.registry().emplace<CollisionHudSnapshot>(player);
@@ -631,6 +634,7 @@ int App::run() {
         (asteroid_index == 1U || asteroid_index == 4U || asteroid_index == 10U) ? OreTier::Industrial :
         OreTier::Common;
       account.registry().emplace<MiningResource>(entity, MiningResource{.tier = tier});
+      account.registry().emplace<MineralComposition>(entity, mineral_composition_for_tier(tier));
       ++asteroid_index;
     }
     GamepadSlot gamepad;
@@ -749,7 +753,8 @@ int App::run() {
         if (recovery_hud.recovered) {
           raider_hud = {};
         }
-        particle_hud = update_particle_cannon(account.registry(), ship, latest_intent, sector, timestep.tick_seconds(), particle_cannon_tuning);
+        particle_hud = update_particle_cannon(account, ship, latest_intent, sector, timestep.tick_seconds(), particle_cannon_tuning);
+        account.event_bus().process();
         pressure_hud = update_sector_pressure(pressure, timestep.tick_seconds(), pressure_tuning);
         collision_hud = predict_ship_asteroid_collision(ship, account.registry(), sector);
       }
@@ -794,7 +799,10 @@ int App::run() {
               asteroid_sprite_size(asteroid, account.registry().try_get<MiningResource>(entity)),
               asteroid.rotation_radians
             );
-            if (const MiningResource* resource = account.registry().try_get<MiningResource>(entity); resource != nullptr) {
+            if (const MineralComposition* composition = account.registry().try_get<MineralComposition>(entity); composition != nullptr) {
+              const OreTint tint = ore_tint(*composition);
+              tint_sprite(asteroid_sprite, tint.r, tint.g, tint.b);
+            } else if (const MiningResource* resource = account.registry().try_get<MiningResource>(entity); resource != nullptr) {
               const OreTint tint = ore_tint(resource->tier);
               tint_sprite(asteroid_sprite, tint.r, tint.g, tint.b);
             }

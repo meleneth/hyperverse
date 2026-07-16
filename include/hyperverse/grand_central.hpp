@@ -1,5 +1,6 @@
 #pragma once
 
+#include "hyperverse/domain_events.hpp"
 #include "hyperverse/physics.hpp"
 
 #include <entt/entity/registry.hpp>
@@ -34,13 +35,21 @@ private:
 
 class AccountCtx {
 public:
-  AccountCtx(entt::registry& registry, std::mt19937& rng, ScopedLog& log, AccountState& account, PhysicsWorld& physics);
+  AccountCtx(
+    entt::registry& registry,
+    std::mt19937& rng,
+    ScopedLog& log,
+    AccountState& account,
+    PhysicsWorld& physics,
+    DomainEventBus& event_bus
+  );
 
   [[nodiscard]] entt::registry& registry() const;
   [[nodiscard]] std::mt19937& rng() const;
   [[nodiscard]] ScopedLog& log() const;
   [[nodiscard]] AccountState& account() const;
   [[nodiscard]] PhysicsWorld& physics() const;
+  [[nodiscard]] DomainEventBus& event_bus() const;
 
 private:
   entt::registry* registry_;
@@ -48,6 +57,7 @@ private:
   ScopedLog* log_;
   AccountState* account_;
   PhysicsWorld* physics_;
+  DomainEventBus* event_bus_;
 };
 
 class GrandCentral {
@@ -62,6 +72,7 @@ private:
   ScopedLog log_;
   AccountState account_;
   PhysicsWorld physics_;
+  DomainEventBus event_bus_;
 };
 
 }  // namespace hyperverse
