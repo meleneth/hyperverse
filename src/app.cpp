@@ -122,6 +122,7 @@ int App::run(AccountCtx& account) {
 
       while (timestep.consume_tick()) {
         SectorTickCtx tick_ctx{account, sector, timestep.tick_seconds()};
+        gamepad.open_first_available();
         latest_intent = input_mapper.map(gamepad.sample());
         simulate_assisted_flight(account, ship, latest_intent, flight, sector, timestep.tick_seconds());
         if (latest_intent.boost_requested && account.registry().get<CargoEscortState>(player).phase == CargoEscortPhase::EscortActive) {

@@ -63,6 +63,8 @@ GamepadSlot::~GamepadSlot() {
 }
 
 void GamepadSlot::open_first_available() {
+  SDL_UpdateGamepads();
+
   int gamepad_count = 0;
   SDL_JoystickID* gamepads = SDL_GetGamepads(&gamepad_count);
   if (gamepads == nullptr) {

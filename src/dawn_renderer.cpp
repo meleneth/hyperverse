@@ -305,9 +305,11 @@ struct DawnRenderer::Impl {
 
     wgpu::CommandBuffer commands = encoder.Finish();
     queue_.Submit(1, &commands);
+#if !defined(__EMSCRIPTEN__)
     if (surface_.Present() != wgpu::Status::Success) {
       surface_dirty_ = true;
     }
+#endif
   }
 
   void wait_idle() const {
