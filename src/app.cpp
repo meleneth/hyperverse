@@ -31,6 +31,10 @@
 
 #include <SDL3/SDL.h>
 
+#if defined(__EMSCRIPTEN__)
+#include <emscripten.h>
+#endif
+
 #include <algorithm>
 #include <chrono>
 #include <exception>
@@ -288,7 +292,11 @@ int App::run(AccountCtx& account) {
         renderer.width(),
         renderer.height()
       ));
+#if defined(__EMSCRIPTEN__)
+      emscripten_sleep(1);
+#else
       SDL_Delay(1);
+#endif
     }
 
     renderer.wait_idle();
