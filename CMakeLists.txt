@@ -234,10 +234,14 @@ target_link_libraries(hyperverse PRIVATE hyperverse::core)
 hyperverse_enable_project_warnings(hyperverse)
 
 if(EMSCRIPTEN)
+  target_compile_options(hyperverse_core PRIVATE "SHELL:-fexceptions")
   set_target_properties(hyperverse PROPERTIES SUFFIX ".html")
+  target_compile_options(hyperverse PRIVATE "SHELL:-fexceptions")
   target_link_options(
     hyperverse
     PRIVATE
+      "SHELL:-fexceptions"
+      "SHELL:-sASYNCIFY=1"
       "SHELL:-sALLOW_MEMORY_GROWTH=1"
       "SHELL:-sEXIT_RUNTIME=0"
       "SHELL:--preload-file ${PROJECT_SOURCE_DIR}/assets@/assets"

@@ -364,6 +364,11 @@ struct DawnRenderer::Impl {
 
   void create_instance() {
     wgpu::InstanceDescriptor descriptor{};
+#if defined(__EMSCRIPTEN__)
+    static constexpr std::array kInstanceFeatures{wgpu::InstanceFeatureName::TimedWaitAny};
+    descriptor.requiredFeatureCount = kInstanceFeatures.size();
+    descriptor.requiredFeatures = kInstanceFeatures.data();
+#endif
     instance_ = wgpu::CreateInstance(&descriptor);
     if (instance_ == nullptr) {
       throw std::runtime_error("failed to create Dawn instance");
@@ -448,6 +453,14 @@ struct DawnRenderer::Impl {
     }
   }
 
+#if defined(__EMSCRIPTEN__)
+  void wait_for_future(const wgpu::Future& future, const std::string_view operation) {
+    if (instance_.WaitAny(future, UINT64_MAX) != wgpu::WaitStatus::Success) {
+      throw std::runtime_error("failed waiting for Dawn " + std::string{operation} + " callback");
+    }
+  }
+#endif
+
   [[nodiscard]] std::string describe_adapter() const {
     if (adapter_ == nullptr) {
       return "no adapter";
@@ -470,7 +483,9 @@ struct DawnRenderer::Impl {
   void request_adapter() {
     wgpu::RequestAdapterOptions options{};
     options.compatibleSurface = surface_;
+#if !defined(__EMSCRIPTEN__)
     options.powerPreference = wgpu::PowerPreference::HighPerformance;
+#endif
 #if defined(_WIN32) && defined(__MINGW32__)
     options.backendType = wgpu::BackendType::Vulkan;
 #endif
@@ -478,9 +493,13 @@ struct DawnRenderer::Impl {
     adapter_request_done_ = false;
     adapter_error_.clear();
     adapter_status_ = wgpu::RequestAdapterStatus::CallbackCancelled;
-    instance_.RequestAdapter(
+    auto future = instance_.RequestAdapter(
       &options,
+#if defined(__EMSCRIPTEN__)
+      wgpu::CallbackMode::AllowSpontaneous,
+#else
       wgpu::CallbackMode::AllowProcessEvents,
+#endif
       [this](wgpu::RequestAdapterStatus status, wgpu::Adapter adapter, wgpu::StringView message) {
         adapter_status_ = status;
         adapter_error_ = to_string(message);
@@ -490,7 +509,12 @@ struct DawnRenderer::Impl {
         adapter_request_done_ = true;
       }
     );
+#if defined(__EMSCRIPTEN__)
+    wait_for_future(future, "adapter request");
+#else
+    (void)future;
     process_events_until(adapter_request_done_, "adapter request");
+#endif
     if (adapter_ == nullptr) {
       std::string error = "failed to request Dawn adapter: status=" + request_adapter_status_name(adapter_status_);
       if (!adapter_error_.empty()) {
@@ -513,7 +537,11 @@ struct DawnRenderer::Impl {
       }
     );
     descriptor.SetDeviceLostCallback(
+#if defined(__EMSCRIPTEN__)
+      wgpu::CallbackMode::AllowSpontaneous,
+#else
       wgpu::CallbackMode::AllowProcessEvents,
+#endif
       [](const wgpu::Device&, wgpu::DeviceLostReason reason, wgpu::StringView message) {
         const std::string text = to_string(message);
         SDL_Log("Dawn device lost: reason=%u message=%s", static_cast<unsigned>(reason), text.c_str());
@@ -523,9 +551,13 @@ struct DawnRenderer::Impl {
     device_request_done_ = false;
     device_error_.clear();
     device_status_ = wgpu::RequestDeviceStatus::CallbackCancelled;
-    adapter_.RequestDevice(
+    auto future = adapter_.RequestDevice(
       &descriptor,
+#if defined(__EMSCRIPTEN__)
+      wgpu::CallbackMode::AllowSpontaneous,
+#else
       wgpu::CallbackMode::AllowProcessEvents,
+#endif
       [this](wgpu::RequestDeviceStatus status, wgpu::Device device, wgpu::StringView message) {
         device_status_ = status;
         device_error_ = to_string(message);
@@ -535,7 +567,12 @@ struct DawnRenderer::Impl {
         device_request_done_ = true;
       }
     );
+#if defined(__EMSCRIPTEN__)
+    wait_for_future(future, "device request");
+#else
+    (void)future;
     process_events_until(device_request_done_, "device request");
+#endif
     if (device_ == nullptr) {
       std::string error = "failed to request Dawn device: status=" + request_device_status_name(device_status_) + " adapter=" + describe_adapter();
       if (!device_error_.empty()) {

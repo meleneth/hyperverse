@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hyperverse WASM</title>
+    <style>
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            background: #05070a;
+            color: #dce7f2;
+            overflow: hidden;
+            font-family: system-ui, sans-serif;
+        }
+
+        #shell {
+            position: fixed;
+            inset: 0;
+            display: grid;
+            grid-template-rows: 1fr auto;
+            background: #05070a;
+        }
+
+        #canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            border: 0;
+            outline: 0;
+            background: #000;
+        }
+
+        #status {
+            min-height: 1.5rem;
+            padding: 0.35rem 0.75rem;
+            background: #111923;
+            color: #dce7f2;
+            font-size: 0.875rem;
+        }
+
+        #output {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <main id="shell">
+        <canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
+        <div id="status">Downloading...</div>
+    </main>
+    <textarea id="output"></textarea>
+
+    <script src="./app.js"></script>
+</body>
+
+</html>
