@@ -22,6 +22,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace hyperverse {
@@ -262,16 +263,58 @@ struct DawnRenderer::Impl {
     }
 
     wgpu::SurfaceDescriptor descriptor{};
-    void* wayland_display = SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER, nullptr);
-    void* wayland_surface = SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, nullptr);
-    if (wayland_display == nullptr || wayland_surface == nullptr) {
-      throw std::runtime_error("SDL window does not expose Wayland handles for Dawn");
+#if defined(__EMSCRIPTEN__)
+    const char* canvas_id = SDL_GetStringProperty(properties, SDL_PROP_WINDOW_EMSCRIPTEN_CANVAS_ID_STRING, nullptr);
+    std::string selector = canvas_id == nullptr || std::string_view{canvas_id}.empty() ? std::string{"#canvas"} : std::string{canvas_id};
+    if (!selector.empty() && selector.front() != '#' && selector.front() != '!') {
+      selector.insert(selector.begin(), '#');
     }
 
+    wgpu::EmscriptenSurfaceSourceCanvasHTMLSelector canvas_source{};
+    canvas_source.selector = wgpu::StringView{selector};
+    descriptor.nextInChain = &canvas_source;
+#elif defined(_WIN32)
+    void* hwnd = SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
+    void* hinstance = SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_WIN32_INSTANCE_POINTER, nullptr);
+    if (hwnd == nullptr || hinstance == nullptr) {
+      throw std::runtime_error("SDL window does not expose Win32 handles for Dawn");
+    }
+
+    wgpu::SurfaceSourceWindowsHWND windows_source{};
+    windows_source.hwnd = hwnd;
+    windows_source.hinstance = hinstance;
+    descriptor.nextInChain = &windows_source;
+#else
+#if defined(HYPERVERSE_ENABLE_X11)
+    void* x11_display = SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_X11_DISPLAY_POINTER, nullptr);
+    const Sint64 x11_window_id = SDL_GetNumberProperty(properties, SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0);
+    wgpu::SurfaceSourceXlibWindow x11_source{};
+#endif
     wgpu::SurfaceSourceWaylandSurface wayland_source{};
-    wayland_source.display = wayland_display;
-    wayland_source.surface = wayland_surface;
-    descriptor.nextInChain = &wayland_source;
+#if defined(HYPERVERSE_ENABLE_X11)
+    if (x11_display != nullptr && x11_window_id > 0) {
+      x11_source.display = x11_display;
+      x11_source.window = static_cast<std::uint64_t>(x11_window_id);
+      descriptor.nextInChain = &x11_source;
+    } else {
+#endif
+      void* wayland_display = SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER, nullptr);
+      void* wayland_surface = SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, nullptr);
+      if (wayland_display == nullptr || wayland_surface == nullptr) {
+#if defined(HYPERVERSE_ENABLE_X11)
+        throw std::runtime_error("SDL window does not expose X11 or Wayland handles for Dawn");
+#else
+        throw std::runtime_error("SDL window does not expose Wayland handles for Dawn");
+#endif
+      }
+
+      wayland_source.display = wayland_display;
+      wayland_source.surface = wayland_surface;
+      descriptor.nextInChain = &wayland_source;
+#if defined(HYPERVERSE_ENABLE_X11)
+    }
+#endif
+#endif
 
     surface_ = instance_.CreateSurface(&descriptor);
     if (surface_ == nullptr) {

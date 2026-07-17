@@ -50,6 +50,7 @@ pacman -Syu --needed \
   git \
   ${MINGW_PACKAGE_PREFIX}-cmake \
   ${MINGW_PACKAGE_PREFIX}-ninja \
+  ${MINGW_PACKAGE_PREFIX}-libpng \
   ${MINGW_PACKAGE_PREFIX}-pkgconf \
   ${MINGW_PACKAGE_PREFIX}-vulkan-headers \
   ${MINGW_PACKAGE_PREFIX}-vulkan-loader \

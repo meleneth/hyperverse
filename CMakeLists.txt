@@ -8,6 +8,7 @@ project(
 )
 
 option(HYPERVERSE_BUILD_TESTS "Build Hyperverse tests" ON)
+option(HYPERVERSE_ENABLE_X11 "Build Dawn X11 surface support on Linux" ON)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -19,6 +20,7 @@ list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 include(FetchContent)
 include(CPM)
 include(CompilerWarnings)
+include(CheckIncludeFileCXX)
 
 find_package(PNG REQUIRED)
 
@@ -27,15 +29,38 @@ set(DAWN_BUILD_MONOLITHIC_LIBRARY STATIC CACHE STRING "" FORCE)
 set(DAWN_BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
 set(DAWN_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(DAWN_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
-set(DAWN_ENABLE_D3D11 OFF CACHE BOOL "" FORCE)
-set(DAWN_ENABLE_D3D12 OFF CACHE BOOL "" FORCE)
 set(DAWN_ENABLE_DESKTOP_GL OFF CACHE BOOL "" FORCE)
 set(DAWN_ENABLE_OPENGLES OFF CACHE BOOL "" FORCE)
 set(DAWN_ENABLE_NULL OFF CACHE BOOL "" FORCE)
 set(DAWN_ENABLE_WEBGPU_ON_WEBGPU OFF CACHE BOOL "" FORCE)
-set(DAWN_USE_X11 OFF CACHE BOOL "" FORCE)
+set(DAWN_USE_GLFW OFF CACHE BOOL "" FORCE)
+if(EMSCRIPTEN)
+  set(DAWN_ENABLE_D3D11 OFF CACHE BOOL "" FORCE)
+  set(DAWN_ENABLE_D3D12 OFF CACHE BOOL "" FORCE)
+  set(DAWN_ENABLE_VULKAN OFF CACHE BOOL "" FORCE)
+  set(DAWN_USE_WAYLAND OFF CACHE BOOL "" FORCE)
+  set(DAWN_USE_X11 OFF CACHE BOOL "" FORCE)
+elseif(WIN32)
+  set(DAWN_ENABLE_D3D11 ON CACHE BOOL "" FORCE)
+  set(DAWN_ENABLE_D3D12 ON CACHE BOOL "" FORCE)
+  set(DAWN_ENABLE_VULKAN ON CACHE BOOL "" FORCE)
+  set(DAWN_USE_WAYLAND OFF CACHE BOOL "" FORCE)
+  set(DAWN_USE_X11 OFF CACHE BOOL "" FORCE)
+else()
+  set(DAWN_ENABLE_D3D11 OFF CACHE BOOL "" FORCE)
+  set(DAWN_ENABLE_D3D12 OFF CACHE BOOL "" FORCE)
+  set(DAWN_ENABLE_VULKAN ON CACHE BOOL "" FORCE)
+  set(DAWN_USE_WAYLAND ON CACHE BOOL "" FORCE)
+  set(DAWN_USE_X11 ${HYPERVERSE_ENABLE_X11} CACHE BOOL "" FORCE)
+endif()
 set(TINT_BUILD_CMD_TOOLS OFF CACHE BOOL "" FORCE)
 set(TINT_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN AND HYPERVERSE_ENABLE_X11)
+  check_include_file_cxx("X11/Xlib-xcb.h" HYPERVERSE_HAS_XLIB_XCB_H)
+  if(NOT HYPERVERSE_HAS_XLIB_XCB_H)
+    message(FATAL_ERROR "Dawn X11 support requires X11/Xlib-xcb.h. Install the Xlib/XCB development header package; on Debian/Trixie use libx11-xcb-dev.")
+  endif()
+endif()
 FetchContent_Declare(
   dawn
   GIT_REPOSITORY https://dawn.googlesource.com/dawn
@@ -44,6 +69,11 @@ FetchContent_Declare(
   GIT_SUBMODULES_RECURSE FALSE
 )
 FetchContent_MakeAvailable(dawn)
+if(EMSCRIPTEN)
+  set(HYPERVERSE_DAWN_TARGETS webgpu_cpp)
+else()
+  set(HYPERVERSE_DAWN_TARGETS dawn::webgpu_dawn webgpu_cpp)
+endif()
 
 CPMAddPackage(
   NAME SDL3
@@ -176,11 +206,13 @@ target_link_libraries(
     hyperverse::eventpp
   PRIVATE
     ${HYPERVERSE_SDL_TARGET}
-    dawn::webgpu_dawn
-    webgpu_cpp
+    ${HYPERVERSE_DAWN_TARGETS}
     PNG::PNG
     ${HYPERVERSE_JOLT_TARGET}
 )
+if(HYPERVERSE_ENABLE_X11)
+  target_compile_definitions(hyperverse_core PRIVATE HYPERVERSE_ENABLE_X11=1)
+endif()
 hyperverse_enable_project_warnings(hyperverse_core)
 
 add_executable(hyperverse src/main.cpp)

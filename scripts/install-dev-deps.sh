@@ -15,6 +15,8 @@ install_apt() {
     g++ \
     git \
     libgl1-mesa-dev \
+    libpng-dev \
+    libx11-xcb-dev \
     libwayland-dev \
     libvulkan-dev \
     libxkbcommon-dev \
@@ -37,6 +39,7 @@ install_dnf() {
     libXrandr-devel \
     libXScrnSaver-devel \
     libXext-devel \
+    libpng-devel \
     libdrm-devel \
     libglvnd-devel \
     libxkbcommon-devel \
@@ -60,6 +63,7 @@ install_pacman() {
     libxext \
     libxi \
     libxinerama \
+    libpng \
     libxrandr \
     libxss \
     libxkbcommon \
@@ -86,6 +90,7 @@ install_zypper() {
     libXrandr-devel \
     libXScrnSaver-devel \
     libxkbcommon-devel \
+    libpng16-devel \
     make \
     ninja \
     pkgconf-pkg-config \
@@ -113,8 +118,9 @@ Install these tool categories manually:
 - Make or Ninja
 - pkg-config
 - Vulkan headers and loader development package
+- libpng development package
 - OpenGL/Mesa development package
-- X11 and Wayland development packages used by SDL3
+- X11, X11-XCB, and Wayland development packages used by SDL3 and Dawn
 EOF
   exit 1
 fi
