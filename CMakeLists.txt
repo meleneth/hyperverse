@@ -22,7 +22,14 @@ include(CPM)
 include(CompilerWarnings)
 include(CheckIncludeFileCXX)
 
-find_package(PNG REQUIRED)
+if(EMSCRIPTEN)
+  add_library(hyperverse_emscripten_png INTERFACE)
+  add_library(PNG::PNG ALIAS hyperverse_emscripten_png)
+  target_compile_options(hyperverse_emscripten_png INTERFACE "SHELL:-sUSE_LIBPNG=1")
+  target_link_options(hyperverse_emscripten_png INTERFACE "SHELL:-sUSE_LIBPNG=1")
+else()
+  find_package(PNG REQUIRED)
+endif()
 
 set(DAWN_FETCH_DEPENDENCIES ON CACHE BOOL "" FORCE)
 set(DAWN_BUILD_MONOLITHIC_LIBRARY STATIC CACHE STRING "" FORCE)
@@ -225,6 +232,17 @@ hyperverse_enable_project_warnings(hyperverse_core)
 add_executable(hyperverse src/main.cpp)
 target_link_libraries(hyperverse PRIVATE hyperverse::core)
 hyperverse_enable_project_warnings(hyperverse)
+
+if(EMSCRIPTEN)
+  set_target_properties(hyperverse PROPERTIES SUFFIX ".html")
+  target_link_options(
+    hyperverse
+    PRIVATE
+      "SHELL:-sALLOW_MEMORY_GROWTH=1"
+      "SHELL:-sEXIT_RUNTIME=0"
+      "SHELL:--preload-file ${PROJECT_SOURCE_DIR}/assets@/assets"
+  )
+endif()
 
 if(WIN32)
   add_custom_command(

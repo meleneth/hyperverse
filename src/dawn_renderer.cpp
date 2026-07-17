@@ -316,9 +316,11 @@ struct DawnRenderer::Impl {
 
   void drain_dawn_events() const {
     for (int index = 0; index < 4; ++index) {
+#if !defined(__EMSCRIPTEN__)
       if (device_ != nullptr) {
         device_.Tick();
       }
+#endif
       if (instance_ != nullptr) {
         instance_.ProcessEvents();
       }

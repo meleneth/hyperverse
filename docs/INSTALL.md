@@ -100,11 +100,24 @@ on `PATH`.
 ## Emscripten
 
 Dawn is wired to use `emdawnwebgpu_cpp` through Dawn's `webgpu_cpp` target when configured with
-the Emscripten toolchain. Use an activated Emscripten SDK environment:
+the Emscripten toolchain. The preferred local path is the container wrapper, which only requires
+Docker or Podman on the host:
 
 ```sh
-emcmake cmake -S . -B build-wasm -G Ninja -DCMAKE_BUILD_TYPE=Release -DHYPERVERSE_BUILD_TESTS=OFF
-cmake --build build-wasm --target hyperverse
+./scripts/build-emscripten-container.sh
+```
+
+The direct SDK script is also available when an Emscripten SDK environment is already active:
+
+```sh
+./scripts/build-emscripten.sh
+```
+
+Both scripts build `build-emscripten/hyperverse.html`, preload the runtime `assets/` directory into
+the browser filesystem, and enable Emscripten WebGPU. To serve the result locally:
+
+```sh
+./scripts/build-emscripten-container.sh --serve
 ```
 
 ## Dependency Pins
