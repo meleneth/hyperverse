@@ -2,10 +2,30 @@
 
 #include <png.h>
 
+#include <array>
 #include <cstdio>
 #include <stdexcept>
+#include <string>
 
 namespace hyperverse {
+namespace {
+
+struct PngReadContext {
+  std::string path;
+  std::string error;
+};
+
+void png_error_callback(png_structp png, png_const_charp message) {
+  auto* context = static_cast<PngReadContext*>(png_get_error_ptr(png));
+  if (context != nullptr) {
+    context->error = message != nullptr ? message : "unknown libpng error";
+  }
+  png_longjmp(png, 1);
+}
+
+void png_warning_callback(png_structp, png_const_charp) {}
+
+}  // namespace
 
 SpriteAlphaMask load_png_rgba(const std::filesystem::path& path) {
   FILE* file = std::fopen(path.string().c_str(), "rb");
@@ -13,7 +33,14 @@ SpriteAlphaMask load_png_rgba(const std::filesystem::path& path) {
     throw std::runtime_error("failed to open png: " + path.string());
   }
 
-  png_structp png = png_create_read_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
+  std::array<png_byte, 8> signature{};
+  if (std::fread(signature.data(), 1, signature.size(), file) != signature.size() || png_sig_cmp(signature.data(), 0, signature.size()) != 0) {
+    std::fclose(file);
+    throw std::runtime_error("not a png file: " + path.string());
+  }
+
+  PngReadContext context{.path = path.string(), .error = {}};
+  png_structp png = png_create_read_struct(PNG_LIBPNG_VER_STRING, &context, png_error_callback, png_warning_callback);
   png_infop info = png != nullptr ? png_create_info_struct(png) : nullptr;
   if (png == nullptr || info == nullptr) {
     png_destroy_read_struct(&png, nullptr, nullptr);
@@ -24,10 +51,12 @@ SpriteAlphaMask load_png_rgba(const std::filesystem::path& path) {
   if (setjmp(png_jmpbuf(png)) != 0) {
     png_destroy_read_struct(&png, &info, nullptr);
     std::fclose(file);
-    throw std::runtime_error("failed to decode png: " + path.string());
+    const std::string detail = context.error.empty() ? "unknown libpng error" : context.error;
+    throw std::runtime_error("failed to decode png " + context.path + ": " + detail);
   }
 
   png_init_io(png, file);
+  png_set_sig_bytes(png, signature.size());
   png_read_info(png, info);
 
   const png_uint_32 width = png_get_image_width(png, info);

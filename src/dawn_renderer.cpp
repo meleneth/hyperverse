@@ -197,25 +197,33 @@ struct LineVertex {
   return ((bytes + alignment - 1U) / alignment) * alignment;
 }
 
-void append_sprite_vertices(std::vector<SpriteVertex>& vertices, const SpriteDraw& sprite) {
+void append_sprite_vertices(std::vector<SpriteVertex>& vertices, const SpriteDraw& sprite, const std::uint32_t width, const std::uint32_t height) {
+  const float viewport_width = static_cast<float>(std::max(width, 1U));
+  const float viewport_height = static_cast<float>(std::max(height, 1U));
+  const float half_width_pixels = sprite.half_width_ndc * viewport_width * 0.5F;
+  const float half_height_pixels = sprite.half_height_ndc * viewport_height * 0.5F;
+  const float center_x = sprite.center_x_ndc;
+  const float center_y = -sprite.center_y_ndc;
   const float cosine = std::cos(sprite.rotation_radians);
   const float sine = std::sin(sprite.rotation_radians);
   const std::array<std::array<float, 4>, 6> corners{{
-    {{-1.0F, -1.0F, 0.0F, 1.0F}},
-    {{1.0F, -1.0F, 1.0F, 1.0F}},
-    {{1.0F, 1.0F, 1.0F, 0.0F}},
-    {{-1.0F, -1.0F, 0.0F, 1.0F}},
-    {{1.0F, 1.0F, 1.0F, 0.0F}},
-    {{-1.0F, 1.0F, 0.0F, 0.0F}},
+    {{-1.0F, -1.0F, 0.0F, 0.0F}},
+    {{1.0F, -1.0F, 1.0F, 0.0F}},
+    {{1.0F, 1.0F, 1.0F, 1.0F}},
+    {{-1.0F, -1.0F, 0.0F, 0.0F}},
+    {{1.0F, 1.0F, 1.0F, 1.0F}},
+    {{-1.0F, 1.0F, 0.0F, 1.0F}},
   }};
 
   for (const auto& corner : corners) {
-    const float local_x = corner[0] * sprite.half_width_ndc;
-    const float local_y = corner[1] * sprite.half_height_ndc;
+    const float local_x_pixels = corner[0] * half_width_pixels;
+    const float local_y_pixels = corner[1] * half_height_pixels;
+    const float rotated_x_pixels = (local_x_pixels * cosine) - (local_y_pixels * sine);
+    const float rotated_y_pixels = (local_x_pixels * sine) + (local_y_pixels * cosine);
     vertices.push_back(
       SpriteVertex{
-        .x = sprite.center_x_ndc + (local_x * cosine) - (local_y * sine),
-        .y = sprite.center_y_ndc + (local_x * sine) + (local_y * cosine),
+        .x = center_x + ((rotated_x_pixels * 2.0F) / viewport_width),
+        .y = center_y - ((rotated_y_pixels * 2.0F) / viewport_height),
         .u = corner[2],
         .v = corner[3],
         .r = sprite.tint_r,
@@ -231,23 +239,25 @@ void append_sprite_vertices(std::vector<SpriteVertex>& vertices, const SpriteDra
 
 struct DawnRenderer::Impl {
   explicit Impl(SDL_Window& window) : window_{&window} {
-    create_instance();
-    create_surface();
-    request_adapter();
-    request_device();
-    queue_ = device_.GetQueue();
-    configure_surface();
-    create_sampler();
-    create_texture_bind_group_layout();
-    create_pipelines();
-    create_textures();
+    try {
+      create_instance();
+      create_surface();
+      request_adapter();
+      request_device();
+      queue_ = device_.GetQueue();
+      configure_surface();
+      create_sampler();
+      create_texture_bind_group_layout();
+      create_pipelines();
+      create_textures();
+    } catch (...) {
+      shutdown();
+      throw;
+    }
   }
 
   ~Impl() {
-    wait_idle();
-    if (surface_ != nullptr) {
-      surface_.Unconfigure();
-    }
+    shutdown();
   }
 
   void draw_frame(const SpriteFrame& frame) {
@@ -301,8 +311,44 @@ struct DawnRenderer::Impl {
   }
 
   void wait_idle() const {
-    if (device_ != nullptr) {
-      device_.Tick();
+    drain_dawn_events();
+  }
+
+  void drain_dawn_events() const {
+    for (int index = 0; index < 4; ++index) {
+      if (device_ != nullptr) {
+        device_.Tick();
+      }
+      if (instance_ != nullptr) {
+        instance_.ProcessEvents();
+      }
+    }
+  }
+
+  void shutdown() noexcept {
+    try {
+      drain_dawn_events();
+      if (surface_ != nullptr) {
+        surface_.Unconfigure();
+      }
+      texture_bind_groups_.clear();
+      texture_views_.clear();
+      textures_.clear();
+      line_pipeline_ = {};
+      sprite_pipeline_ = {};
+      sprite_pipeline_layout_ = {};
+      texture_bind_group_layout_ = {};
+      sampler_ = {};
+      queue_ = {};
+      drain_dawn_events();
+      surface_ = {};
+      device_ = {};
+      adapter_ = {};
+      if (instance_ != nullptr) {
+        instance_.ProcessEvents();
+      }
+      instance_ = {};
+    } catch (...) {
     }
   }
 
@@ -464,6 +510,13 @@ struct DawnRenderer::Impl {
         SDL_Log("Dawn validation error: %s", text.c_str());
       }
     );
+    descriptor.SetDeviceLostCallback(
+      wgpu::CallbackMode::AllowProcessEvents,
+      [](const wgpu::Device&, wgpu::DeviceLostReason reason, wgpu::StringView message) {
+        const std::string text = to_string(message);
+        SDL_Log("Dawn device lost: reason=%u message=%s", static_cast<unsigned>(reason), text.c_str());
+      }
+    );
 
     device_request_done_ = false;
     device_error_.clear();
@@ -535,8 +588,8 @@ struct DawnRenderer::Impl {
     wgpu::SamplerDescriptor descriptor{};
     descriptor.addressModeU = wgpu::AddressMode::ClampToEdge;
     descriptor.addressModeV = wgpu::AddressMode::ClampToEdge;
-    descriptor.magFilter = wgpu::FilterMode::Nearest;
-    descriptor.minFilter = wgpu::FilterMode::Nearest;
+    descriptor.magFilter = wgpu::FilterMode::Linear;
+    descriptor.minFilter = wgpu::FilterMode::Linear;
     sampler_ = device_.CreateSampler(&descriptor);
   }
 
@@ -775,7 +828,7 @@ fn fs_main(input: LineOutput) -> @location(0) vec4f {
 
       std::vector<SpriteVertex> vertices;
       vertices.reserve(6);
-      append_sprite_vertices(vertices, sprite);
+      append_sprite_vertices(vertices, sprite, width_, height_);
       const wgpu::Buffer vertex_buffer = transient_buffer(vertices.data(), sizeof(SpriteVertex) * vertices.size());
       pass.SetBindGroup(0, texture_bind_groups_[texture_index]);
       pass.SetVertexBuffer(0, vertex_buffer);
@@ -791,8 +844,8 @@ fn fs_main(input: LineOutput) -> @location(0) vec4f {
     std::vector<LineVertex> vertices;
     vertices.reserve(lines.size() * 2U);
     for (const LineDraw& line : lines) {
-      vertices.push_back(LineVertex{.x = line.start_x_ndc, .y = line.start_y_ndc, .r = line.r, .g = line.g, .b = line.b, .a = line.a});
-      vertices.push_back(LineVertex{.x = line.end_x_ndc, .y = line.end_y_ndc, .r = line.r, .g = line.g, .b = line.b, .a = line.a});
+      vertices.push_back(LineVertex{.x = line.start_x_ndc, .y = -line.start_y_ndc, .r = line.r, .g = line.g, .b = line.b, .a = line.a});
+      vertices.push_back(LineVertex{.x = line.end_x_ndc, .y = -line.end_y_ndc, .r = line.r, .g = line.g, .b = line.b, .a = line.a});
     }
 
     const wgpu::Buffer vertex_buffer = transient_buffer(vertices.data(), sizeof(LineVertex) * vertices.size());
