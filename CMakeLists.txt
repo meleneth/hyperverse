@@ -40,6 +40,13 @@ if(EMSCRIPTEN)
   set(DAWN_ENABLE_VULKAN OFF CACHE BOOL "" FORCE)
   set(DAWN_USE_WAYLAND OFF CACHE BOOL "" FORCE)
   set(DAWN_USE_X11 OFF CACHE BOOL "" FORCE)
+elseif(WIN32 AND MINGW)
+  set(DAWN_ENABLE_D3D11 OFF CACHE BOOL "" FORCE)
+  set(DAWN_ENABLE_D3D12 OFF CACHE BOOL "" FORCE)
+  set(DAWN_ENABLE_VULKAN ON CACHE BOOL "" FORCE)
+  set(DAWN_USE_WINDOWS_UI OFF CACHE BOOL "" FORCE)
+  set(DAWN_USE_WAYLAND OFF CACHE BOOL "" FORCE)
+  set(DAWN_USE_X11 OFF CACHE BOOL "" FORCE)
 elseif(WIN32)
   set(DAWN_ENABLE_D3D11 ON CACHE BOOL "" FORCE)
   set(DAWN_ENABLE_D3D12 ON CACHE BOOL "" FORCE)
@@ -218,6 +225,38 @@ hyperverse_enable_project_warnings(hyperverse_core)
 add_executable(hyperverse src/main.cpp)
 target_link_libraries(hyperverse PRIVATE hyperverse::core)
 hyperverse_enable_project_warnings(hyperverse)
+
+if(WIN32)
+  add_custom_command(
+    TARGET hyperverse
+    POST_BUILD
+    COMMAND
+      "${CMAKE_COMMAND}" -E copy -t "$<TARGET_FILE_DIR:hyperverse>"
+      "$<TARGET_RUNTIME_DLLS:hyperverse>"
+    COMMAND_EXPAND_LISTS
+    COMMENT "Copying runtime DLLs next to hyperverse"
+    VERBATIM
+  )
+
+  if(MINGW)
+    find_file(HYPERVERSE_VULKAN_LOADER_DLL NAMES vulkan-1.dll PATHS ENV PATH NO_DEFAULT_PATH)
+    if(HYPERVERSE_VULKAN_LOADER_DLL)
+      add_custom_command(
+        TARGET hyperverse
+        POST_BUILD
+        COMMAND
+          "${CMAKE_COMMAND}" -E copy_if_different
+          "${HYPERVERSE_VULKAN_LOADER_DLL}"
+          "$<TARGET_FILE_DIR:hyperverse>"
+        COMMENT "Copying Vulkan loader next to hyperverse"
+        VERBATIM
+      )
+    else()
+      message(WARNING "vulkan-1.dll was not found on PATH; the Windows runtime may fail until the Vulkan loader is installed or added to PATH.")
+    endif()
+  endif()
+endif()
+
 add_custom_command(
   TARGET hyperverse
   POST_BUILD

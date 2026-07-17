@@ -91,6 +91,12 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
+MSYS2/MinGW builds use Dawn's Vulkan backend with Win32 HWND surfaces. Dawn's D3D11,
+D3D12, and Windows UI surface paths are disabled there because they require Windows SDK
+headers that are not provided by MinGW. The build stages runtime DLLs next to
+`hyperverse.exe`, including `vulkan-1.dll` when the MSYS2 Vulkan loader package has put it
+on `PATH`.
+
 ## Emscripten
 
 Dawn is wired to use `emdawnwebgpu_cpp` through Dawn's `webgpu_cpp` target when configured with

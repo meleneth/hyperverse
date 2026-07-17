@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -22,6 +23,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -114,6 +116,70 @@ struct LineVertex {
 [[nodiscard]] std::string to_string(const wgpu::StringView message) {
   const std::string_view view = message;
   return std::string{view};
+}
+
+[[nodiscard]] std::string request_adapter_status_name(const wgpu::RequestAdapterStatus status) {
+  switch (status) {
+    case wgpu::RequestAdapterStatus::Success:
+      return "success";
+    case wgpu::RequestAdapterStatus::CallbackCancelled:
+      return "callback cancelled";
+    case wgpu::RequestAdapterStatus::Unavailable:
+      return "unavailable";
+    case wgpu::RequestAdapterStatus::Error:
+      return "error";
+  }
+  return "unknown(" + std::to_string(static_cast<std::uint32_t>(status)) + ")";
+}
+
+[[nodiscard]] std::string request_device_status_name(const wgpu::RequestDeviceStatus status) {
+  switch (status) {
+    case wgpu::RequestDeviceStatus::Success:
+      return "success";
+    case wgpu::RequestDeviceStatus::CallbackCancelled:
+      return "callback cancelled";
+    case wgpu::RequestDeviceStatus::Error:
+      return "error";
+  }
+  return "unknown(" + std::to_string(static_cast<std::uint32_t>(status)) + ")";
+}
+
+[[nodiscard]] std::string backend_type_name(const wgpu::BackendType backend) {
+  switch (backend) {
+    case wgpu::BackendType::Undefined:
+      return "undefined";
+    case wgpu::BackendType::Null:
+      return "null";
+    case wgpu::BackendType::WebGPU:
+      return "webgpu";
+    case wgpu::BackendType::D3D11:
+      return "d3d11";
+    case wgpu::BackendType::D3D12:
+      return "d3d12";
+    case wgpu::BackendType::Metal:
+      return "metal";
+    case wgpu::BackendType::Vulkan:
+      return "vulkan";
+    case wgpu::BackendType::OpenGL:
+      return "opengl";
+    case wgpu::BackendType::OpenGLES:
+      return "opengles";
+  }
+  return "unknown(" + std::to_string(static_cast<std::uint32_t>(backend)) + ")";
+}
+
+[[nodiscard]] std::string adapter_type_name(const wgpu::AdapterType type) {
+  switch (type) {
+    case wgpu::AdapterType::DiscreteGPU:
+      return "discrete gpu";
+    case wgpu::AdapterType::IntegratedGPU:
+      return "integrated gpu";
+    case wgpu::AdapterType::CPU:
+      return "cpu";
+    case wgpu::AdapterType::Unknown:
+      return "unknown";
+  }
+  return "unknown(" + std::to_string(static_cast<std::uint32_t>(type)) + ")";
 }
 
 [[nodiscard]] bool supports_present_mode(const wgpu::SurfaceCapabilities& capabilities, const wgpu::PresentMode mode) {
@@ -322,26 +388,72 @@ struct DawnRenderer::Impl {
     }
   }
 
+  void process_events_until(bool& done, const std::string_view operation) {
+    constexpr auto timeout = std::chrono::seconds{5};
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (!done) {
+      instance_.ProcessEvents();
+      if (std::chrono::steady_clock::now() >= deadline) {
+        throw std::runtime_error("timed out waiting for Dawn " + std::string{operation} + " callback");
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds{1});
+    }
+  }
+
+  [[nodiscard]] std::string describe_adapter() const {
+    if (adapter_ == nullptr) {
+      return "no adapter";
+    }
+
+    wgpu::AdapterInfo info{};
+    if (adapter_.GetInfo(&info) != wgpu::Status::Success) {
+      return "adapter info unavailable";
+    }
+
+    std::string description = to_string(info.description);
+    if (description.empty()) {
+      description = "unknown adapter";
+    }
+
+    return description + " backend=" + backend_type_name(info.backendType) + " type=" + adapter_type_name(info.adapterType) +
+           " vendor_id=" + std::to_string(info.vendorID) + " device_id=" + std::to_string(info.deviceID);
+  }
+
   void request_adapter() {
     wgpu::RequestAdapterOptions options{};
     options.compatibleSurface = surface_;
     options.powerPreference = wgpu::PowerPreference::HighPerformance;
+#if defined(_WIN32) && defined(__MINGW32__)
+    options.backendType = wgpu::BackendType::Vulkan;
+#endif
 
-    wgpu::Future future = instance_.RequestAdapter(
+    adapter_request_done_ = false;
+    adapter_error_.clear();
+    adapter_status_ = wgpu::RequestAdapterStatus::CallbackCancelled;
+    instance_.RequestAdapter(
       &options,
-      wgpu::CallbackMode::WaitAnyOnly,
+      wgpu::CallbackMode::AllowProcessEvents,
       [this](wgpu::RequestAdapterStatus status, wgpu::Adapter adapter, wgpu::StringView message) {
+        adapter_status_ = status;
+        adapter_error_ = to_string(message);
         if (status == wgpu::RequestAdapterStatus::Success) {
           adapter_ = adapter;
-          return;
         }
-        adapter_error_ = to_string(message);
+        adapter_request_done_ = true;
       }
     );
-    instance_.WaitAny(future, UINT64_MAX);
+    process_events_until(adapter_request_done_, "adapter request");
     if (adapter_ == nullptr) {
-      throw std::runtime_error("failed to request Dawn adapter: " + adapter_error_);
+      std::string error = "failed to request Dawn adapter: status=" + request_adapter_status_name(adapter_status_);
+      if (!adapter_error_.empty()) {
+        error += " message=" + adapter_error_;
+      }
+#if defined(_WIN32) && defined(__MINGW32__)
+      error += " backend=vulkan";
+#endif
+      throw std::runtime_error(error);
     }
+    SDL_Log("Dawn adapter: %s", describe_adapter().c_str());
   }
 
   void request_device() {
@@ -353,20 +465,28 @@ struct DawnRenderer::Impl {
       }
     );
 
-    wgpu::Future future = adapter_.RequestDevice(
+    device_request_done_ = false;
+    device_error_.clear();
+    device_status_ = wgpu::RequestDeviceStatus::CallbackCancelled;
+    adapter_.RequestDevice(
       &descriptor,
-      wgpu::CallbackMode::WaitAnyOnly,
+      wgpu::CallbackMode::AllowProcessEvents,
       [this](wgpu::RequestDeviceStatus status, wgpu::Device device, wgpu::StringView message) {
+        device_status_ = status;
+        device_error_ = to_string(message);
         if (status == wgpu::RequestDeviceStatus::Success) {
           device_ = device;
-          return;
         }
-        device_error_ = to_string(message);
+        device_request_done_ = true;
       }
     );
-    instance_.WaitAny(future, UINT64_MAX);
+    process_events_until(device_request_done_, "device request");
     if (device_ == nullptr) {
-      throw std::runtime_error("failed to request Dawn device: " + device_error_);
+      std::string error = "failed to request Dawn device: status=" + request_device_status_name(device_status_) + " adapter=" + describe_adapter();
+      if (!device_error_.empty()) {
+        error += " message=" + device_error_;
+      }
+      throw std::runtime_error(error);
     }
   }
 
@@ -700,6 +820,10 @@ fn fs_main(input: LineOutput) -> @location(0) vec4f {
   std::uint32_t width_{1280U};
   std::uint32_t height_{720U};
   bool surface_dirty_{true};
+  bool adapter_request_done_{false};
+  bool device_request_done_{false};
+  wgpu::RequestAdapterStatus adapter_status_{wgpu::RequestAdapterStatus::CallbackCancelled};
+  wgpu::RequestDeviceStatus device_status_{wgpu::RequestDeviceStatus::CallbackCancelled};
   std::string adapter_error_{};
   std::string device_error_{};
 
