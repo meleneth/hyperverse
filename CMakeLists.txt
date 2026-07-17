@@ -20,7 +20,6 @@ include(FetchContent)
 include(CPM)
 include(CompilerWarnings)
 
-find_package(Vulkan REQUIRED)
 find_package(PNG REQUIRED)
 
 set(DAWN_FETCH_DEPENDENCIES ON CACHE BOOL "" FORCE)
@@ -34,11 +33,15 @@ set(DAWN_ENABLE_DESKTOP_GL OFF CACHE BOOL "" FORCE)
 set(DAWN_ENABLE_OPENGLES OFF CACHE BOOL "" FORCE)
 set(DAWN_ENABLE_NULL OFF CACHE BOOL "" FORCE)
 set(DAWN_ENABLE_WEBGPU_ON_WEBGPU OFF CACHE BOOL "" FORCE)
+set(DAWN_USE_X11 OFF CACHE BOOL "" FORCE)
+set(TINT_BUILD_CMD_TOOLS OFF CACHE BOOL "" FORCE)
+set(TINT_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(
   dawn
   GIT_REPOSITORY https://dawn.googlesource.com/dawn
   GIT_TAG 2a49ad12f8a9bf7451cb71983647d662fbe70224
-  GIT_SHALLOW TRUE
+  GIT_SUBMODULES ""
+  GIT_SUBMODULES_RECURSE FALSE
 )
 FetchContent_MakeAvailable(dawn)
 
@@ -128,6 +131,7 @@ add_library(
   src/cargo_route.cpp
   src/cargo_train.cpp
   src/collision.cpp
+  src/dawn_renderer.cpp
   src/drone.cpp
   src/fixed_timestep.cpp
   src/flight.cpp
@@ -156,12 +160,6 @@ add_library(
   src/sprite_frame_builder.cpp
   src/version.cpp
   src/vertical_slice_seed.cpp
-  src/vulkan_assets.cpp
-  src/vulkan_commands.cpp
-  src/vulkan_pipeline.cpp
-  src/vulkan_renderer.cpp
-  src/vulkan_swapchain.cpp
-  src/vulkan_texture.cpp
 )
 add_library(hyperverse::core ALIAS hyperverse_core)
 target_include_directories(
@@ -178,8 +176,9 @@ target_link_libraries(
     hyperverse::eventpp
   PRIVATE
     ${HYPERVERSE_SDL_TARGET}
+    dawn::webgpu_dawn
+    webgpu_cpp
     PNG::PNG
-    Vulkan::Vulkan
     ${HYPERVERSE_JOLT_TARGET}
 )
 hyperverse_enable_project_warnings(hyperverse_core)

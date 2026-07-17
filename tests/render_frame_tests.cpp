@@ -2,7 +2,7 @@
 
 using hyperverse::test::TestAccountWorld;
 
-TEST_CASE("Vulkan clear color stays stable now that sprites expose state") {
+TEST_CASE("clear color stays stable now that sprites expose state") {
   const hyperverse::RenderColor idle = hyperverse::make_clear_color({});
   const hyperverse::RenderColor fast = hyperverse::make_clear_color({.speed_fraction = 1.0F});
   const hyperverse::RenderColor locked = hyperverse::make_clear_color({.target_locked = true});

@@ -8,6 +8,7 @@
 #include "hyperverse/cargo_route.hpp"
 #include "hyperverse/cargo_train.hpp"
 #include "hyperverse/collision.hpp"
+#include "hyperverse/dawn_renderer.hpp"
 #include "hyperverse/drone.hpp"
 #include "hyperverse/fixed_timestep.hpp"
 #include "hyperverse/flight.hpp"
@@ -27,7 +28,6 @@
 #include "hyperverse/universe_clock.hpp"
 #include "hyperverse/version.hpp"
 #include "hyperverse/vertical_slice_seed.hpp"
-#include "hyperverse/vulkan_renderer.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -45,7 +45,7 @@ int App::run(AccountCtx& account) {
   try {
     SdlRuntime sdl;
     Window window;
-    VulkanRenderer renderer{window.get()};
+    DawnRenderer renderer{window.get()};
     account.log().info("starting flight laboratory");
 
     const VerticalSliceEntities entities = seed_vertical_slice(account);

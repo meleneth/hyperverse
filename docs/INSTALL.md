@@ -1,8 +1,8 @@
 # Installation and Bootstrap
 
 Hyperverse is currently a C++23/CMake prototype bootstrap. Milestone 0 builds a `hyperverse`
-executable that opens an SDL3 Vulkan window, initializes gamepad support, clears the window
-through Vulkan, and provides a Catch2 test binary.
+executable that opens an SDL3 window, initializes gamepad support, renders through Dawn/WebGPU,
+and provides a Catch2 test binary.
 
 ## Linux
 
@@ -55,7 +55,7 @@ cmake --install build --prefix "$PWD/install"
 ## Steam Deck
 
 Use the Linux instructions in a SteamOS development environment. The primary runtime
-requirements are a Vulkan-capable driver and SDL3 gamepad support. The first bootstrap logs
+requirements are a Vulkan-capable driver for Dawn's Linux backend and SDL3 gamepad support. The first bootstrap logs
 detected gamepads to stdout so controller detection can be verified before gameplay input
 mapping exists.
 
@@ -92,6 +92,7 @@ ctest --test-dir build --output-on-failure
 
 Dependencies are fetched through CPM during CMake configure:
 
+- Dawn `2a49ad12f8a9bf7451cb71983647d662fbe70224`
 - SDL `release-3.4.12`
 - EnTT `v3.16.0`
 - Jolt `v5.6.0`
@@ -101,3 +102,6 @@ Dependencies are fetched through CPM during CMake configure:
 
 Project code is built with warnings as errors. Third-party dependency warnings are not promoted
 to errors.
+
+Hyperverse code no longer links directly against Vulkan. The current Dawn integration uses the
+Wayland surface path on Linux and relies on Dawn's Vulkan backend at runtime.

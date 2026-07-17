@@ -8,7 +8,7 @@ The game is about feel, information, and controlled industrial violence.
 
 ## Current Project Shape
 
-- Playable 2D Vulkan prototype in continuous wraparound sectors
+- Playable 2D Dawn/WebGPU prototype in continuous wraparound sectors
 - Each sector is approximately 9 camera-widths by 9 camera-heights
 - Fixed 60 Hz simulation clock through `UniverseClock::FixedTickSeconds`
 - Development round pressure currently escalates every 1 minute
@@ -22,7 +22,7 @@ The game is about feel, information, and controlled industrial violence.
 - CMake
 - CPM
 - SDL3
-- Vulkan
+- Dawn/WebGPU
 - Jolt
 - EnTT
 - EventPP
@@ -32,7 +32,7 @@ The game is about feel, information, and controlled industrial violence.
 ## Bootstrap
 
 The repository builds a `hyperverse` executable and a Catch2 test target. The current executable
-opens an SDL3 Vulkan window, initializes gamepad support, renders sprite assets and HUD geometry,
+opens an SDL3 window, initializes gamepad support, renders sprite assets and HUD geometry through Dawn,
 and runs the playable mining/escort prototype.
 
 See [Installation and Bootstrap](docs/INSTALL.md) for Linux, Steam Deck, MSYS2, CI, and install
@@ -65,7 +65,7 @@ These assets are temporary implementation scaffolding, not a permanent visual co
 
 ## Current Playable State
 
-The current Vulkan prototype draws Sector7-derived sprites, hardware-uploaded textures, line HUD
+The current Dawn prototype draws Sector7-derived sprites, hardware-uploaded textures, line HUD
 brackets, text glyph HUD, mining beams, dual particle cannon shots, cargo boxes, active cargo train
 links, a harpoon tether, an escort gate route, drones, and raiders.
 

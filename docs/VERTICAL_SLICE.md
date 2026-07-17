@@ -21,7 +21,7 @@ Deliver:
 - C++23 CMake project
 - CPM dependency setup
 - SDL3 window and gamepad initialization
-- Vulkan clear-screen renderer
+- Dawn/WebGPU renderer
 - Catch2 test target
 - Linux build path
 - MSYS2 build path

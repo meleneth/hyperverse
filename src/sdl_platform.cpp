@@ -22,7 +22,7 @@ SdlRuntime::~SdlRuntime() {
 }
 
 Window::Window() {
-  window_ = SDL_CreateWindow(application_name().data(), 1280, 720, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
+  window_ = SDL_CreateWindow(application_name().data(), 1280, 720, SDL_WINDOW_RESIZABLE);
 
   if (window_ == nullptr) {
     throw std::runtime_error(std::string{"SDL_CreateWindow failed: "} + SDL_GetError());

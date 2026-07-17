@@ -11,14 +11,14 @@ struct RenderColor {
   float a{1.0F};
 };
 
-struct VulkanFrameSnapshot {
+struct FrameSnapshot {
   float speed_fraction{0.0F};
   bool wrap_warning{false};
   bool target_locked{false};
   bool mining_active{false};
 };
 
-[[nodiscard]] RenderColor make_clear_color(const VulkanFrameSnapshot& frame);
+[[nodiscard]] RenderColor make_clear_color(const FrameSnapshot& frame);
 
 enum class SpriteTexture {
   Ship,
@@ -91,7 +91,7 @@ struct LineDraw {
 };
 
 struct SpriteFrame {
-  VulkanFrameSnapshot state{};
+  FrameSnapshot state{};
   std::vector<SpriteDraw> sprites{};
   std::vector<LineDraw> lines{};
 };

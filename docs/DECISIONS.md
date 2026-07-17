@@ -122,7 +122,7 @@ Gameplay systems should not directly depend on raw stick identity.
 - CMake
 - CPM
 - SDL3
-- Vulkan
+- Dawn/WebGPU
 - Jolt
 - EnTT
 - EventPP

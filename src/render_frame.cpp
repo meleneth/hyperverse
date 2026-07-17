@@ -4,7 +4,7 @@
 
 namespace hyperverse {
 
-RenderColor make_clear_color(const VulkanFrameSnapshot& frame) {
+RenderColor make_clear_color(const FrameSnapshot& frame) {
   (void)frame;
   return {};
 }
