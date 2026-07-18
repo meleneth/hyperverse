@@ -71,6 +71,15 @@ struct TriangleVertex {
   float a{};
 };
 
+struct StarVertex {
+  float x{};
+  float y{};
+  float r{};
+  float g{};
+  float b{};
+  float a{};
+};
+
 struct EngineTrailGpuVertex {
   float x{};
   float y{};
@@ -322,6 +331,7 @@ struct DawnRenderer::Impl {
 
     wgpu::CommandEncoder encoder = device_.CreateCommandEncoder();
     wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&pass_descriptor);
+    draw_stars(pass, frame.stars);
     draw_triangles(pass, frame.triangles);
     draw_engine_trails(pass, frame.engine_trails);
     draw_sprites(pass, frame.sprites);
@@ -365,6 +375,7 @@ struct DawnRenderer::Impl {
       textures_.clear();
       line_pipeline_ = {};
       engine_trail_pipeline_ = {};
+      star_pipeline_ = {};
       triangle_pipeline_ = {};
       sprite_pipeline_ = {};
       sprite_pipeline_layout_ = {};
@@ -690,6 +701,7 @@ struct DawnRenderer::Impl {
 
   void create_pipelines() {
     create_sprite_pipeline();
+    create_star_pipeline();
     create_triangle_pipeline();
     create_engine_trail_pipeline();
     create_line_pipeline();
@@ -945,6 +957,77 @@ fn fs_main(input: TriangleOutput) -> @location(0) vec4f {
     triangle_pipeline_ = device_.CreateRenderPipeline(&descriptor);
   }
 
+  void create_star_pipeline() {
+    constexpr std::string_view shader = R"(
+struct StarInput {
+  @location(0) position: vec2f,
+  @location(1) color: vec4f,
+};
+
+struct StarOutput {
+  @builtin(position) position: vec4f,
+  @location(0) color: vec4f,
+};
+
+@vertex
+fn vs_main(input: StarInput) -> StarOutput {
+  var output: StarOutput;
+  output.position = vec4f(input.position, 0.0, 1.0);
+  output.color = input.color;
+  return output;
+}
+
+@fragment
+fn fs_main(input: StarOutput) -> @location(0) vec4f {
+  return input.color;
+}
+)";
+
+    wgpu::ShaderModule module = create_shader_module(device_, shader);
+    std::array<wgpu::VertexAttribute, 2> attributes{};
+    attributes[0].format = wgpu::VertexFormat::Float32x2;
+    attributes[0].offset = offsetof(StarVertex, x);
+    attributes[0].shaderLocation = 0;
+    attributes[1].format = wgpu::VertexFormat::Float32x4;
+    attributes[1].offset = offsetof(StarVertex, r);
+    attributes[1].shaderLocation = 1;
+
+    wgpu::VertexBufferLayout vertex_buffer{};
+    vertex_buffer.arrayStride = sizeof(StarVertex);
+    vertex_buffer.attributeCount = attributes.size();
+    vertex_buffer.attributes = attributes.data();
+
+    wgpu::BlendState blend{};
+    blend.color.srcFactor = wgpu::BlendFactor::SrcAlpha;
+    blend.color.dstFactor = wgpu::BlendFactor::OneMinusSrcAlpha;
+    blend.color.operation = wgpu::BlendOperation::Add;
+    blend.alpha.srcFactor = wgpu::BlendFactor::One;
+    blend.alpha.dstFactor = wgpu::BlendFactor::OneMinusSrcAlpha;
+    blend.alpha.operation = wgpu::BlendOperation::Add;
+
+    wgpu::ColorTargetState color_target{};
+    color_target.format = surface_format_;
+    color_target.blend = &blend;
+    color_target.writeMask = wgpu::ColorWriteMask::All;
+
+    wgpu::FragmentState fragment{};
+    fragment.module = module;
+    fragment.entryPoint = "fs_main";
+    fragment.targetCount = 1;
+    fragment.targets = &color_target;
+
+    wgpu::RenderPipelineDescriptor descriptor{};
+    descriptor.vertex.module = module;
+    descriptor.vertex.entryPoint = "vs_main";
+    descriptor.vertex.bufferCount = 1;
+    descriptor.vertex.buffers = &vertex_buffer;
+    descriptor.primitive.topology = wgpu::PrimitiveTopology::TriangleList;
+    descriptor.primitive.cullMode = wgpu::CullMode::None;
+    descriptor.multisample.count = 1;
+    descriptor.fragment = &fragment;
+    star_pipeline_ = device_.CreateRenderPipeline(&descriptor);
+  }
+
   void create_engine_trail_pipeline() {
     constexpr std::string_view shader = R"(
 struct EngineTrailInput {
@@ -1140,6 +1223,36 @@ fn fs_main(input: EngineTrailOutput) -> @location(0) vec4f {
     pass.Draw(static_cast<std::uint32_t>(vertices.size()));
   }
 
+  void draw_stars(wgpu::RenderPassEncoder& pass, const std::vector<StarDraw>& stars) {
+    if (stars.empty()) {
+      return;
+    }
+
+    std::vector<StarVertex> vertices;
+    vertices.reserve(stars.size() * 6U);
+    for (const StarDraw& star : stars) {
+      const float left = star.x_ndc - star.half_size_x_ndc;
+      const float right = star.x_ndc + star.half_size_x_ndc;
+      const float top = -(star.y_ndc - star.half_size_y_ndc);
+      const float bottom = -(star.y_ndc + star.half_size_y_ndc);
+      const StarVertex a{.x = left, .y = top, .r = star.r, .g = star.g, .b = star.b, .a = star.a};
+      const StarVertex b{.x = right, .y = top, .r = star.r, .g = star.g, .b = star.b, .a = star.a};
+      const StarVertex c{.x = left, .y = bottom, .r = star.r, .g = star.g, .b = star.b, .a = star.a};
+      const StarVertex d{.x = right, .y = bottom, .r = star.r, .g = star.g, .b = star.b, .a = star.a};
+      vertices.push_back(a);
+      vertices.push_back(b);
+      vertices.push_back(c);
+      vertices.push_back(b);
+      vertices.push_back(d);
+      vertices.push_back(c);
+    }
+
+    const wgpu::Buffer vertex_buffer = transient_buffer(vertices.data(), sizeof(StarVertex) * vertices.size());
+    pass.SetPipeline(star_pipeline_);
+    pass.SetVertexBuffer(0, vertex_buffer);
+    pass.Draw(static_cast<std::uint32_t>(vertices.size()));
+  }
+
   void draw_lines(wgpu::RenderPassEncoder& pass, const std::vector<LineDraw>& lines) {
     if (lines.empty()) {
       return;
@@ -1211,6 +1324,7 @@ fn fs_main(input: EngineTrailOutput) -> @location(0) vec4f {
   wgpu::BindGroupLayout texture_bind_group_layout_{};
   wgpu::PipelineLayout sprite_pipeline_layout_{};
   wgpu::RenderPipeline sprite_pipeline_{};
+  wgpu::RenderPipeline star_pipeline_{};
   wgpu::RenderPipeline triangle_pipeline_{};
   wgpu::RenderPipeline engine_trail_pipeline_{};
   wgpu::RenderPipeline line_pipeline_{};

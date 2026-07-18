@@ -24,6 +24,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <limits>
 #include <numbers>
 #include <string>
@@ -33,6 +34,11 @@
 namespace {
 
 constexpr float ScreenAnchorYFraction = 0.75F;
+constexpr std::array<float, 4> StarLayerParallax{0.08F, 0.18F, 0.34F, 0.56F};
+constexpr std::array<float, 4> StarLayerCellSize{420.0F, 340.0F, 270.0F, 215.0F};
+constexpr std::array<float, 4> StarLayerPixelSize{1.0F, 1.25F, 1.55F, 1.9F};
+constexpr std::array<float, 4> StarLayerBaseGrey{0.20F, 0.32F, 0.46F, 0.62F};
+constexpr std::array<float, 4> StarLayerGreyRange{0.16F, 0.18F, 0.20F, 0.22F};
 
 [[nodiscard]] hyperverse::SpriteDraw make_world_sprite(
   hyperverse::SpriteTexture texture,
@@ -73,6 +79,93 @@ constexpr float ScreenAnchorYFraction = 0.75F;
     .x = ((screen_x / static_cast<float>(width)) * 2.0F) - 1.0F,
     .y = ((screen_y / static_cast<float>(height)) * 2.0F) - 1.0F,
   };
+}
+
+[[nodiscard]] std::uint32_t hash_star(std::int32_t x, std::int32_t y, std::uint32_t layer) {
+  std::uint32_t seed = static_cast<std::uint32_t>(x) * 0x9E3779B9U;
+  seed ^= static_cast<std::uint32_t>(y) * 0x85EBCA6BU;
+  seed ^= (layer + 1U) * 0xC2B2AE35U;
+  seed ^= seed >> 16U;
+  seed *= 0x7FEB352DU;
+  seed ^= seed >> 15U;
+  seed *= 0x846CA68BU;
+  seed ^= seed >> 16U;
+  return seed;
+}
+
+[[nodiscard]] float hash_star_unit(std::uint32_t value) {
+  return static_cast<float>(value >> 8U) * (1.0F / 16777215.0F);
+}
+
+[[nodiscard]] std::uint32_t mix_star_hash(std::uint32_t value) {
+  value ^= value >> 16U;
+  value *= 0x7FEB352DU;
+  value ^= value >> 15U;
+  value *= 0x846CA68BU;
+  value ^= value >> 16U;
+  return value;
+}
+
+void add_star(
+  std::vector<hyperverse::StarDraw>& stars,
+  float screen_x,
+  float screen_y,
+  float pixel_size,
+  float grey,
+  std::uint32_t width,
+  std::uint32_t height
+) {
+  if (screen_x < -pixel_size || screen_x > static_cast<float>(width) + pixel_size || screen_y < -pixel_size ||
+      screen_y > static_cast<float>(height) + pixel_size) {
+    return;
+  }
+
+  stars.push_back(hyperverse::StarDraw{
+    .x_ndc = ((screen_x / static_cast<float>(width)) * 2.0F) - 1.0F,
+    .y_ndc = ((screen_y / static_cast<float>(height)) * 2.0F) - 1.0F,
+    .half_size_x_ndc = pixel_size / static_cast<float>(width),
+    .half_size_y_ndc = pixel_size / static_cast<float>(height),
+    .r = grey,
+    .g = grey,
+    .b = grey,
+    .a = 1.0F,
+  });
+}
+
+void add_starfield(
+  std::vector<hyperverse::StarDraw>& stars,
+  hyperverse::Vec2 camera_position,
+  std::uint32_t width,
+  std::uint32_t height
+) {
+  const float screen_anchor_x = static_cast<float>(width) * 0.5F;
+  const float screen_anchor_y = static_cast<float>(height) * ScreenAnchorYFraction;
+
+  for (std::size_t layer = 0; layer < StarLayerParallax.size(); ++layer) {
+    const float cell_size = StarLayerCellSize[layer];
+    const hyperverse::Vec2 layer_camera = camera_position * (hyperverse::PixelsPerWorldUnit * StarLayerParallax[layer]);
+    const float left = layer_camera.x - screen_anchor_x - cell_size;
+    const float right = layer_camera.x + (static_cast<float>(width) - screen_anchor_x) + cell_size;
+    const float top = layer_camera.y - screen_anchor_y - cell_size;
+    const float bottom = layer_camera.y + (static_cast<float>(height) - screen_anchor_y) + cell_size;
+    const std::int32_t min_x = static_cast<std::int32_t>(std::floor(left / cell_size));
+    const std::int32_t max_x = static_cast<std::int32_t>(std::floor(right / cell_size));
+    const std::int32_t min_y = static_cast<std::int32_t>(std::floor(top / cell_size));
+    const std::int32_t max_y = static_cast<std::int32_t>(std::floor(bottom / cell_size));
+
+    for (std::int32_t cell_y = min_y; cell_y <= max_y; ++cell_y) {
+      for (std::int32_t cell_x = min_x; cell_x <= max_x; ++cell_x) {
+        const std::uint32_t hash = hash_star(cell_x, cell_y, static_cast<std::uint32_t>(layer));
+        const float jitter_x = hash_star_unit(hash);
+        const float jitter_y = hash_star_unit(mix_star_hash(hash ^ 0xB5297A4DU));
+        const float shade = StarLayerBaseGrey[layer] + (StarLayerGreyRange[layer] * hash_star_unit(hash ^ 0xA5115A7U));
+        const float size = StarLayerPixelSize[layer] + (hash_star_unit(hash ^ 0x51EAD5U) * 0.85F);
+        const float star_x = ((static_cast<float>(cell_x) + jitter_x) * cell_size) - layer_camera.x + screen_anchor_x;
+        const float star_y = ((static_cast<float>(cell_y) + jitter_y) * cell_size) - layer_camera.y + screen_anchor_y;
+        add_star(stars, star_x, star_y, size, shade, width, height);
+      }
+    }
+  }
 }
 
 [[nodiscard]] hyperverse::Vec3 operator-(hyperverse::Vec3 lhs, hyperverse::Vec3 rhs) {
@@ -907,6 +1000,7 @@ SpriteFrame build_sprite_frame(
       .mining_active = mining_hud.beam_active,
     },
   };
+  add_starfield(frame.stars, camera.position, width, height);
 
   for (auto [entity, asteroid] : account.registry().view<AsteroidBody>().each()) {
     OreTint tint{.r = 0.82F, .g = 0.78F, .b = 0.70F};

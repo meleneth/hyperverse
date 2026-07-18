@@ -107,6 +107,17 @@ struct TriangleDraw {
   TriangleVertexDraw c{};
 };
 
+struct StarDraw {
+  float x_ndc{0.0F};
+  float y_ndc{0.0F};
+  float half_size_x_ndc{0.001F};
+  float half_size_y_ndc{0.001F};
+  float r{0.55F};
+  float g{0.55F};
+  float b{0.55F};
+  float a{1.0F};
+};
+
 struct EngineTrailVertexDraw {
   float x_ndc{0.0F};
   float y_ndc{0.0F};
@@ -117,6 +128,7 @@ struct EngineTrailVertexDraw {
 
 struct SpriteFrame {
   FrameSnapshot state{};
+  std::vector<StarDraw> stars{};
   std::vector<EngineTrailVertexDraw> engine_trails{};
   std::vector<TriangleDraw> triangles{};
   std::vector<SpriteDraw> sprites{};

@@ -3,6 +3,9 @@
 #include "hyperverse/sprite_frame_builder.hpp"
 #include "hyperverse/vertical_slice_seed.hpp"
 
+#include <algorithm>
+#include <cmath>
+
 using hyperverse::test::TestAccountWorld;
 
 TEST_CASE("clear color stays stable now that sprites expose state") {
@@ -44,4 +47,75 @@ TEST_CASE("sprite frame includes engine trail vertices after thrust history") {
   );
 
   CHECK_FALSE(frame.engine_trails.empty());
+}
+
+TEST_CASE("sprite frame includes deterministic parallax starfield") {
+  TestAccountWorld world;
+  hyperverse::AccountCtx account = world.account_context();
+  const hyperverse::VerticalSliceEntities entities = hyperverse::seed_vertical_slice(account);
+  hyperverse::ShipMotion& ship = account.registry().get<hyperverse::ShipMotion>(entities.player);
+  hyperverse::CameraState& camera = account.registry().get<hyperverse::CameraState>(entities.player);
+  const hyperverse::SectorTuning sector = hyperverse::default_sector();
+  const hyperverse::SemanticInputFrame input{};
+
+  const hyperverse::SpriteFrame first = hyperverse::build_sprite_frame(
+    account,
+    entities.player,
+    entities.mining_drones,
+    entities.raider,
+    hyperverse::make_flight_hud_snapshot(ship, input, {}, sector),
+    input,
+    sector,
+    1280,
+    720
+  );
+  const hyperverse::SpriteFrame repeated = hyperverse::build_sprite_frame(
+    account,
+    entities.player,
+    entities.mining_drones,
+    entities.raider,
+    hyperverse::make_flight_hud_snapshot(ship, input, {}, sector),
+    input,
+    sector,
+    1280,
+    720
+  );
+  camera.position.x += 800.0F;
+  const hyperverse::SpriteFrame moved = hyperverse::build_sprite_frame(
+    account,
+    entities.player,
+    entities.mining_drones,
+    entities.raider,
+    hyperverse::make_flight_hud_snapshot(ship, input, {}, sector),
+    input,
+    sector,
+    1280,
+    720
+  );
+
+  REQUIRE(first.stars.size() > 40U);
+  REQUIRE(first.stars.size() == repeated.stars.size());
+  CHECK(first.stars.front().x_ndc == Catch::Approx(repeated.stars.front().x_ndc));
+  CHECK(first.stars.front().r == Catch::Approx(repeated.stars.front().r));
+
+  bool saw_changed_position = false;
+  bool saw_different_shades = false;
+  for (std::size_t index = 0; index < std::min(first.stars.size(), moved.stars.size()); ++index) {
+    const hyperverse::StarDraw& star = first.stars[index];
+    CHECK(std::isfinite(star.x_ndc));
+    CHECK(std::isfinite(star.y_ndc));
+    CHECK(star.r == Catch::Approx(star.g));
+    CHECK(star.g == Catch::Approx(star.b));
+    CHECK(star.r >= 0.19F);
+    CHECK(star.r <= 0.85F);
+    if (first.stars[index].x_ndc != Catch::Approx(moved.stars[index].x_ndc)) {
+      saw_changed_position = true;
+    }
+    if (index > 0U && first.stars[index].r != Catch::Approx(first.stars[0].r)) {
+      saw_different_shades = true;
+    }
+  }
+
+  CHECK(saw_changed_position);
+  CHECK(saw_different_shades);
 }
