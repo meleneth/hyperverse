@@ -197,3 +197,38 @@ TEST_CASE("engine trail sampling is stable across differing frame delta sequence
   CHECK(many_small.engines[0].count == few_large.engines[0].count);
   CHECK(many_small.engines[1].count == few_large.engines[1].count);
 }
+
+TEST_CASE("engine trail resumes after gravity sling release") {
+  entt::registry registry;
+  const entt::entity target = registry.create();
+  registry.emplace<hyperverse::AsteroidBody>(
+    target,
+    hyperverse::AsteroidBody{.position = {.x = 1300.0F, .y = 1000.0F}, .radius = 100.0F}
+  );
+  hyperverse::GravitySlingModel sling;
+  hyperverse::EngineTrailModel trail;
+  hyperverse::ShipMotion ship{.position = {.x = 1000.0F, .y = 1000.0F}, .velocity = {.x = 0.0F, .y = 180.0F}};
+
+  (void)hyperverse::update_engine_trail(trail, ship, thrust(), Sector, 1.0F / 60.0F);
+  (void)hyperverse::update_gravity_sling(
+    sling,
+    registry,
+    ship,
+    {.primary_aim = {.x = 1.0F}, .gravity_sling_requested = true},
+    Sector,
+    0.0F,
+    {.engagement_seconds = 0.01F}
+  );
+  (void)hyperverse::update_gravity_sling(sling, registry, ship, thrust(), Sector, 1.0F / 60.0F, {.engagement_seconds = 0.01F});
+  REQUIRE(sling.phase == hyperverse::GravitySlingPhase::Active);
+
+  (void)hyperverse::update_gravity_sling(sling, registry, ship, {.gravity_sling_requested = true}, Sector, 1.0F / 60.0F);
+  REQUIRE(sling.phase == hyperverse::GravitySlingPhase::FreeFlight);
+
+  ship.position = hyperverse::wrap_position(ship.position + hyperverse::Vec2{.x = 12.0F, .y = 0.0F}, Sector);
+  const hyperverse::EngineTrailUpdate update = hyperverse::update_engine_trail(trail, ship, thrust(), Sector, 1.0F / 60.0F);
+
+  CHECK(update.active_sources == 2U);
+  CHECK(trail.sources[0].intensity == Catch::Approx(1.0F));
+  CHECK(sample_count(trail) >= 4U);
+}

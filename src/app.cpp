@@ -269,13 +269,12 @@ private:
     CargoRecoveryHudSnapshot& recovery_hud = account_.registry().get<CargoRecoveryHudSnapshot>(player_);
     CollisionHudSnapshot& collision_hud = account_.registry().get<CollisionHudSnapshot>(player_);
 
-    const GravitySlingPhase previous_sling_phase = gravity_sling.phase;
     SemanticInputFrame sling_input = latest_intent_;
     if (sling_input.gravity_sling_requested && length(sling_input.primary_aim) <= 0.0001F && has_locked_target(target_lock)) {
       sling_input.primary_aim = normalize_or_zero(target_lock.relative_position);
     }
     gravity_sling_hud = update_gravity_sling(gravity_sling, account_.registry(), ship_, sling_input, sector_, timestep_.tick_seconds(), gravity_sling_tuning_);
-    if (previous_sling_phase == GravitySlingPhase::FreeFlight && gravity_sling.phase == GravitySlingPhase::FreeFlight) {
+    if (gravity_sling.phase == GravitySlingPhase::FreeFlight) {
       simulate_assisted_flight(account_, ship_, latest_intent_, flight_, sector_, timestep_.tick_seconds());
     }
     if (ship_health.armor <= 0.0F) {
