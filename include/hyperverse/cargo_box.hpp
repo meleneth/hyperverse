@@ -1,6 +1,7 @@
 #pragma once
 
 #include "hyperverse/cargo_manifest.hpp"
+#include "hyperverse/domain_events.hpp"
 #include "hyperverse/math.hpp"
 
 #include <entt/entity/registry.hpp>
@@ -12,6 +13,8 @@ struct ExtractionSite {
 };
 
 enum class CargoBoxState {
+  PendingPickup,
+  BeingHauled,
   Linked,
   GateBound,
   Extracting,
@@ -40,7 +43,9 @@ int sync_cargo_boxes(
   entt::registry& registry,
   const CargoManifest& manifest,
   const ExtractionSite& extraction_site,
-  const CargoBoxTuning& tuning = {}
+  const CargoBoxTuning& tuning = {},
+  Vec2 pickup_origin = {},
+  DomainEventBus* event_bus = nullptr
 );
 
 }  // namespace hyperverse

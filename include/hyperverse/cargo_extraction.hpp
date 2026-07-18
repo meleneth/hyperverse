@@ -15,6 +15,7 @@ struct CargoExtractionTuning {
   float gate_radius{96.0F};
   float staging_radius{140.0F};
   float staging_spacing{78.0F};
+  int formation_columns{5};
   float approach_rate{4.0F};
   float max_speed{520.0F};
 };

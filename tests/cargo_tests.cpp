@@ -110,6 +110,44 @@ TEST_CASE("cargo boxes are created at the extraction site from manifest mass") {
   CHECK(saw_second_box);
 }
 
+TEST_CASE("cargo boxes created at a mining site wait for drone pickup and emit events") {
+  entt::registry registry;
+  const entt::entity asteroid = registry.create();
+  registry.emplace<hyperverse::MiningResource>(asteroid, hyperverse::MiningResource{.extracted_mass = 12.0F});
+  hyperverse::CargoManifest manifest;
+  (void)hyperverse::update_cargo_manifest(manifest, registry, {.cargo_box_mass = 10.0F});
+  hyperverse::DomainEventBus event_bus;
+  int created_events = 0;
+  event_bus.appendListener(
+    hyperverse::DomainEventType::CargoBoxCreated,
+    [&](const hyperverse::DomainEvent& event) {
+      CHECK(event.type == hyperverse::DomainEventType::CargoBoxCreated);
+      CHECK(event.position.x == Catch::Approx(320.0F));
+      CHECK(event.position.y == Catch::Approx(640.0F));
+      ++created_events;
+    }
+  );
+
+  const int box_count = hyperverse::sync_cargo_boxes(
+    registry,
+    manifest,
+    {.position = {.x = 1000.0F, .y = 2000.0F}},
+    {.box_mass = 10.0F, .box_spacing = 50.0F},
+    {.x = 320.0F, .y = 640.0F},
+    &event_bus
+  );
+  event_bus.process();
+
+  CHECK(box_count == 1);
+  CHECK(created_events == 1);
+  for (auto [entity, box] : registry.view<hyperverse::CargoBox>().each()) {
+    (void)entity;
+    CHECK(box.state == hyperverse::CargoBoxState::PendingPickup);
+    CHECK(box.position.x == Catch::Approx(320.0F));
+    CHECK(box.position.y == Catch::Approx(640.0F));
+  }
+}
+
 TEST_CASE("cargo boxes inherit ore color tiers from extracted mass buckets") {
   entt::registry registry;
   const entt::entity common = registry.create();
@@ -343,7 +381,7 @@ TEST_CASE("cargo extraction processes boxes one at a time at the gate") {
   CHECK(complete_events == 1);
 }
 
-TEST_CASE("cargo extraction stages the whole group near the gate before loading") {
+TEST_CASE("cargo extraction accepts the train and forms a compact queue") {
   entt::registry registry;
   const entt::entity first = registry.create();
   registry.emplace<hyperverse::CargoBox>(
@@ -370,10 +408,53 @@ TEST_CASE("cargo extraction stages the whole group near the gate before loading"
 
   CHECK(hud.active);
   CHECK(hud.extracted_boxes == 0);
-  CHECK(registry.get<hyperverse::CargoBox>(first).state == hyperverse::CargoBoxState::GateBound);
+  CHECK(registry.get<hyperverse::CargoBox>(first).state == hyperverse::CargoBoxState::Extracting);
   CHECK(registry.get<hyperverse::CargoBox>(second).state == hyperverse::CargoBoxState::GateBound);
-  CHECK(registry.get<hyperverse::CargoBox>(first).position.x > 500.0F);
-  CHECK(registry.get<hyperverse::CargoBox>(second).position.x > 450.0F);
+  CHECK(registry.get<hyperverse::CargoBox>(first).position.x == Catch::Approx(1000.0F));
+  CHECK(registry.get<hyperverse::CargoBox>(first).position.y == Catch::Approx(1000.0F));
+  CHECK(registry.get<hyperverse::CargoBox>(second).position.x == Catch::Approx(840.0F));
+  CHECK(registry.get<hyperverse::CargoBox>(second).position.y == Catch::Approx(1080.0F));
+}
+
+TEST_CASE("cargo extraction compacts queued containers after each accepted box") {
+  entt::registry registry;
+  const entt::entity first = registry.create();
+  registry.emplace<hyperverse::CargoBox>(first, hyperverse::CargoBox{.index = 0});
+  const entt::entity second = registry.create();
+  registry.emplace<hyperverse::CargoBox>(second, hyperverse::CargoBox{.index = 1});
+  const entt::entity third = registry.create();
+  registry.emplace<hyperverse::CargoBox>(third, hyperverse::CargoBox{.index = 2});
+  hyperverse::CargoEscortState escort{.phase = hyperverse::CargoEscortPhase::Extracting};
+  const hyperverse::CargoEscortRoute route{.gate_position = {.x = 1000.0F, .y = 1000.0F}};
+  const hyperverse::CargoExtractionTuning tuning{.seconds_per_box = 1.0F, .staging_spacing = 80.0F};
+
+  (void)hyperverse::update_cargo_extraction(
+    registry,
+    escort,
+    route,
+    {.width = 9000.0F, .height = 9000.0F},
+    1.0F,
+    nullptr,
+    tuning
+  );
+  const hyperverse::CargoExtractionHudSnapshot shifted = hyperverse::update_cargo_extraction(
+    registry,
+    escort,
+    route,
+    {.width = 9000.0F, .height = 9000.0F},
+    0.0F,
+    nullptr,
+    tuning
+  );
+
+  CHECK(shifted.active_box_index == 1);
+  CHECK(registry.get<hyperverse::CargoBox>(first).state == hyperverse::CargoBoxState::Extracted);
+  CHECK(registry.get<hyperverse::CargoBox>(second).state == hyperverse::CargoBoxState::Extracting);
+  CHECK(registry.get<hyperverse::CargoBox>(third).state == hyperverse::CargoBoxState::GateBound);
+  CHECK(registry.get<hyperverse::CargoBox>(second).position.x == Catch::Approx(1000.0F));
+  CHECK(registry.get<hyperverse::CargoBox>(second).position.y == Catch::Approx(1000.0F));
+  CHECK(registry.get<hyperverse::CargoBox>(third).position.x == Catch::Approx(840.0F));
+  CHECK(registry.get<hyperverse::CargoBox>(third).position.y == Catch::Approx(1080.0F));
 }
 
 TEST_CASE("burst speed detaches linked cargo train boxes") {

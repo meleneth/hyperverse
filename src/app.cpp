@@ -75,6 +75,7 @@ public:
     install_game_session_event_handlers(game_session_, account_.event_bus());
     account_.event_bus().appendListener(DomainEventType::CargoArrivedAtGate, [this](const DomainEvent& event) {
       spawn_gate_combat_raiders(account_.registry(), event.position, ship_.position, sector_, 3);
+      push_hud_notice(account_.registry().get<HudNotice>(player_), "Cargo accepted - thank you");
     });
 
     std::cout << application_name() << " " << version() << "\n";
@@ -240,7 +241,15 @@ private:
       push_hud_notice(hud_notice, "GET TO THE TRANSPORT GATE NOW");
     }
     if (escort_hud.phase == CargoEscortPhase::Mining || escort_hud.phase == CargoEscortPhase::Authorized) {
-      (void)sync_cargo_boxes(account_.registry(), cargo_manifest, gathering_site_, cargo_box_tuning_);
+      Vec2 cargo_pickup_origin{};
+      if (mining_hud.beam_active && mining_hud.target != entt::null && account_.registry().valid(mining_hud.target) &&
+          account_.registry().all_of<AsteroidBody>(mining_hud.target)) {
+        cargo_pickup_origin = account_.registry().get<AsteroidBody>(mining_hud.target).position;
+      } else if (drone_hud.target != entt::null && account_.registry().valid(drone_hud.target) &&
+                 account_.registry().all_of<AsteroidBody>(drone_hud.target)) {
+        cargo_pickup_origin = account_.registry().get<AsteroidBody>(drone_hud.target).position;
+      }
+      (void)sync_cargo_boxes(account_.registry(), cargo_manifest, gathering_site_, cargo_box_tuning_, cargo_pickup_origin, &account_.event_bus());
     }
     route_hud = update_cargo_escort_route(cargo_escort, escort_route_, ship_, sector_);
     escort_hud = update_cargo_escort_arrival(cargo_escort, cargo_hud, route_hud, &account_.event_bus());

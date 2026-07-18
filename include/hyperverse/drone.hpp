@@ -15,12 +15,15 @@ enum class MiningDronePhase {
   Idle,
   Travelling,
   Mining,
+  CargoPickup,
+  CargoDelivery,
 };
 
 struct MiningDrone {
   Vec2 position{};
   Vec2 velocity{};
   entt::entity target{entt::null};
+  entt::entity cargo_target{entt::null};
   MiningDronePhase phase{MiningDronePhase::Idle};
   float facing_radians{0.0F};
   float work_angle_radians{0.0F};
@@ -39,6 +42,8 @@ struct MiningDroneTuning {
   float work_angle_rotation_radians_per_second{0.18F};
   float facing_dead_stick_speed{24.0F};
   float max_target_distance_from_ship{2200.0F};
+  float cargo_pickup_tolerance{34.0F};
+  float cargo_delivery_tolerance{42.0F};
 };
 
 struct MiningDroneHudSnapshot {

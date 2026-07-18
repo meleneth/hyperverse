@@ -23,11 +23,21 @@
 
 #include <cmath>
 #include <numbers>
+#include <vector>
 
 namespace hyperverse {
 namespace {
 
 constexpr float AsteroidStartScale = 6.0F;
+
+[[nodiscard]] float hash_unit(std::uint32_t seed) {
+  seed ^= seed >> 16U;
+  seed *= 0x7FEB352DU;
+  seed ^= seed >> 15U;
+  seed *= 0x846CA68BU;
+  seed ^= seed >> 16U;
+  return static_cast<float>(seed >> 8U) * (1.0F / 16777215.0F);
+}
 
 [[nodiscard]] AsteroidBody seed_asteroid(
   Vec2 position,
@@ -104,32 +114,30 @@ VerticalSliceEntities seed_vertical_slice(AccountCtx& account) {
   );
   account.registry().emplace<ParticleCannonModel>(entities.raider);
 
-  const std::vector<AsteroidBody> asteroid_field{
-    seed_asteroid({.x = 900.0F, .y = 850.0F}, {.x = 188.0F, .y = 112.0F}, 125.0F, 0.36F, 0.44F),
-    seed_asteroid({.x = 2350.0F, .y = 950.0F}, {.x = -146.0F, .y = 216.0F}, 170.0F, -0.20F, 0.61F),
-    seed_asteroid({.x = 3725.0F, .y = 840.0F}, {.x = 202.0F, .y = 184.0F}, 85.0F, -0.52F, 0.36F),
-    seed_asteroid({.x = 5250.0F, .y = 780.0F}, {.x = -238.0F, .y = 134.0F}, 145.0F, 0.25F, 0.69F),
-    seed_asteroid({.x = 7350.0F, .y = 900.0F}, {.x = -118.0F, .y = 256.0F}, 100.0F, -0.44F, 0.49F),
-    seed_asteroid({.x = 8550.0F, .y = 1250.0F}, {.x = -242.0F, .y = 96.0F}, 115.0F, -0.30F, 0.47F),
-    seed_asteroid({.x = 1300.0F, .y = 2500.0F}, {.x = 218.0F, .y = 92.0F}, 75.0F, 0.57F, 0.38F),
-    seed_asteroid({.x = 2820.0F, .y = 2380.0F}, {.x = -174.0F, .y = 156.0F}, 110.0F, -0.36F, 0.63F),
-    seed_asteroid({.x = 4925.0F, .y = 2550.0F}, {.x = 148.0F, .y = 232.0F}, 95.0F, 0.42F, 0.46F),
-    seed_asteroid({.x = 6900.0F, .y = 2420.0F}, {.x = -206.0F, .y = 172.0F}, 180.0F, -0.12F, 0.72F),
-    seed_asteroid({.x = 8150.0F, .y = 2850.0F}, {.x = -212.0F, .y = -178.0F}, 155.0F, 0.22F, 0.52F),
-    seed_asteroid({.x = 1050.0F, .y = 4300.0F}, {.x = 268.0F, .y = -74.0F}, 125.0F, 0.36F, 0.44F),
-    seed_asteroid({.x = 3300.0F, .y = 3550.0F}, {.x = 226.0F, .y = 154.0F}, 130.0F, 0.31F, 0.41F),
-    seed_asteroid({.x = 5650.0F, .y = 3850.0F}, {.x = -218.0F, .y = 168.0F}, 220.0F, 0.18F, 0.34F),
-    seed_asteroid({.x = 7725.0F, .y = 3900.0F}, {.x = -246.0F, .y = 104.0F}, 155.0F, 0.22F, 0.52F),
-    seed_asteroid({.x = 1825.0F, .y = 5480.0F}, {.x = 164.0F, .y = -246.0F}, 150.0F, -0.24F, 0.58F),
-    seed_asteroid({.x = 3825.0F, .y = 5650.0F}, {.x = 192.0F, .y = -136.0F}, 150.0F, -0.24F, 0.58F),
-    seed_asteroid({.x = 6200.0F, .y = 5525.0F}, {.x = -256.0F, .y = -128.0F}, 180.0F, -0.12F, 0.72F),
-    seed_asteroid({.x = 8250.0F, .y = 5750.0F}, {.x = -186.0F, .y = -214.0F}, 205.0F, -0.16F, 0.67F),
-    seed_asteroid({.x = 1150.0F, .y = 7200.0F}, {.x = 158.0F, .y = -268.0F}, 140.0F, 0.28F, 0.57F),
-    seed_asteroid({.x = 2450.0F, .y = 7600.0F}, {.x = 254.0F, .y = -132.0F}, 110.0F, -0.36F, 0.63F),
-    seed_asteroid({.x = 4550.0F, .y = 7750.0F}, {.x = -224.0F, .y = -186.0F}, 190.0F, 0.14F, 0.53F),
-    seed_asteroid({.x = 6900.0F, .y = 7480.0F}, {.x = -172.0F, .y = -252.0F}, 260.0F, 0.09F, 0.29F),
-    seed_asteroid({.x = 8350.0F, .y = 7250.0F}, {.x = -286.0F, .y = -144.0F}, 205.0F, -0.16F, 0.67F),
-  };
+  std::vector<AsteroidBody> asteroid_field;
+  asteroid_field.reserve(72);
+  const SectorTuning sector = default_sector();
+  for (int row = 0; row < 8; ++row) {
+    for (int column = 0; column < 9; ++column) {
+      const int index = (row * 9) + column;
+      const float jitter_x = (hash_unit(0xA5100000U + static_cast<std::uint32_t>(index * 3)) - 0.5F) * (sector.width / 11.0F);
+      const float jitter_y = (hash_unit(0xA5100001U + static_cast<std::uint32_t>(index * 3)) - 0.5F) * (sector.height / 10.0F);
+      const float position_x = ((static_cast<float>(column) + 0.5F) / 9.0F) * sector.width + jitter_x;
+      const float position_y = ((static_cast<float>(row) + 0.5F) / 8.0F) * sector.height + jitter_y;
+      const float angle = hash_unit(0xA5100002U + static_cast<std::uint32_t>(index * 5)) * std::numbers::pi_v<float> * 2.0F;
+      const float speed = 420.0F + (hash_unit(0xA5100003U + static_cast<std::uint32_t>(index * 5)) * 360.0F);
+      const float depleted_radius = 75.0F + (hash_unit(0xA5100004U + static_cast<std::uint32_t>(index * 7)) * 190.0F);
+      const float spin_sign = hash_unit(0xA5100005U + static_cast<std::uint32_t>(index * 7)) < 0.5F ? -1.0F : 1.0F;
+      const float angular_velocity = spin_sign * (0.28F + (hash_unit(0xA5100007U + static_cast<std::uint32_t>(index * 7)) * 0.72F));
+      asteroid_field.push_back(seed_asteroid(
+        wrap_position({.x = position_x, .y = position_y}, sector),
+        {.x = std::cos(angle) * speed, .y = std::sin(angle) * speed},
+        depleted_radius,
+        angular_velocity,
+        0.28F + (hash_unit(0xA5100006U + static_cast<std::uint32_t>(index * 11)) * 0.48F)
+      ));
+    }
+  }
 
   std::size_t asteroid_index = 0;
   for (const AsteroidBody& asteroid : asteroid_field) {

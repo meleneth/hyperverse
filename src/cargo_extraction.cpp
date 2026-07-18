@@ -45,6 +45,20 @@ void emit_extraction_complete(DomainEventBus* event_bus, Vec2 gate_position, int
   );
 }
 
+[[nodiscard]] Vec2 queue_position(const CargoEscortRoute& route, const CargoExtractionTuning& tuning, const SectorTuning& sector, int queue_index) {
+  const int columns = std::max(1, tuning.formation_columns);
+  const int column = queue_index % columns;
+  const int row = queue_index / columns;
+  const float centered_column = static_cast<float>(column) - ((static_cast<float>(columns) - 1.0F) * 0.5F);
+  return wrap_position(
+    {
+      .x = route.gate_position.x + (centered_column * tuning.staging_spacing),
+      .y = route.gate_position.y + tuning.staging_spacing + (static_cast<float>(row) * tuning.staging_spacing),
+    },
+    sector
+  );
+}
+
 }  // namespace
 
 CargoExtractionHudSnapshot update_cargo_extraction(
@@ -84,50 +98,21 @@ CargoExtractionHudSnapshot update_cargo_extraction(
 
   for (entt::entity entity : boxes) {
     CargoBox& box = registry.get<CargoBox>(entity);
-    if (box.state == CargoBoxState::Linked) {
+    if (box.state == CargoBoxState::Linked || box.state == CargoBoxState::BeingHauled || box.state == CargoBoxState::PendingPickup) {
       box.state = CargoBoxState::GateBound;
-    }
-  }
-
-  bool staged = true;
-  for (entt::entity entity : boxes) {
-    CargoBox& box = registry.get<CargoBox>(entity);
-    if (box.state == CargoBoxState::Extracted) {
-      continue;
-    }
-    const Vec2 staging_position = wrap_position(
-      {
-        .x = route.gate_position.x - (static_cast<float>(box.index) * tuning.staging_spacing),
-        .y = route.gate_position.y,
-      },
-      sector
-    );
-    const Vec2 to_staging = wrapped_delta(box.position, staging_position, sector);
-    if (length(to_staging) > tuning.staging_radius) {
-      staged = false;
-      box.state = CargoBoxState::GateBound;
-      box.velocity = clamp_length(to_staging * tuning.approach_rate, tuning.max_speed);
-      box.position = wrap_position(box.position + (box.velocity * std::max(0.0F, dt_seconds)), sector);
-    } else if (box.state == CargoBoxState::GateBound) {
       box.velocity = {};
     }
   }
 
-  if (!staged) {
-    return hud;
-  }
-
-  entt::entity active_box = entt::null;
+  std::vector<entt::entity> queued_boxes;
   for (entt::entity entity : boxes) {
     CargoBox& box = registry.get<CargoBox>(entity);
     if (box.state != CargoBoxState::Extracted) {
-      active_box = entity;
-      hud.active_box_index = box.index;
-      break;
+      queued_boxes.push_back(entity);
     }
   }
 
-  if (active_box == entt::null) {
+  if (queued_boxes.empty()) {
     escort.phase = CargoEscortPhase::Complete;
     hud.active = false;
     hud.complete = true;
@@ -135,23 +120,24 @@ CargoExtractionHudSnapshot update_cargo_extraction(
     return hud;
   }
 
+  const entt::entity active_box = queued_boxes.front();
+  for (std::size_t queue_index = 1; queue_index < queued_boxes.size(); ++queue_index) {
+    CargoBox& queued = registry.get<CargoBox>(queued_boxes[queue_index]);
+    queued.state = CargoBoxState::GateBound;
+    queued.velocity = {};
+    queued.position = queue_position(route, tuning, sector, static_cast<int>(queue_index - 1U));
+  }
+
   CargoBox& box = registry.get<CargoBox>(active_box);
-  const Vec2 to_gate = wrapped_delta(box.position, route.gate_position, sector);
-  const float gate_distance = length(to_gate);
-  if (gate_distance > tuning.gate_radius) {
-    box.state = CargoBoxState::GateBound;
-    box.velocity = clamp_length(to_gate * tuning.approach_rate, tuning.max_speed);
-    box.position = wrap_position(box.position + (box.velocity * std::max(0.0F, dt_seconds)), sector);
-  } else {
-    box.state = CargoBoxState::Extracting;
-    box.velocity = {};
-    box.position = route.gate_position;
-    box.extraction_seconds = std::min(tuning.seconds_per_box, box.extraction_seconds + std::max(0.0F, dt_seconds));
-    if (box.extraction_seconds >= tuning.seconds_per_box) {
-      box.state = CargoBoxState::Extracted;
-      ++hud.extracted_boxes;
-      emit_box_extracted(event_bus, active_box, box, route.gate_position);
-    }
+  hud.active_box_index = box.index;
+  box.state = CargoBoxState::Extracting;
+  box.velocity = {};
+  box.position = route.gate_position;
+  box.extraction_seconds = std::min(tuning.seconds_per_box, box.extraction_seconds + std::max(0.0F, dt_seconds));
+  if (box.extraction_seconds >= tuning.seconds_per_box) {
+    box.state = CargoBoxState::Extracted;
+    ++hud.extracted_boxes;
+    emit_box_extracted(event_bus, active_box, box, route.gate_position);
   }
 
   hud.active_box_fraction = box.state == CargoBoxState::Extracted ? 1.0F : box.extraction_seconds / std::max(tuning.seconds_per_box, std::numeric_limits<float>::epsilon());

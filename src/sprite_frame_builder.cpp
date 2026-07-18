@@ -528,6 +528,95 @@ void add_world_link_line(
   });
 }
 
+void add_world_line(
+  std::vector<hyperverse::LineDraw>& lines,
+  hyperverse::Vec2 center,
+  hyperverse::Vec2 a,
+  hyperverse::Vec2 b,
+  hyperverse::Vec2 camera_position,
+  const hyperverse::SectorTuning& sector,
+  std::uint32_t width,
+  std::uint32_t height,
+  float r,
+  float g,
+  float blue,
+  float alpha = 1.0F
+) {
+  const hyperverse::SpriteDraw from_point =
+    make_world_sprite(hyperverse::SpriteTexture::Reticle, center + a, camera_position, sector, width, height, 1.0F, 1.0F, 0.0F);
+  const hyperverse::SpriteDraw to_point =
+    make_world_sprite(hyperverse::SpriteTexture::Reticle, center + b, camera_position, sector, width, height, 1.0F, 1.0F, 0.0F);
+  lines.push_back({
+    .start_x_ndc = from_point.center_x_ndc,
+    .start_y_ndc = from_point.center_y_ndc,
+    .end_x_ndc = to_point.center_x_ndc,
+    .end_y_ndc = to_point.center_y_ndc,
+    .r = r,
+    .g = g,
+    .b = blue,
+    .a = alpha,
+  });
+}
+
+[[nodiscard]] hyperverse::Vec2 rotated_point(float angle, float radius_x, float radius_y) {
+  return {.x = std::cos(angle) * radius_x, .y = std::sin(angle) * radius_y};
+}
+
+void add_cargo_container_lines(
+  std::vector<hyperverse::LineDraw>& lines,
+  hyperverse::Vec2 position,
+  hyperverse::OreTint tint,
+  hyperverse::Vec2 camera_position,
+  const hyperverse::SectorTuning& sector,
+  std::uint32_t width,
+  std::uint32_t height
+) {
+  std::array<hyperverse::Vec2, 5> top{};
+  std::array<hyperverse::Vec2, 5> bottom{};
+  for (int index = 0; index < 5; ++index) {
+    const float angle = -std::numbers::pi_v<float> * 0.5F + (static_cast<float>(index) / 5.0F) * std::numbers::pi_v<float> * 2.0F;
+    top[static_cast<std::size_t>(index)] = rotated_point(angle, 26.0F, 14.0F) + hyperverse::Vec2{.x = 0.0F, .y = -10.0F};
+    bottom[static_cast<std::size_t>(index)] = rotated_point(angle + 0.32F, 23.0F, 13.0F) + hyperverse::Vec2{.x = 0.0F, .y = 12.0F};
+  }
+
+  for (int index = 0; index < 5; ++index) {
+    const int next = (index + 1) % 5;
+    add_world_line(lines, position, top[static_cast<std::size_t>(index)], top[static_cast<std::size_t>(next)], camera_position, sector, width, height, tint.r, tint.g, tint.b);
+    add_world_line(lines, position, bottom[static_cast<std::size_t>(index)], bottom[static_cast<std::size_t>(next)], camera_position, sector, width, height, tint.r, tint.g, tint.b);
+    add_world_line(lines, position, top[static_cast<std::size_t>(index)], bottom[static_cast<std::size_t>(index)], camera_position, sector, width, height, tint.r, tint.g, tint.b);
+  }
+
+  add_world_line(lines, position, {-11.0F, -2.0F}, {11.0F, 3.0F}, camera_position, sector, width, height, 1.0F, 1.0F, 1.0F, 0.55F);
+  add_world_line(lines, position, {-7.0F, 8.0F}, {7.0F, 10.0F}, camera_position, sector, width, height, 1.0F, 1.0F, 1.0F, 0.42F);
+}
+
+void add_jump_gate_lines(
+  std::vector<hyperverse::LineDraw>& lines,
+  hyperverse::Vec2 position,
+  float pulse,
+  hyperverse::Vec2 camera_position,
+  const hyperverse::SectorTuning& sector,
+  std::uint32_t width,
+  std::uint32_t height
+) {
+  const float scale = 86.0F + (std::sin(pulse * 4.0F) * 9.0F);
+  std::array<hyperverse::Vec2, 5> belt{};
+  for (int index = 0; index < 5; ++index) {
+    const float angle = -std::numbers::pi_v<float> * 0.5F + (static_cast<float>(index) / 5.0F) * std::numbers::pi_v<float> * 2.0F;
+    belt[static_cast<std::size_t>(index)] = rotated_point(angle, scale * 0.64F, scale * 0.46F);
+  }
+  const hyperverse::Vec2 top{.x = 0.0F, .y = -scale * 0.72F};
+  const hyperverse::Vec2 bottom{.x = 0.0F, .y = scale * 0.72F};
+  const float glow = 0.68F + (std::sin(pulse * 6.0F) * 0.22F);
+  for (int index = 0; index < 5; ++index) {
+    const int next = (index + 1) % 5;
+    add_world_line(lines, position, belt[static_cast<std::size_t>(index)], belt[static_cast<std::size_t>(next)], camera_position, sector, width, height, 0.35F, 0.9F, 1.0F, glow);
+    add_world_line(lines, position, top, belt[static_cast<std::size_t>(index)], camera_position, sector, width, height, 0.55F, 1.0F, 0.86F, glow);
+    add_world_line(lines, position, bottom, belt[static_cast<std::size_t>(index)], camera_position, sector, width, height, 0.35F, 0.74F, 1.0F, glow);
+  }
+  add_world_line(lines, position, {-scale * 0.35F, 0.0F}, {scale * 0.35F, 0.0F}, camera_position, sector, width, height, 0.75F, 1.0F, 1.0F, 0.5F);
+}
+
 void add_gathering_edge_indicator(
   std::vector<hyperverse::SpriteDraw>& sprites,
   std::vector<hyperverse::LineDraw>& lines,
@@ -902,12 +991,7 @@ SpriteFrame build_sprite_frame(
     }
   }
   if (route_hud.active) {
-    const SpriteDraw gate_bounds = make_world_sprite(SpriteTexture::Reticle, route_hud.gate_position, camera.position, sector, width, height, 96.0F);
-    if (route_hud.gate_reached) {
-      add_box_lines(frame.lines, gate_bounds, 0.65F, 1.0F, 0.45F);
-    } else {
-      add_box_lines(frame.lines, gate_bounds, 0.35F, 0.9F, 1.0F);
-    }
+    add_jump_gate_lines(frame.lines, route_hud.gate_position, round_timer.elapsed_seconds, camera.position, sector, width, height);
     add_world_link_line(frame.lines, ship.position, route_hud.gate_position, camera.position, sector, width, height, 0.2F, 0.55F, 0.85F);
   }
   if (gravity_sling_hud.phase != GravitySlingPhase::FreeFlight && account.registry().valid(gravity_sling_hud.target) &&
@@ -933,20 +1017,15 @@ SpriteFrame build_sprite_frame(
     if (box.state == CargoBoxState::Extracted) {
       continue;
     }
-    const SpriteDraw box_bounds = make_world_sprite(SpriteTexture::Reticle, box.position, camera.position, sector, width, height, 28.0F);
+    OreTint tint = ore_tint(box.tier);
     if (escort_hud.cargo_train_active) {
       if (box.state == CargoBoxState::Lost) {
-        add_box_lines(frame.lines, box_bounds, 0.55F, 0.1F, 0.1F);
+        tint = {.r = 0.55F, .g = 0.1F, .b = 0.1F};
       } else if (box.state == CargoBoxState::Stolen) {
-        add_box_lines(frame.lines, box_bounds, 1.0F, 0.2F, 0.15F);
-      } else {
-        const OreTint tint = ore_tint(box.tier);
-        add_box_lines(frame.lines, box_bounds, tint.r, tint.g, tint.b);
+        tint = {.r = 1.0F, .g = 0.2F, .b = 0.15F};
       }
-    } else {
-      const OreTint tint = ore_tint(box.tier);
-      add_box_lines(frame.lines, box_bounds, tint.r, tint.g, tint.b);
     }
+    add_cargo_container_lines(frame.lines, box.position, tint, camera.position, sector, width, height);
   }
   if (escort_hud.cargo_train_active) {
     std::vector<const CargoBox*> linked_boxes;

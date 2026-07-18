@@ -181,3 +181,74 @@ TEST_CASE("mining drone releases targets that move beyond operating range") {
   CHECK_FALSE(registry.valid(hud.target));
   CHECK(release_events == 1);
 }
+
+TEST_CASE("mining drone picks up one pending cargo box and delivers it to the gathering ship") {
+  entt::registry registry;
+  const entt::entity box_entity = registry.create();
+  registry.emplace<hyperverse::CargoBox>(
+    box_entity,
+    hyperverse::CargoBox{.position = {.x = 140.0F, .y = 100.0F}, .index = 0, .state = hyperverse::CargoBoxState::PendingPickup}
+  );
+  hyperverse::MiningDrone drone{.position = {.x = 100.0F, .y = 100.0F}};
+  const hyperverse::ShipMotion ship{.position = {.x = 300.0F, .y = 100.0F}};
+  hyperverse::DomainEventBus event_bus;
+  int pickup_events = 0;
+  int delivered_events = 0;
+  event_bus.appendListener(hyperverse::DomainEventType::CargoBoxPickupStarted, [&](const hyperverse::DomainEvent& event) {
+    CHECK(event.target == box_entity);
+    ++pickup_events;
+  });
+  event_bus.appendListener(hyperverse::DomainEventType::CargoBoxDeliveredToGathering, [&](const hyperverse::DomainEvent& event) {
+    CHECK(event.target == box_entity);
+    CHECK(event.position.x == Catch::Approx(ship.position.x));
+    CHECK(event.position.y == Catch::Approx(ship.position.y));
+    ++delivered_events;
+  });
+
+  const hyperverse::MiningDroneHudSnapshot pickup = hyperverse::update_mining_drone(
+    drone,
+    registry,
+    {},
+    ship,
+    {.width = 9000.0F, .height = 9000.0F},
+    0.5F,
+    {.max_speed = 80.0F, .cargo_pickup_tolerance = 45.0F},
+    &event_bus
+  );
+  event_bus.process();
+
+  CHECK(pickup.phase == hyperverse::MiningDronePhase::CargoPickup);
+  CHECK(pickup.target == box_entity);
+  CHECK(registry.get<hyperverse::CargoBox>(box_entity).state == hyperverse::CargoBoxState::BeingHauled);
+  CHECK(pickup_events == 1);
+
+  (void)hyperverse::update_mining_drone(
+    drone,
+    registry,
+    {},
+    ship,
+    {.width = 9000.0F, .height = 9000.0F},
+    1.95F,
+    {.max_speed = 80.0F, .cargo_pickup_tolerance = 45.0F, .cargo_delivery_tolerance = 45.0F},
+    &event_bus
+  );
+  const hyperverse::MiningDroneHudSnapshot delivery = hyperverse::update_mining_drone(
+    drone,
+    registry,
+    {},
+    ship,
+    {.width = 9000.0F, .height = 9000.0F},
+    0.1F,
+    {.max_speed = 80.0F, .cargo_pickup_tolerance = 45.0F, .cargo_delivery_tolerance = 45.0F},
+    &event_bus
+  );
+  event_bus.process();
+
+  const hyperverse::CargoBox& box = registry.get<hyperverse::CargoBox>(box_entity);
+  CHECK(delivery.phase == hyperverse::MiningDronePhase::CargoDelivery);
+  CHECK(box.state == hyperverse::CargoBoxState::Linked);
+  CHECK(box.position.x == Catch::Approx(ship.position.x));
+  CHECK(box.position.y == Catch::Approx(ship.position.y));
+  CHECK_FALSE(registry.valid(drone.cargo_target));
+  CHECK(delivered_events == 1);
+}

@@ -58,13 +58,13 @@ TEST_CASE("vertical slice asteroid field is spread across the sector and visibly
   for (auto [entity, asteroid] : account.registry().view<hyperverse::AsteroidBody>().each()) {
     (void)entity;
     ++asteroid_count;
-    CHECK(hyperverse::length(asteroid.velocity) >= 180.0F);
-    CHECK(std::abs(asteroid.angular_velocity) >= 0.216F);
+    CHECK(hyperverse::length(asteroid.velocity) >= 420.0F);
+    CHECK(std::abs(asteroid.angular_velocity) >= 0.672F);
     if (asteroid.position.x >= left && asteroid.position.x <= right && asteroid.position.y >= top && asteroid.position.y <= bottom) {
       ++initially_visible_count;
     }
   }
 
-  CHECK(asteroid_count >= 24);
+  CHECK(asteroid_count >= 72);
   CHECK(initially_visible_count <= 4);
 }
