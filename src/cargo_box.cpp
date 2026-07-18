@@ -1,5 +1,8 @@
 #include "hyperverse/cargo_box.hpp"
 
+#include <algorithm>
+#include <limits>
+
 namespace hyperverse {
 namespace {
 
@@ -29,6 +32,40 @@ void emit_box_created(DomainEventBus* event_bus, entt::entity box, const CargoBo
       .count = cargo_box.index,
     }
   );
+}
+
+[[nodiscard]] Vec2 cargo_slot_position(const ExtractionSite& gathering_site, const CargoBoxTuning& tuning, const SectorTuning& sector, int box_index) {
+  const int columns = std::max(1, tuning.gathering_columns);
+  const int column = box_index % columns;
+  const int row = box_index / columns;
+  const float centered_column = static_cast<float>(column) - ((static_cast<float>(columns) - 1.0F) * 0.5F);
+  return wrap_position(
+    {
+      .x = gathering_site.position.x + (centered_column * tuning.box_spacing),
+      .y = gathering_site.position.y + (static_cast<float>(row) * tuning.box_spacing),
+    },
+    sector
+  );
+}
+
+void move_box_toward(CargoBox& box, Vec2 target, const SectorTuning& sector, float dt_seconds, const CargoBoxTuning& tuning) {
+  const float scaled_dt = std::max(0.0F, dt_seconds);
+  const Vec2 delta = wrapped_delta(box.position, target, sector);
+  const float distance = length(delta);
+  if (distance <= 0.001F || scaled_dt <= 0.0F) {
+    box.velocity = {};
+    return;
+  }
+
+  const Vec2 desired_velocity = clamp_length(delta * tuning.gathering_follow_rate, tuning.gathering_max_speed);
+  const Vec2 step = desired_velocity * scaled_dt;
+  if (length(step) >= distance) {
+    box.velocity = delta * (1.0F / std::max(scaled_dt, std::numeric_limits<float>::epsilon()));
+    box.position = target;
+  } else {
+    box.velocity = desired_velocity;
+    box.position = wrap_position(box.position + step, sector);
+  }
 }
 
 }  // namespace
@@ -69,6 +106,25 @@ int sync_cargo_boxes(
   }
 
   return existing_boxes;
+}
+
+int update_gathered_cargo_boxes(
+  entt::registry& registry,
+  const ExtractionSite& gathering_site,
+  const SectorTuning& sector,
+  float dt_seconds,
+  const CargoBoxTuning& tuning
+) {
+  int moved_boxes = 0;
+  for (auto [entity, box] : registry.view<CargoBox>().each()) {
+    (void)entity;
+    if (box.state != CargoBoxState::Linked) {
+      continue;
+    }
+    move_box_toward(box, cargo_slot_position(gathering_site, tuning, sector, box.index), sector, dt_seconds, tuning);
+    ++moved_boxes;
+  }
+  return moved_boxes;
 }
 
 }  // namespace hyperverse

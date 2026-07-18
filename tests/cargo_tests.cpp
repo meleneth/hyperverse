@@ -148,6 +148,84 @@ TEST_CASE("cargo boxes created at a mining site wait for drone pickup and emit e
   }
 }
 
+TEST_CASE("cargo dispatch assigns queued cargo jobs to the first available unassigned drone") {
+  entt::registry registry;
+  const entt::entity first_box = registry.create();
+  registry.emplace<hyperverse::CargoBox>(
+    first_box,
+    hyperverse::CargoBox{.position = {.x = 100.0F, .y = 100.0F}, .index = 0, .state = hyperverse::CargoBoxState::PendingPickup}
+  );
+  const entt::entity second_box = registry.create();
+  registry.emplace<hyperverse::CargoBox>(
+    second_box,
+    hyperverse::CargoBox{.position = {.x = 200.0F, .y = 100.0F}, .index = 1, .state = hyperverse::CargoBoxState::PendingPickup}
+  );
+  const entt::entity drone_entity = registry.create();
+  registry.emplace<hyperverse::MiningDrone>(drone_entity, hyperverse::MiningDrone{.phase = hyperverse::MiningDronePhase::Idle});
+  const std::vector<entt::entity> drones{drone_entity};
+  hyperverse::CargoDispatchModel dispatch;
+  hyperverse::DomainEventBus event_bus;
+  int queued_events = 0;
+  int assigned_events = 0;
+  event_bus.appendListener(hyperverse::DomainEventType::CargoDroneJobQueued, [&](const hyperverse::DomainEvent&) { ++queued_events; });
+  event_bus.appendListener(hyperverse::DomainEventType::CargoDroneJobAssigned, [&](const hyperverse::DomainEvent&) { ++assigned_events; });
+  const hyperverse::ExtractionSite gathering_site{.position = {.x = 1000.0F, .y = 2000.0F}};
+  const hyperverse::CargoBoxTuning tuning{.box_spacing = 156.0F};
+  install_cargo_dispatch_event_handlers(dispatch, registry, drones, gathering_site, tuning, {.width = 9000.0F, .height = 9000.0F}, event_bus);
+
+  event_bus.enqueue(hyperverse::DomainEventType::CargoBoxCreated, hyperverse::DomainEvent{.type = hyperverse::DomainEventType::CargoBoxCreated, .subject = first_box});
+  event_bus.enqueue(hyperverse::DomainEventType::CargoBoxCreated, hyperverse::DomainEvent{.type = hyperverse::DomainEventType::CargoBoxCreated, .subject = second_box});
+  event_bus.process();
+  event_bus.process();
+
+  hyperverse::MiningDrone& drone = registry.get<hyperverse::MiningDrone>(drone_entity);
+  CHECK(queued_events == 2);
+  CHECK(assigned_events == 1);
+  CHECK(dispatch.jobs.size() == 2);
+  CHECK(drone.cargo_target == first_box);
+  CHECK(drone.cargo_destination.x == Catch::Approx(688.0F));
+  CHECK(drone.cargo_destination.y == Catch::Approx(2000.0F));
+
+  registry.get<hyperverse::CargoBox>(first_box).state = hyperverse::CargoBoxState::Linked;
+  drone.cargo_target = entt::null;
+  drone.phase = hyperverse::MiningDronePhase::Idle;
+  event_bus.enqueue(
+    hyperverse::DomainEventType::CargoBoxDeliveredToGathering,
+    hyperverse::DomainEvent{.type = hyperverse::DomainEventType::CargoBoxDeliveredToGathering, .target = first_box}
+  );
+  event_bus.process();
+  event_bus.process();
+
+  CHECK(dispatch.jobs.size() == 1);
+  CHECK(drone.cargo_target == second_box);
+  CHECK(drone.cargo_destination.x == Catch::Approx(844.0F));
+  CHECK(drone.cargo_destination.y == Catch::Approx(2000.0F));
+  CHECK(assigned_events == 2);
+}
+
+TEST_CASE("linked cargo boxes maneuver into spaced gathering slots") {
+  entt::registry registry;
+  const entt::entity box_entity = registry.create();
+  registry.emplace<hyperverse::CargoBox>(
+    box_entity,
+    hyperverse::CargoBox{.position = {.x = 1000.0F, .y = 2000.0F}, .index = 1, .state = hyperverse::CargoBoxState::Linked}
+  );
+
+  const int moved = hyperverse::update_gathered_cargo_boxes(
+    registry,
+    {.position = {.x = 1000.0F, .y = 2000.0F}},
+    {.width = 9000.0F, .height = 9000.0F},
+    0.25F,
+    {.box_spacing = 156.0F, .gathering_max_speed = 80.0F}
+  );
+
+  const hyperverse::CargoBox& box = registry.get<hyperverse::CargoBox>(box_entity);
+  CHECK(moved == 1);
+  CHECK(box.position.x < 1000.0F);
+  CHECK(box.position.x > 844.0F);
+  CHECK(box.position.y == Catch::Approx(2000.0F));
+}
+
 TEST_CASE("cargo boxes inherit ore color tiers from extracted mass buckets") {
   entt::registry registry;
   const entt::entity common = registry.create();
@@ -357,26 +435,20 @@ TEST_CASE("cargo extraction processes boxes one at a time at the gate") {
   CHECK(extracted_events == 1);
   CHECK(complete_events == 0);
 
-  (void)hyperverse::update_cargo_extraction(
-    registry,
-    escort,
-    route,
-    {.width = 9000.0F, .height = 9000.0F},
-    5.0F,
-    &event_bus
-  );
-  (void)hyperverse::update_cargo_extraction(
-    registry,
-    escort,
-    route,
-    {.width = 9000.0F, .height = 9000.0F},
-    0.0F,
-    &event_bus
-  );
+  for (int tick = 0; tick < 16 && escort.phase != hyperverse::CargoEscortPhase::Complete; ++tick) {
+    (void)hyperverse::update_cargo_extraction(
+      registry,
+      escort,
+      route,
+      {.width = 9000.0F, .height = 9000.0F},
+      1.0F,
+      &event_bus
+    );
+  }
   event_bus.process();
 
-  CHECK(registry.get<hyperverse::CargoBox>(second).state == hyperverse::CargoBoxState::Extracted);
   CHECK(escort.phase == hyperverse::CargoEscortPhase::Complete);
+  CHECK(registry.get<hyperverse::CargoBox>(second).state == hyperverse::CargoBoxState::Extracted);
   CHECK(extracted_events == 2);
   CHECK(complete_events == 1);
 }
@@ -408,25 +480,25 @@ TEST_CASE("cargo extraction accepts the train and forms a compact queue") {
 
   CHECK(hud.active);
   CHECK(hud.extracted_boxes == 0);
-  CHECK(registry.get<hyperverse::CargoBox>(first).state == hyperverse::CargoBoxState::Extracting);
+  CHECK(registry.get<hyperverse::CargoBox>(first).state == hyperverse::CargoBoxState::GateBound);
   CHECK(registry.get<hyperverse::CargoBox>(second).state == hyperverse::CargoBoxState::GateBound);
-  CHECK(registry.get<hyperverse::CargoBox>(first).position.x == Catch::Approx(1000.0F));
+  CHECK(registry.get<hyperverse::CargoBox>(first).position.x > 500.0F);
   CHECK(registry.get<hyperverse::CargoBox>(first).position.y == Catch::Approx(1000.0F));
-  CHECK(registry.get<hyperverse::CargoBox>(second).position.x == Catch::Approx(840.0F));
-  CHECK(registry.get<hyperverse::CargoBox>(second).position.y == Catch::Approx(1080.0F));
+  CHECK(registry.get<hyperverse::CargoBox>(second).position.x > 450.0F);
+  CHECK(registry.get<hyperverse::CargoBox>(second).position.y > 1000.0F);
 }
 
 TEST_CASE("cargo extraction compacts queued containers after each accepted box") {
   entt::registry registry;
   const entt::entity first = registry.create();
-  registry.emplace<hyperverse::CargoBox>(first, hyperverse::CargoBox{.index = 0});
+  registry.emplace<hyperverse::CargoBox>(first, hyperverse::CargoBox{.position = {.x = 1000.0F, .y = 1000.0F}, .index = 0});
   const entt::entity second = registry.create();
-  registry.emplace<hyperverse::CargoBox>(second, hyperverse::CargoBox{.index = 1});
+  registry.emplace<hyperverse::CargoBox>(second, hyperverse::CargoBox{.position = {.x = 844.0F, .y = 1156.0F}, .index = 1});
   const entt::entity third = registry.create();
-  registry.emplace<hyperverse::CargoBox>(third, hyperverse::CargoBox{.index = 2});
+  registry.emplace<hyperverse::CargoBox>(third, hyperverse::CargoBox{.position = {.x = 1000.0F, .y = 1312.0F}, .index = 2});
   hyperverse::CargoEscortState escort{.phase = hyperverse::CargoEscortPhase::Extracting};
   const hyperverse::CargoEscortRoute route{.gate_position = {.x = 1000.0F, .y = 1000.0F}};
-  const hyperverse::CargoExtractionTuning tuning{.seconds_per_box = 1.0F, .staging_spacing = 80.0F};
+  const hyperverse::CargoExtractionTuning tuning{.seconds_per_box = 1.0F, .staging_spacing = 156.0F, .max_speed = 520.0F};
 
   (void)hyperverse::update_cargo_extraction(
     registry,
@@ -442,19 +514,19 @@ TEST_CASE("cargo extraction compacts queued containers after each accepted box")
     escort,
     route,
     {.width = 9000.0F, .height = 9000.0F},
-    0.0F,
+    0.25F,
     nullptr,
     tuning
   );
 
   CHECK(shifted.active_box_index == 1);
   CHECK(registry.get<hyperverse::CargoBox>(first).state == hyperverse::CargoBoxState::Extracted);
-  CHECK(registry.get<hyperverse::CargoBox>(second).state == hyperverse::CargoBoxState::Extracting);
+  CHECK(registry.get<hyperverse::CargoBox>(second).state == hyperverse::CargoBoxState::GateBound);
   CHECK(registry.get<hyperverse::CargoBox>(third).state == hyperverse::CargoBoxState::GateBound);
-  CHECK(registry.get<hyperverse::CargoBox>(second).position.x == Catch::Approx(1000.0F));
-  CHECK(registry.get<hyperverse::CargoBox>(second).position.y == Catch::Approx(1000.0F));
-  CHECK(registry.get<hyperverse::CargoBox>(third).position.x == Catch::Approx(840.0F));
-  CHECK(registry.get<hyperverse::CargoBox>(third).position.y == Catch::Approx(1080.0F));
+  CHECK(registry.get<hyperverse::CargoBox>(second).position.x > 688.0F);
+  CHECK(registry.get<hyperverse::CargoBox>(second).position.y < 1156.0F);
+  CHECK(registry.get<hyperverse::CargoBox>(third).position.x < 1000.0F);
+  CHECK(registry.get<hyperverse::CargoBox>(third).position.y < 1312.0F);
 }
 
 TEST_CASE("burst speed detaches linked cargo train boxes") {

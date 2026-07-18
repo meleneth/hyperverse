@@ -16,12 +16,13 @@ enum class MiningDronePhase {
   Travelling,
   Mining,
   CargoPickup,
-  CargoDelivery,
+  EscortingCargo,
 };
 
 struct MiningDrone {
   Vec2 position{};
   Vec2 velocity{};
+  Vec2 cargo_destination{};
   entt::entity target{entt::null};
   entt::entity cargo_target{entt::null};
   MiningDronePhase phase{MiningDronePhase::Idle};

@@ -170,6 +170,7 @@ add_library(
   src/asteroid_mass.cpp
   src/camera.cpp
   src/cargo_box.cpp
+  src/cargo_dispatch.cpp
   src/cargo_escort.cpp
   src/cargo_extraction.cpp
   src/cargo_manifest.cpp

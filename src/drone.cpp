@@ -4,6 +4,8 @@
 #include "hyperverse/asteroid_mass.hpp"
 #include "hyperverse/cargo_box.hpp"
 
+#include <boost/sml.hpp>
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -12,6 +14,45 @@ namespace hyperverse {
 namespace {
 
 constexpr float TauRadians = 6.28318530718F;
+namespace sml = boost::sml;
+
+struct drone_unassigned {};
+struct drone_pickup_cargo {};
+struct drone_escorting_cargo {};
+struct cargo_assigned {};
+struct cargo_picked_up {};
+struct cargo_delivered {};
+
+struct DroneCargoMachine {
+  auto operator()() const {
+    using namespace sml;
+    return make_transition_table(
+      *state<drone_unassigned> + event<cargo_assigned> = state<drone_pickup_cargo>,
+      state<drone_pickup_cargo> + event<cargo_picked_up> = state<drone_escorting_cargo>,
+      state<drone_escorting_cargo> + event<cargo_delivered> = state<drone_unassigned>
+    );
+  }
+};
+
+void replay_cargo_phase(sml::sm<DroneCargoMachine>& machine, MiningDronePhase phase, entt::entity cargo_target) {
+  if (cargo_target == entt::null) {
+    return;
+  }
+  machine.process_event(cargo_assigned{});
+  if (phase == MiningDronePhase::EscortingCargo) {
+    machine.process_event(cargo_picked_up{});
+  }
+}
+
+[[nodiscard]] MiningDronePhase read_cargo_phase(const sml::sm<DroneCargoMachine>& machine) {
+  if (machine.is(sml::state<drone_escorting_cargo>)) {
+    return MiningDronePhase::EscortingCargo;
+  }
+  if (machine.is(sml::state<drone_pickup_cargo>)) {
+    return MiningDronePhase::CargoPickup;
+  }
+  return MiningDronePhase::Idle;
+}
 
 [[nodiscard]] bool valid_mining_target(entt::registry& registry, entt::entity target) {
   if (
@@ -85,26 +126,30 @@ void update_facing_from_velocity(MiningDrone& drone, float dead_stick_speed) {
   return box.state == CargoBoxState::PendingPickup || box.state == CargoBoxState::BeingHauled;
 }
 
-[[nodiscard]] entt::entity nearest_pending_cargo(entt::registry& registry, Vec2 position, const SectorTuning& sector) {
-  entt::entity selected = entt::null;
-  float selected_distance = std::numeric_limits<float>::max();
-  for (auto [entity, box] : registry.view<CargoBox>().each()) {
-    if (box.state != CargoBoxState::PendingPickup) {
-      continue;
-    }
-    const float distance = length(wrapped_delta(position, box.position, sector));
-    if (distance < selected_distance) {
-      selected = entity;
-      selected_distance = distance;
-    }
+void move_drone_toward(MiningDrone& drone, Vec2 target, const SectorTuning& sector, float dt_seconds, const MiningDroneTuning& tuning) {
+  const float scaled_dt = std::max(0.0F, dt_seconds);
+  const Vec2 delta = wrapped_delta(drone.position, target, sector);
+  const float distance = length(delta);
+  if (distance <= 0.001F || scaled_dt <= 0.0F) {
+    drone.velocity = {};
+    return;
   }
-  return selected;
+
+  const Vec2 desired_velocity = normalize_or_zero(delta) * tuning.max_speed;
+  const Vec2 step = desired_velocity * scaled_dt;
+  if (length(step) >= distance) {
+    drone.velocity = delta * (1.0F / std::max(scaled_dt, std::numeric_limits<float>::epsilon()));
+    drone.position = target;
+  } else {
+    drone.velocity = desired_velocity;
+    drone.position = wrap_position(drone.position + step, sector);
+  }
+  update_facing_from_velocity(drone, tuning.facing_dead_stick_speed);
 }
 
 [[nodiscard]] bool update_cargo_haul(
   MiningDrone& drone,
   entt::registry& registry,
-  const ShipMotion& ship,
   const SectorTuning& sector,
   float dt_seconds,
   const MiningDroneTuning& tuning,
@@ -112,12 +157,12 @@ void update_facing_from_velocity(MiningDrone& drone, float dead_stick_speed) {
   MiningDroneHudSnapshot& hud
 ) {
   if (!valid_cargo_target(registry, drone.cargo_target)) {
-    drone.cargo_target = nearest_pending_cargo(registry, drone.position, sector);
-  }
-  if (!valid_cargo_target(registry, drone.cargo_target)) {
+    drone.cargo_target = entt::null;
     return false;
   }
 
+  sml::sm<DroneCargoMachine> machine;
+  replay_cargo_phase(machine, drone.phase, drone.cargo_target);
   CargoBox& box = registry.get<CargoBox>(drone.cargo_target);
   if (box.state == CargoBoxState::PendingPickup) {
     const Vec2 to_box = wrapped_delta(drone.position, box.position, sector);
@@ -127,35 +172,35 @@ void update_facing_from_velocity(MiningDrone& drone, float dead_stick_speed) {
     hud.target = drone.cargo_target;
     hud.target_distance = distance;
     if (distance > tuning.cargo_pickup_tolerance) {
-      drone.velocity = normalize_or_zero(to_box) * tuning.max_speed;
-      update_facing_from_velocity(drone, tuning.facing_dead_stick_speed);
-      drone.position = wrap_position(drone.position + (drone.velocity * dt_seconds), sector);
+      move_drone_toward(drone, box.position, sector, dt_seconds, tuning);
     } else {
       box.state = CargoBoxState::BeingHauled;
+      machine.process_event(cargo_picked_up{});
+      drone.phase = read_cargo_phase(machine);
       emit_cargo_pickup_started(event_bus, entt::null, drone.cargo_target, box.position);
     }
     return true;
   }
 
-  const Vec2 delivery_position = ship.position;
+  const Vec2 delivery_position = drone.cargo_destination;
   const Vec2 to_delivery = wrapped_delta(drone.position, delivery_position, sector);
   const float distance = length(to_delivery);
-  drone.phase = MiningDronePhase::CargoDelivery;
+  drone.phase = MiningDronePhase::EscortingCargo;
   hud.phase = drone.phase;
   hud.target = drone.cargo_target;
   hud.target_distance = distance;
   if (distance > tuning.cargo_delivery_tolerance) {
-    drone.velocity = normalize_or_zero(to_delivery) * tuning.max_speed;
-    update_facing_from_velocity(drone, tuning.facing_dead_stick_speed);
-    drone.position = wrap_position(drone.position + (drone.velocity * dt_seconds), sector);
+    move_drone_toward(drone, delivery_position, sector, dt_seconds, tuning);
     box.position = drone.position;
     box.velocity = drone.velocity;
   } else {
     box.state = CargoBoxState::Linked;
-    box.position = delivery_position;
     box.velocity = {};
     emit_cargo_delivered(event_bus, entt::null, drone.cargo_target, delivery_position);
+    machine.process_event(cargo_delivered{});
     drone.cargo_target = entt::null;
+    drone.cargo_destination = {};
+    drone.phase = read_cargo_phase(machine);
   }
   return true;
 }
@@ -179,7 +224,7 @@ MiningDroneHudSnapshot update_mining_drone(
   }
 
   MiningDroneHudSnapshot hud{.phase = drone.phase, .target = drone.target, .extracted_mass = drone.extracted_mass};
-  if (update_cargo_haul(drone, registry, ship, sector, scaled_dt, tuning, event_bus, hud)) {
+  if (update_cargo_haul(drone, registry, sector, scaled_dt, tuning, event_bus, hud)) {
     return hud;
   }
 

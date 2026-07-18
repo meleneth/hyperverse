@@ -18,6 +18,8 @@ enum class DomainEventType {
   CargoEscortStarted,
   CargoArrivedAtGate,
   CargoBoxCreated,
+  CargoDroneJobQueued,
+  CargoDroneJobAssigned,
   CargoBoxPickupStarted,
   CargoBoxDeliveredToGathering,
   CargoBoxExtracted,

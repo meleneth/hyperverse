@@ -16,6 +16,7 @@
 #include "hyperverse/hud_notice.hpp"
 #include "hyperverse/camera.hpp"
 #include "hyperverse/cargo.hpp"
+#include "hyperverse/cargo_dispatch.hpp"
 #include "hyperverse/collision.hpp"
 #include "hyperverse/drone.hpp"
 #include "hyperverse/input.hpp"

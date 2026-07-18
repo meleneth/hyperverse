@@ -562,7 +562,27 @@ void add_world_line(
   return {.x = std::cos(angle) * radius_x, .y = std::sin(angle) * radius_y};
 }
 
-void add_cargo_container_lines(
+[[nodiscard]] hyperverse::TriangleVertexDraw cargo_vertex(
+  hyperverse::Vec2 center_ndc,
+  hyperverse::Vec2 offset,
+  hyperverse::OreTint tint,
+  float shade,
+  std::uint32_t width,
+  std::uint32_t height,
+  float alpha = 0.95F
+) {
+  return {
+    .x_ndc = center_ndc.x + ((offset.x * hyperverse::PixelsPerWorldUnit * 2.0F) / static_cast<float>(width)),
+    .y_ndc = center_ndc.y + ((offset.y * hyperverse::PixelsPerWorldUnit * 2.0F) / static_cast<float>(height)),
+    .r = std::clamp(tint.r * shade, 0.04F, 1.0F),
+    .g = std::clamp(tint.g * shade, 0.04F, 1.0F),
+    .b = std::clamp(tint.b * shade, 0.04F, 1.0F),
+    .a = alpha,
+  };
+}
+
+void add_cargo_container(
+  std::vector<hyperverse::TriangleDraw>& triangles,
   std::vector<hyperverse::LineDraw>& lines,
   hyperverse::Vec2 position,
   hyperverse::OreTint tint,
@@ -571,12 +591,40 @@ void add_cargo_container_lines(
   std::uint32_t width,
   std::uint32_t height
 ) {
+  const hyperverse::Vec2 center_ndc = world_to_ndc(position, camera_position, sector, width, height);
   std::array<hyperverse::Vec2, 5> top{};
   std::array<hyperverse::Vec2, 5> bottom{};
   for (int index = 0; index < 5; ++index) {
     const float angle = -std::numbers::pi_v<float> * 0.5F + (static_cast<float>(index) / 5.0F) * std::numbers::pi_v<float> * 2.0F;
-    top[static_cast<std::size_t>(index)] = rotated_point(angle, 26.0F, 14.0F) + hyperverse::Vec2{.x = 0.0F, .y = -10.0F};
-    bottom[static_cast<std::size_t>(index)] = rotated_point(angle + 0.32F, 23.0F, 13.0F) + hyperverse::Vec2{.x = 0.0F, .y = 12.0F};
+    top[static_cast<std::size_t>(index)] = rotated_point(angle, 52.0F, 28.0F) + hyperverse::Vec2{.x = 0.0F, .y = -20.0F};
+    bottom[static_cast<std::size_t>(index)] = rotated_point(angle + 0.32F, 46.0F, 26.0F) + hyperverse::Vec2{.x = 0.0F, .y = 24.0F};
+  }
+
+  const hyperverse::Vec2 top_center{.x = 0.0F, .y = -20.0F};
+  const hyperverse::Vec2 bottom_center{.x = 0.0F, .y = 24.0F};
+  for (int index = 0; index < 5; ++index) {
+    const int next = (index + 1) % 5;
+    const float side_shade = 0.58F + (static_cast<float>(index) * 0.055F);
+    triangles.push_back({
+      .a = cargo_vertex(center_ndc, top[static_cast<std::size_t>(index)], tint, side_shade, width, height),
+      .b = cargo_vertex(center_ndc, bottom[static_cast<std::size_t>(index)], tint, side_shade * 0.82F, width, height),
+      .c = cargo_vertex(center_ndc, bottom[static_cast<std::size_t>(next)], tint, side_shade * 0.72F, width, height),
+    });
+    triangles.push_back({
+      .a = cargo_vertex(center_ndc, top[static_cast<std::size_t>(index)], tint, side_shade, width, height),
+      .b = cargo_vertex(center_ndc, bottom[static_cast<std::size_t>(next)], tint, side_shade * 0.72F, width, height),
+      .c = cargo_vertex(center_ndc, top[static_cast<std::size_t>(next)], tint, side_shade * 1.08F, width, height),
+    });
+    triangles.push_back({
+      .a = cargo_vertex(center_ndc, top_center, tint, 0.92F, width, height),
+      .b = cargo_vertex(center_ndc, top[static_cast<std::size_t>(index)], tint, 0.84F, width, height),
+      .c = cargo_vertex(center_ndc, top[static_cast<std::size_t>(next)], tint, 0.98F, width, height),
+    });
+    triangles.push_back({
+      .a = cargo_vertex(center_ndc, bottom_center, tint, 0.42F, width, height),
+      .b = cargo_vertex(center_ndc, bottom[static_cast<std::size_t>(next)], tint, 0.48F, width, height),
+      .c = cargo_vertex(center_ndc, bottom[static_cast<std::size_t>(index)], tint, 0.36F, width, height),
+    });
   }
 
   for (int index = 0; index < 5; ++index) {
@@ -586,8 +634,8 @@ void add_cargo_container_lines(
     add_world_line(lines, position, top[static_cast<std::size_t>(index)], bottom[static_cast<std::size_t>(index)], camera_position, sector, width, height, tint.r, tint.g, tint.b);
   }
 
-  add_world_line(lines, position, {-11.0F, -2.0F}, {11.0F, 3.0F}, camera_position, sector, width, height, 1.0F, 1.0F, 1.0F, 0.55F);
-  add_world_line(lines, position, {-7.0F, 8.0F}, {7.0F, 10.0F}, camera_position, sector, width, height, 1.0F, 1.0F, 1.0F, 0.42F);
+  add_world_line(lines, position, {-22.0F, -4.0F}, {22.0F, 6.0F}, camera_position, sector, width, height, 1.0F, 1.0F, 1.0F, 0.55F);
+  add_world_line(lines, position, {-14.0F, 16.0F}, {14.0F, 20.0F}, camera_position, sector, width, height, 1.0F, 1.0F, 1.0F, 0.42F);
 }
 
 void add_jump_gate_lines(
@@ -1025,7 +1073,7 @@ SpriteFrame build_sprite_frame(
         tint = {.r = 1.0F, .g = 0.2F, .b = 0.15F};
       }
     }
-    add_cargo_container_lines(frame.lines, box.position, tint, camera.position, sector, width, height);
+    add_cargo_container(frame.triangles, frame.lines, box.position, tint, camera.position, sector, width, height);
   }
   if (escort_hud.cargo_train_active) {
     std::vector<const CargoBox*> linked_boxes;

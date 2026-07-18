@@ -191,6 +191,8 @@ TEST_CASE("mining drone picks up one pending cargo box and delivers it to the ga
   );
   hyperverse::MiningDrone drone{.position = {.x = 100.0F, .y = 100.0F}};
   const hyperverse::ShipMotion ship{.position = {.x = 300.0F, .y = 100.0F}};
+  drone.cargo_target = box_entity;
+  drone.cargo_destination = ship.position;
   hyperverse::DomainEventBus event_bus;
   int pickup_events = 0;
   int delivered_events = 0;
@@ -245,10 +247,9 @@ TEST_CASE("mining drone picks up one pending cargo box and delivers it to the ga
   event_bus.process();
 
   const hyperverse::CargoBox& box = registry.get<hyperverse::CargoBox>(box_entity);
-  CHECK(delivery.phase == hyperverse::MiningDronePhase::CargoDelivery);
+  CHECK(delivery.phase == hyperverse::MiningDronePhase::EscortingCargo);
   CHECK(box.state == hyperverse::CargoBoxState::Linked);
-  CHECK(box.position.x == Catch::Approx(ship.position.x));
-  CHECK(box.position.y == Catch::Approx(ship.position.y));
+  CHECK(hyperverse::length(hyperverse::wrapped_delta(box.position, ship.position, {.width = 9000.0F, .height = 9000.0F})) <= 45.0F);
   CHECK_FALSE(registry.valid(drone.cargo_target));
   CHECK(delivered_events == 1);
 }

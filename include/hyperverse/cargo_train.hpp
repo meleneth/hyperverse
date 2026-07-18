@@ -10,7 +10,7 @@
 namespace hyperverse {
 
 struct CargoTrainTuning {
-  float link_spacing{86.0F};
+  float link_spacing{156.0F};
   float follow_rate{5.0F};
   float max_speed{520.0F};
 };

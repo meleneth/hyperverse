@@ -3,6 +3,7 @@
 #include "hyperverse/cargo_manifest.hpp"
 #include "hyperverse/domain_events.hpp"
 #include "hyperverse/math.hpp"
+#include "hyperverse/sector.hpp"
 
 #include <entt/entity/registry.hpp>
 
@@ -36,7 +37,10 @@ struct CargoBox {
 
 struct CargoBoxTuning {
   float box_mass{10.0F};
-  float box_spacing{78.0F};
+  float box_spacing{156.0F};
+  int gathering_columns{5};
+  float gathering_follow_rate{4.0F};
+  float gathering_max_speed{420.0F};
 };
 
 int sync_cargo_boxes(
@@ -46,6 +50,14 @@ int sync_cargo_boxes(
   const CargoBoxTuning& tuning = {},
   Vec2 pickup_origin = {},
   DomainEventBus* event_bus = nullptr
+);
+
+int update_gathered_cargo_boxes(
+  entt::registry& registry,
+  const ExtractionSite& gathering_site,
+  const SectorTuning& sector,
+  float dt_seconds,
+  const CargoBoxTuning& tuning = {}
 );
 
 }  // namespace hyperverse

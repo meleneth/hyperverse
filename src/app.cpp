@@ -3,6 +3,7 @@
 #include "hyperverse/asteroid_geometry.hpp"
 #include "hyperverse/camera.hpp"
 #include "hyperverse/cargo_box.hpp"
+#include "hyperverse/cargo_dispatch.hpp"
 #include "hyperverse/cargo_escort.hpp"
 #include "hyperverse/cargo_extraction.hpp"
 #include "hyperverse/cargo_manifest.hpp"
@@ -73,6 +74,15 @@ public:
     gamepad_.open_first_available();
     account_.registry().emplace_or_replace<ExtractionSite>(player_, gathering_site_);
     install_game_session_event_handlers(game_session_, account_.event_bus());
+    install_cargo_dispatch_event_handlers(
+      cargo_dispatch_,
+      account_.registry(),
+      entities_.mining_drones,
+      gathering_site_,
+      cargo_box_tuning_,
+      sector_,
+      account_.event_bus()
+    );
     account_.event_bus().appendListener(DomainEventType::CargoArrivedAtGate, [this](const DomainEvent& event) {
       spawn_gate_combat_raiders(account_.registry(), event.position, ship_.position, sector_, 3);
       push_hud_notice(account_.registry().get<HudNotice>(player_), "Cargo accepted - thank you");
@@ -212,6 +222,7 @@ private:
     mining_hud = update_mining_laser(account_.registry(), target_lock, ship_, latest_intent_, sector_, mining_laser_, timestep_.tick_seconds());
 
     drone_hud = {};
+    (void)dispatch_cargo_drone_jobs(cargo_dispatch_, account_.registry(), entities_.mining_drones, &account_.event_bus());
     for (entt::entity drone_entity : entities_.mining_drones) {
       const MiningDroneHudSnapshot current_drone = update_mining_drone(
         account_.registry().get<MiningDrone>(drone_entity),
@@ -250,6 +261,7 @@ private:
         cargo_pickup_origin = account_.registry().get<AsteroidBody>(drone_hud.target).position;
       }
       (void)sync_cargo_boxes(account_.registry(), cargo_manifest, gathering_site_, cargo_box_tuning_, cargo_pickup_origin, &account_.event_bus());
+      (void)update_gathered_cargo_boxes(account_.registry(), gathering_site_, sector_, timestep_.tick_seconds(), cargo_box_tuning_);
     }
     route_hud = update_cargo_escort_route(cargo_escort, escort_route_, ship_, sector_);
     escort_hud = update_cargo_escort_arrival(cargo_escort, cargo_hud, route_hud, &account_.event_bus());
@@ -335,6 +347,7 @@ private:
   ContractQuotaTuning quota_{};
   ExtractionSite gathering_site_;
   CargoBoxTuning cargo_box_tuning_;
+  CargoDispatchModel cargo_dispatch_{};
   CargoEscortRoute escort_route_;
   CargoExtractionTuning cargo_extraction_tuning_{};
   SectorPressureTuning pressure_tuning_{.escalation_interval_seconds = 60.0F};
