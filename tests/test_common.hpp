@@ -19,6 +19,7 @@
 #include "hyperverse/cargo_dispatch.hpp"
 #include "hyperverse/collision.hpp"
 #include "hyperverse/drone.hpp"
+#include "hyperverse/engine_trail.hpp"
 #include "hyperverse/input.hpp"
 #include "hyperverse/game_session.hpp"
 #include "hyperverse/mining.hpp"

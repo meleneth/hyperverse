@@ -179,6 +179,7 @@ add_library(
   src/collision.cpp
   src/dawn_renderer.cpp
   src/drone.cpp
+  src/engine_trail.cpp
   src/fixed_timestep.cpp
   src/flight.cpp
   src/game_context.cpp
@@ -315,6 +316,7 @@ if(HYPERVERSE_BUILD_TESTS)
     tests/cargo_tests.cpp
     tests/collision_tests.cpp
     tests/drone_tests.cpp
+    tests/engine_trail_tests.cpp
     tests/fixed_timestep_tests.cpp
     tests/flight_tests.cpp
     tests/game_session_tests.cpp
