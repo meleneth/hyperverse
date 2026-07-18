@@ -13,12 +13,21 @@
 
   function fitCanvas() {
     const dpr = window.devicePixelRatio || 1;
-    const width = Math.max(1, Math.floor(canvasElement.clientWidth * dpr));
-    const height = Math.max(1, Math.floor(canvasElement.clientHeight * dpr));
+    const bounds = canvasElement.getBoundingClientRect();
+    const width = Math.max(1, Math.floor(bounds.width * dpr));
+    const height = Math.max(1, Math.floor(bounds.height * dpr));
 
     if (canvasElement.width !== width || canvasElement.height !== height) {
       canvasElement.width = width;
       canvasElement.height = height;
+      window.hyperverseCanvasMetrics = {
+        cssWidth: bounds.width,
+        cssHeight: bounds.height,
+        backingWidth: width,
+        backingHeight: height,
+        devicePixelRatio: dpr,
+      };
+      console.log("[app] canvas", window.hyperverseCanvasMetrics);
     }
   }
 

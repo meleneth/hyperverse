@@ -22,7 +22,13 @@ cp "$BUILD_DIR/"*.data "$DIST_DIR/" 2>/dev/null || true
 cp "$BUILD_DIR/"*.worker.js "$DIST_DIR/" 2>/dev/null || true
 cp "$BUILD_DIR/"*.map "$DIST_DIR/" 2>/dev/null || true
 
-BUILD_ID="$(find "$DIST_DIR" -maxdepth 1 -type f \( -name 'hyperverse.js' -o -name 'hyperverse.wasm' -o -name 'hyperverse.data' \) -print0 |
+BUILD_ID="$(find "$DIST_DIR" -maxdepth 1 -type f \( \
+    -name 'index.html' -o \
+    -name 'app.js' -o \
+    -name 'hyperverse.js' -o \
+    -name 'hyperverse.wasm' -o \
+    -name 'hyperverse.data' \
+  \) -print0 |
   sort -z |
   xargs -0 sha256sum |
   sha256sum |
