@@ -114,6 +114,7 @@ private:
       tick();
     }
 
+    renderer_.refresh_extent();
     const FlightHudSnapshot hud = make_flight_hud_snapshot(ship_, latest_intent_, flight_, sector_);
     renderer_.draw_frame(build_sprite_frame(
       account_,

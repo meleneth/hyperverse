@@ -953,6 +953,10 @@ void DawnRenderer::draw_frame(const SpriteFrame& frame) {
   impl_->draw_frame(frame);
 }
 
+void DawnRenderer::refresh_extent() {
+  impl_->refresh_extent();
+}
+
 void DawnRenderer::wait_idle() const {
   impl_->wait_idle();
 }

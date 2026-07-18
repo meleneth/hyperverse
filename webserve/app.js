@@ -44,10 +44,12 @@
 
   window.Module = window.Module || {};
   const Module = window.Module;
+  const buildId = "__HYPERVERSE_BUILD_ID__";
+  const versioned = (path) => `${path}?v=${encodeURIComponent(buildId)}`;
 
   Module.canvas = canvasElement;
-  Module.locateFile = (path) => path;
-  Module.mainScriptUrlOrBlob = "hyperverse.js";
+  Module.locateFile = (path) => versioned(path);
+  Module.mainScriptUrlOrBlob = versioned("hyperverse.js");
   Module.setStatus = setStatus;
   Module.print = (...args) => {
     console.log(...args);
@@ -95,6 +97,6 @@
   setStatus("Downloading...");
   const script = document.createElement("script");
   script.async = true;
-  script.src = "./hyperverse.js";
+  script.src = versioned("./hyperverse.js");
   document.body.appendChild(script);
 })();

@@ -21,6 +21,7 @@ public:
 
   void draw_frame(const FrameSnapshot& frame = {});
   void draw_frame(const SpriteFrame& frame);
+  void refresh_extent();
   void wait_idle() const;
   [[nodiscard]] std::uint32_t width() const;
   [[nodiscard]] std::uint32_t height() const;

@@ -22,6 +22,13 @@ cp "$BUILD_DIR/"*.data "$DIST_DIR/" 2>/dev/null || true
 cp "$BUILD_DIR/"*.worker.js "$DIST_DIR/" 2>/dev/null || true
 cp "$BUILD_DIR/"*.map "$DIST_DIR/" 2>/dev/null || true
 
+BUILD_ID="$(find "$DIST_DIR" -maxdepth 1 -type f \( -name 'hyperverse.js' -o -name 'hyperverse.wasm' -o -name 'hyperverse.data' \) -print0 |
+  sort -z |
+  xargs -0 sha256sum |
+  sha256sum |
+  cut -d' ' -f1)"
+sed -i "s/__HYPERVERSE_BUILD_ID__/$BUILD_ID/g" "$DIST_DIR/index.html" "$DIST_DIR/app.js"
+
 sha256sum "$DIST_DIR"/* >"$DIST_DIR/SHA256SUMS"
 
 echo "Built deploy bundle:"
