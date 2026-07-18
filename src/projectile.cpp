@@ -66,6 +66,11 @@ void replay_phase(sml::sm<ParticleCannonMachine>& machine, ParticleCannonPhase p
   return false;
 }
 
+[[nodiscard]] ParticleCannonTuning raider_cannon_tuning(ParticleCannonTuning tuning) {
+  tuning.fire_interval_seconds = tuning.raider_fire_interval_seconds;
+  return tuning;
+}
+
 void apply_projectile_damage(
   entt::registry& registry,
   entt::entity asteroid_entity,
@@ -214,7 +219,7 @@ std::optional<ParticleCannonFireCommand> request_raider_particle_fire(
   const ShipMotion& target_motion = target.get<ShipMotion>();
   const Vec2 to_target = wrapped_delta(raider.position, target_motion.position, ctx.sector());
   const bool trigger_active = trigger.active && raider.integrity > 0.0F && length(to_target) <= tuning.raider_fire_range;
-  if (!advance_particle_cannon_fsm(ctx.cannon(), trigger_active, ctx.dt(), tuning) || length(to_target) <= 0.0001F) {
+  if (!advance_particle_cannon_fsm(ctx.cannon(), trigger_active, ctx.dt(), raider_cannon_tuning(tuning)) || length(to_target) <= 0.0001F) {
     return std::nullopt;
   }
 

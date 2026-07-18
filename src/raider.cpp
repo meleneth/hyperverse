@@ -1,5 +1,6 @@
 #include "hyperverse/raider.hpp"
 
+#include "hyperverse/engine_trail.hpp"
 #include "hyperverse/projectile.hpp"
 
 #include <algorithm>
@@ -64,9 +65,94 @@ void spawn_combat_raider(entt::registry& registry, Vec2 position, RaiderTask tas
       .task = task,
       .integrity = integrity,
       .max_integrity = integrity,
+      .orbit_radians = std::atan2(position.y, position.x),
     }
   );
   registry.emplace<ParticleCannonModel>(raider);
+  registry.emplace<EngineTrailModel>(raider);
+}
+
+void update_raider_facing(RaiderShip& raider) {
+  if (length(raider.velocity) > 0.001F) {
+    raider.facing_radians = std::atan2(raider.velocity.y, raider.velocity.x);
+  }
+}
+
+void move_raider_toward(RaiderShip& raider, Vec2 target, const SectorTuning& sector, float dt_seconds, float max_speed) {
+  const float scaled_dt = std::max(0.0F, dt_seconds);
+  const Vec2 delta = wrapped_delta(raider.position, target, sector);
+  const float distance = length(delta);
+  if (scaled_dt <= 0.0F || distance <= 0.001F) {
+    raider.velocity = {};
+    return;
+  }
+
+  const Vec2 desired_velocity = normalize_or_zero(delta) * max_speed;
+  const Vec2 step = desired_velocity * scaled_dt;
+  if (length(step) >= distance) {
+    raider.velocity = delta * (1.0F / std::max(scaled_dt, std::numeric_limits<float>::epsilon()));
+    raider.position = wrap_position(target, sector);
+  } else {
+    raider.velocity = desired_velocity;
+    raider.position = wrap_position(raider.position + step, sector);
+  }
+  update_raider_facing(raider);
+}
+
+[[nodiscard]] float combat_orbit_speed_scale(RaiderTask task) {
+  switch (task) {
+    case RaiderTask::FullAggression:
+      return 1.25F;
+    case RaiderTask::CoverThief:
+      return 0.85F;
+    case RaiderTask::HarassPlayer:
+    case RaiderTask::StealCargo:
+      return 1.0F;
+  }
+  return 1.0F;
+}
+
+[[nodiscard]] float combat_orbit_radius_scale(RaiderTask task) {
+  switch (task) {
+    case RaiderTask::FullAggression:
+      return 0.74F;
+    case RaiderTask::CoverThief:
+      return 1.18F;
+    case RaiderTask::HarassPlayer:
+    case RaiderTask::StealCargo:
+      return 1.0F;
+  }
+  return 1.0F;
+}
+
+void update_combat_raider(RaiderShip& raider, const ShipMotion& ship, const SectorTuning& sector, float dt_seconds, const RaiderTuning& tuning) {
+  const float scaled_dt = std::max(0.0F, dt_seconds);
+  const Vec2 to_player = wrapped_delta(raider.position, ship.position, sector);
+  const float player_distance = length(to_player);
+  if (std::abs(raider.orbit_radians) <= 0.0001F && player_distance > 0.001F) {
+    raider.orbit_radians = std::atan2(-to_player.y, -to_player.x);
+  }
+
+  const float speed_scale = combat_orbit_speed_scale(raider.task);
+  const float radius_scale = combat_orbit_radius_scale(raider.task);
+  raider.orbit_radians = std::fmod(
+    raider.orbit_radians + (tuning.combat_orbit_radians_per_second * speed_scale * scaled_dt),
+    std::numbers::pi_v<float> * 2.0F
+  );
+  if (raider.orbit_radians < 0.0F) {
+    raider.orbit_radians += std::numbers::pi_v<float> * 2.0F;
+  }
+
+  const Vec2 forward = length(ship.velocity) > 24.0F ? normalize_or_zero(ship.velocity) : Vec2{.x = std::cos(ship.facing_radians), .y = std::sin(ship.facing_radians)};
+  const Vec2 right{.x = -forward.y, .y = forward.x};
+  const Vec2 orbit_offset =
+    (forward * std::cos(raider.orbit_radians) * tuning.combat_orbit_x_radius * radius_scale) +
+    (right * std::sin(raider.orbit_radians) * tuning.combat_orbit_y_radius * radius_scale);
+  const Vec2 desired_position = wrap_position(ship.position + orbit_offset, sector);
+  const float distance_to_orbit = length(wrapped_delta(raider.position, desired_position, sector));
+
+  raider.phase = distance_to_orbit > tuning.combat_orbit_arrival_tolerance ? RaiderPhase::Approaching : RaiderPhase::Disrupting;
+  move_raider_toward(raider, desired_position, sector, scaled_dt, tuning.max_speed * speed_scale);
 }
 
 }  // namespace
@@ -136,18 +222,7 @@ RaiderHudSnapshot update_raider_threat(
   if (raider.role == RaiderRole::Combat) {
     const Vec2 to_player = wrapped_delta(raider.position, ship.position, sector);
     const float player_distance = length(to_player);
-    const float standoff =
-      raider.task == RaiderTask::FullAggression ? tuning.combat_standoff * 0.55F :
-      raider.task == RaiderTask::CoverThief ? tuning.combat_standoff * 1.25F :
-      tuning.combat_standoff;
-    if (player_distance > standoff) {
-      raider.phase = RaiderPhase::Approaching;
-      raider.velocity = normalize_or_zero(to_player) * tuning.max_speed;
-      raider.position = wrap_position(raider.position + (raider.velocity * dt_seconds), sector);
-    } else {
-      raider.phase = RaiderPhase::Disrupting;
-      raider.velocity = {};
-    }
+    update_combat_raider(raider, ship, sector, dt_seconds, tuning);
     return {
       .phase = raider.phase,
       .task = raider.task,
@@ -188,6 +263,7 @@ RaiderHudSnapshot update_raider_threat(
     raider.disruption_seconds = 0.0F;
     raider.velocity = normalize_or_zero(to_target) * tuning.max_speed;
     raider.position = wrap_position(raider.position + (raider.velocity * dt_seconds), sector);
+    update_raider_facing(raider);
   } else {
     raider.phase = RaiderPhase::Disrupting;
     raider.velocity = {};
@@ -205,6 +281,7 @@ RaiderHudSnapshot update_raider_threat(
     }
     raider.velocity = escape_direction * tuning.max_speed;
     raider.position = wrap_position(raider.position + (raider.velocity * dt_seconds), sector);
+    update_raider_facing(raider);
     target.position = raider.position;
     target.velocity = raider.velocity;
     if (wrapped_distance(ship.position, target.position, sector) >= tuning.escape_distance) {

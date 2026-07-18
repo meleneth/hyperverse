@@ -136,3 +136,24 @@ TEST_CASE("asteroid motion is integrated through the physics step") {
   CHECK(moved.position.y == Catch::Approx(100.0F));
   CHECK(moved.rotation_radians == Catch::Approx(2.0F));
 }
+
+TEST_CASE("asteroid motion wraps through sector edges during physics integration") {
+  TestAccountWorld world;
+  hyperverse::AccountCtx account = world.account_context();
+  const entt::entity asteroid = account.registry().create();
+  account.registry().emplace<hyperverse::AsteroidBody>(
+    asteroid,
+    hyperverse::AsteroidBody{
+      .position = {.x = 8990.0F, .y = 100.0F},
+      .velocity = {.x = 25.0F, .y = 0.0F},
+      .radius = 40.0F,
+      .base_radius = 40.0F,
+    }
+  );
+
+  hyperverse::update_asteroid_motion(account, {.width = 9000.0F, .height = 9000.0F}, 1.0F);
+
+  const hyperverse::AsteroidBody& moved = account.registry().get<hyperverse::AsteroidBody>(asteroid);
+  CHECK(moved.position.x == Catch::Approx(15.0F).margin(0.02F));
+  CHECK(moved.position.y == Catch::Approx(100.0F));
+}

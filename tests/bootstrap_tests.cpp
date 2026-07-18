@@ -68,3 +68,14 @@ TEST_CASE("vertical slice asteroid field is spread across the sector and visibly
   CHECK(asteroid_count >= 72);
   CHECK(initially_visible_count <= 4);
 }
+
+TEST_CASE("vertical slice drones and raiders own engine trail components") {
+  TestAccountWorld world;
+  hyperverse::AccountCtx account = world.account_context();
+  const hyperverse::VerticalSliceEntities entities = hyperverse::seed_vertical_slice(account);
+
+  CHECK(account.registry().all_of<hyperverse::EngineTrailModel>(entities.raider));
+  for (entt::entity drone : entities.mining_drones) {
+    CHECK(account.registry().all_of<hyperverse::EngineTrailModel>(drone));
+  }
+}

@@ -226,6 +226,32 @@ TEST_CASE("high pressure spawns full aggression raiders") {
   }
 }
 
+TEST_CASE("combat raiders buzz the player in moving oval attack runs") {
+  entt::registry registry;
+  hyperverse::RaiderShip combat{
+    .position = {.x = 1000.0F, .y = 1000.0F},
+    .role = hyperverse::RaiderRole::Combat,
+    .orbit_radians = 0.0F,
+  };
+
+  const hyperverse::RaiderHudSnapshot hud = hyperverse::update_raider_threat(
+    combat,
+    registry,
+    {.phase = hyperverse::CargoEscortPhase::Mining},
+    {.position = {.x = 1000.0F, .y = 1000.0F}, .facing_radians = 0.0F},
+    {.width = 9000.0F, .height = 9000.0F},
+    0.5F,
+    {.max_speed = 500.0F, .combat_orbit_x_radius = 1200.0F, .combat_orbit_y_radius = 600.0F, .combat_orbit_radians_per_second = 1.0F}
+  );
+
+  CHECK(hud.active);
+  CHECK(hud.task == hyperverse::RaiderTask::HarassPlayer);
+  CHECK(hyperverse::length(combat.velocity) > 0.0F);
+  CHECK(combat.position.x != Catch::Approx(1000.0F));
+  CHECK(combat.position.y != Catch::Approx(1000.0F));
+  CHECK(combat.orbit_radians == Catch::Approx(0.5F));
+}
+
 TEST_CASE("combat raiders switch to cover when a thief is stealing cargo") {
   entt::registry registry;
   const entt::entity thief_entity = registry.create();

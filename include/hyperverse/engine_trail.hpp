@@ -7,6 +7,7 @@
 
 #include <array>
 #include <cstddef>
+#include <span>
 #include <vector>
 
 namespace hyperverse {
@@ -47,6 +48,12 @@ struct EngineSourceDraw {
   float intensity{0.0F};
 };
 
+struct EngineTrailNozzle {
+  Vec2 world_position{};
+  Vec2 exhaust_direction{};
+  float intensity{0.0F};
+};
+
 struct EngineTrailEngine {
   static constexpr std::size_t Capacity = 32U;
   std::array<EngineTrailSample, Capacity> samples{};
@@ -71,6 +78,14 @@ struct EngineTrailUpdate {
 };
 
 void reset_engine_trail(EngineTrailModel& model);
+
+[[nodiscard]] EngineTrailUpdate update_engine_trail_from_nozzles(
+  EngineTrailModel& model,
+  std::span<const EngineTrailNozzle> nozzles,
+  const SectorTuning& sector,
+  float dt_seconds,
+  const EngineTrailTuning& tuning = {}
+);
 
 [[nodiscard]] EngineTrailUpdate update_engine_trail(
   EngineTrailModel& model,

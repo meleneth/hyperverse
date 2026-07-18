@@ -1,5 +1,6 @@
 #include "test_common.hpp"
 
+#include <array>
 #include <cmath>
 
 namespace {
@@ -54,6 +55,23 @@ TEST_CASE("engine trail capacity remains bounded") {
 
   CHECK(model.engines[0].count == hyperverse::EngineTrailEngine::Capacity);
   CHECK(model.engines[1].count == hyperverse::EngineTrailEngine::Capacity);
+}
+
+TEST_CASE("engine trail accepts renderer neutral nozzle emitters") {
+  hyperverse::EngineTrailModel model;
+  const hyperverse::EngineTrailTuning tuning{.sample_interval_seconds = 0.01F};
+  const std::array<hyperverse::EngineTrailNozzle, 2> nozzles{{
+    hyperverse::EngineTrailNozzle{.world_position = {.x = 100.0F, .y = 100.0F}, .exhaust_direction = {.x = -1.0F, .y = 0.0F}, .intensity = 0.75F},
+    hyperverse::EngineTrailNozzle{.world_position = {.x = 100.0F, .y = 130.0F}, .exhaust_direction = {.x = -1.0F, .y = 0.0F}, .intensity = 0.75F},
+  }};
+
+  const hyperverse::EngineTrailUpdate update = hyperverse::update_engine_trail_from_nozzles(model, nozzles, Sector, 0.02F, tuning);
+
+  CHECK(update.active_sources == 2U);
+  CHECK(model.engines[0].count == 2U);
+  CHECK(model.engines[1].count == 2U);
+  CHECK(model.sources[0].position.x == Catch::Approx(100.0F));
+  CHECK(model.sources[1].position.y == Catch::Approx(130.0F));
 }
 
 TEST_CASE("thrust off stops new active engine trail samples") {

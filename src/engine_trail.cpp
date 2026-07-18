@@ -1,6 +1,7 @@
 #include "hyperverse/engine_trail.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 
@@ -137,14 +138,44 @@ EngineTrailUpdate update_engine_trail(
   float dt_seconds,
   const EngineTrailTuning& tuning
 ) {
-  const float scaled_dt = std::clamp(dt_seconds, 0.0F, tuning.sample_lifetime_seconds);
   const float intensity = thrust_intensity(ship, input);
   const Vec2 exhaust_direction = direction_from_angle(ship.facing_radians + (TauRadians * 0.5F));
+  std::array<EngineTrailNozzle, 2> nozzles{};
+
+  for (std::size_t index = 0; index < nozzles.size(); ++index) {
+    nozzles[index] = EngineTrailNozzle{
+      .world_position = wrap_position(ship.position + nozzle_offset(index, ship.facing_radians), sector),
+      .exhaust_direction = exhaust_direction,
+      .intensity = intensity,
+    };
+  }
+
+  return update_engine_trail_from_nozzles(model, nozzles, sector, dt_seconds, tuning);
+}
+
+EngineTrailUpdate update_engine_trail_from_nozzles(
+  EngineTrailModel& model,
+  std::span<const EngineTrailNozzle> nozzles,
+  const SectorTuning& sector,
+  float dt_seconds,
+  const EngineTrailTuning& tuning
+) {
+  const float scaled_dt = std::clamp(dt_seconds, 0.0F, tuning.sample_lifetime_seconds);
   EngineTrailUpdate update{};
 
   for (std::size_t index = 0; index < model.engines.size(); ++index) {
     EngineTrailEngine& engine = model.engines[index];
-    const Vec2 position = wrap_position(ship.position + nozzle_offset(index, ship.facing_radians), sector);
+    if (index >= nozzles.size()) {
+      engine.sample_accumulator_seconds += scaled_dt;
+      age_samples(engine, scaled_dt, tuning.sample_lifetime_seconds);
+      engine.previous_intensity = 0.0F;
+      continue;
+    }
+
+    const EngineTrailNozzle& nozzle = nozzles[index];
+    const Vec2 position = wrap_position(nozzle.world_position, sector);
+    const Vec2 exhaust_direction = nozzle.exhaust_direction;
+    const float intensity = std::clamp(nozzle.intensity, 0.0F, 1.0F);
     if (!finite(position) || !finite(exhaust_direction)) {
       reset_engine(engine, {}, {.x = -1.0F, .y = 0.0F}, 0.0F);
       continue;

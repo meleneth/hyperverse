@@ -266,3 +266,35 @@ TEST_CASE("active raiders fire particle pairs toward the player") {
     CHECK(shot.velocity.x > 0.0F);
   }
 }
+
+TEST_CASE("raider particle cannon uses slower dedicated cadence") {
+  TestAccountWorld world;
+  hyperverse::AccountCtx account = world.account_context();
+  const entt::entity player = make_player(world, {.x = 300.0F, .y = 100.0F});
+  const entt::entity raider = world.registry.create();
+  world.registry.emplace<hyperverse::RaiderShip>(raider, hyperverse::RaiderShip{.position = {.x = 100.0F, .y = 100.0F}});
+  world.registry.emplace<hyperverse::ParticleCannonModel>(raider);
+  const hyperverse::ParticleCannonTuning tuning{.projectile_speed = 100.0F, .fire_interval_seconds = 0.25F, .raider_fire_interval_seconds = 0.70F};
+
+  hyperverse::update_raider_particle_cannon(
+    hyperverse::WeaponCtx{tick_context(account, 0.0F).entity_context(raider)},
+    tick_context(account, 0.0F).entity_context(player),
+    {.active = true},
+    tuning
+  );
+  hyperverse::update_raider_particle_cannon(
+    hyperverse::WeaponCtx{tick_context(account, 0.25F).entity_context(raider)},
+    tick_context(account, 0.25F).entity_context(player),
+    {.active = true},
+    tuning
+  );
+  CHECK(particle_count(account.registry()) == 2);
+
+  hyperverse::update_raider_particle_cannon(
+    hyperverse::WeaponCtx{tick_context(account, 0.45F).entity_context(raider)},
+    tick_context(account, 0.45F).entity_context(player),
+    {.active = true},
+    tuning
+  );
+  CHECK(particle_count(account.registry()) == 4);
+}

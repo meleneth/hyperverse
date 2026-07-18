@@ -106,6 +106,7 @@ VerticalSliceEntities seed_vertical_slice(AccountCtx& account) {
         .work_angle_radians = angle,
       }
     );
+    account.registry().emplace<EngineTrailModel>(drone_entity);
     entities.mining_drones.push_back(drone_entity);
   }
 
@@ -115,6 +116,7 @@ VerticalSliceEntities seed_vertical_slice(AccountCtx& account) {
     RaiderShip{.position = {.x = ship.position.x + 640.0F, .y = ship.position.y - 420.0F}}
   );
   account.registry().emplace<ParticleCannonModel>(entities.raider);
+  account.registry().emplace<EngineTrailModel>(entities.raider);
 
   std::vector<AsteroidBody> asteroid_field;
   asteroid_field.reserve(72);

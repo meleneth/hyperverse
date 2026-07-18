@@ -43,6 +43,7 @@ struct ParticleCannonTuning {
   float projectile_radius{10.0F};
   float damage{22.0F};
   float fire_interval_seconds{0.25F};
+  float raider_fire_interval_seconds{0.68F};
   float muzzle_forward_offset{46.0F};
   float muzzle_side_offset{14.0F};
   float raider_fire_range{1800.0F};

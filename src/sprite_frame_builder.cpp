@@ -879,7 +879,6 @@ SpriteFrame build_sprite_frame(
 ) {
   const ShipMotion& ship = account.registry().get<ShipMotion>(player);
   const ShipHealth& ship_health = account.registry().get<ShipHealth>(player);
-  const EngineTrailModel* engine_trail = account.registry().try_get<EngineTrailModel>(player);
   const ShipComputer& ship_computer = account.registry().get<ShipComputer>(player);
   const RoundTimer& round_timer = account.registry().get<RoundTimer>(player);
   const CameraState& camera = account.registry().get<CameraState>(player);
@@ -971,13 +970,14 @@ SpriteFrame build_sprite_frame(
     }
     frame.sprites.push_back(particle_sprite);
   }
-  if (engine_trail != nullptr) {
-    const EngineTrailTuning engine_trail_tuning{};
-    for (const EngineTrailEngine& engine : engine_trail->engines) {
+  const EngineTrailTuning engine_trail_tuning{};
+  for (auto [entity, engine_trail] : account.registry().view<EngineTrailModel>().each()) {
+    (void)entity;
+    for (const EngineTrailEngine& engine : engine_trail.engines) {
       append_engine_trail_ribbon(frame.engine_trails, engine, camera.position, sector, width, height, engine_trail_tuning);
     }
-    for (std::size_t index = 0; index < engine_trail->active_sources; ++index) {
-      append_engine_trail_source(frame.engine_trails, engine_trail->sources[index], camera.position, sector, width, height, engine_trail_tuning);
+    for (std::size_t index = 0; index < engine_trail.active_sources; ++index) {
+      append_engine_trail_source(frame.engine_trails, engine_trail.sources[index], camera.position, sector, width, height, engine_trail_tuning);
     }
   }
   for (entt::entity drone_entity : mining_drones) {
@@ -1003,7 +1003,7 @@ SpriteFrame build_sprite_frame(
       width,
       height,
       46.0F,
-      ship_sprite_rotation(std::atan2(raider.velocity.y, raider.velocity.x))
+      ship_sprite_rotation(raider.facing_radians)
     );
     if (raider.role == RaiderRole::Combat) {
       tint_sprite(raider_sprite, 0.95F, 0.18F, 0.14F);

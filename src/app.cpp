@@ -40,7 +40,9 @@
 #endif
 
 #include <algorithm>
+#include <array>
 #include <chrono>
+#include <cmath>
 #include <exception>
 #include <iostream>
 #include <optional>
@@ -50,6 +52,71 @@
 
 namespace hyperverse {
 namespace {
+
+constexpr float TauRadians = 6.28318530718F;
+
+[[nodiscard]] Vec2 direction_from_angle(float radians) {
+  return {.x = std::cos(radians), .y = std::sin(radians)};
+}
+
+[[nodiscard]] Vec2 rotate(Vec2 value, float radians) {
+  const float cosine = std::cos(radians);
+  const float sine = std::sin(radians);
+  return {.x = (value.x * cosine) - (value.y * sine), .y = (value.x * sine) + (value.y * cosine)};
+}
+
+[[nodiscard]] float movement_intensity(Vec2 velocity, float full_speed) {
+  return std::clamp(length(velocity) / std::max(full_speed, 1.0F), 0.0F, 1.0F);
+}
+
+void update_drone_engine_trail(
+  EngineTrailModel& trail,
+  const MiningDrone& drone,
+  const SectorTuning& sector,
+  float dt_seconds,
+  const MiningDroneTuning& tuning,
+  const EngineTrailTuning& trail_tuning
+) {
+  const float intensity = movement_intensity(drone.velocity, tuning.max_speed);
+  const Vec2 exhaust_direction = direction_from_angle(drone.facing_radians + (TauRadians * 0.5F));
+  std::array<EngineTrailNozzle, 2> nozzles{};
+  for (std::size_t index = 0; index < nozzles.size(); ++index) {
+    const float side = index == 0U ? -1.0F : 1.0F;
+    nozzles[index] = EngineTrailNozzle{
+      .world_position = wrap_position(drone.position + rotate({.x = -12.0F, .y = side * 5.5F}, drone.facing_radians), sector),
+      .exhaust_direction = exhaust_direction,
+      .intensity = intensity,
+    };
+  }
+  (void)update_engine_trail_from_nozzles(trail, nozzles, sector, dt_seconds, trail_tuning);
+}
+
+void update_raider_engine_trail(
+  EngineTrailModel& trail,
+  const RaiderShip& raider,
+  const SectorTuning& sector,
+  float dt_seconds,
+  const RaiderTuning& tuning,
+  const EngineTrailTuning& trail_tuning
+) {
+  if (raider.integrity <= 0.0F) {
+    reset_engine_trail(trail);
+    return;
+  }
+
+  const float intensity = std::clamp(0.22F + (movement_intensity(raider.velocity, tuning.max_speed) * 0.78F), 0.0F, 1.0F);
+  const Vec2 exhaust_direction = direction_from_angle(raider.facing_radians + (TauRadians * 0.5F));
+  std::array<EngineTrailNozzle, 2> nozzles{};
+  for (std::size_t index = 0; index < nozzles.size(); ++index) {
+    const float side = index == 0U ? -1.0F : 1.0F;
+    nozzles[index] = EngineTrailNozzle{
+      .world_position = wrap_position(raider.position + rotate({.x = -18.0F, .y = side * 34.0F}, raider.facing_radians), sector),
+      .exhaust_direction = exhaust_direction,
+      .intensity = intensity,
+    };
+  }
+  (void)update_engine_trail_from_nozzles(trail, nozzles, sector, dt_seconds, trail_tuning);
+}
 
 class AppRuntime {
 public:
@@ -231,8 +298,9 @@ private:
     drone_hud = {};
     (void)dispatch_cargo_drone_jobs(cargo_dispatch_, account_.registry(), entities_.mining_drones, &account_.event_bus());
     for (entt::entity drone_entity : entities_.mining_drones) {
+      MiningDrone& drone = account_.registry().get<MiningDrone>(drone_entity);
       const MiningDroneHudSnapshot current_drone = update_mining_drone(
-        account_.registry().get<MiningDrone>(drone_entity),
+        drone,
         account_.registry(),
         target_lock,
         ship_,
@@ -240,6 +308,14 @@ private:
         timestep_.tick_seconds(),
         mining_drone_tuning_,
         &account_.event_bus()
+      );
+      update_drone_engine_trail(
+        account_.registry().get<EngineTrailModel>(drone_entity),
+        drone,
+        sector_,
+        timestep_.tick_seconds(),
+        mining_drone_tuning_,
+        engine_trail_tuning_
       );
       drone_hud.extracted_mass += current_drone.extracted_mass;
       if (current_drone.phase == MiningDronePhase::Mining) {
@@ -288,6 +364,13 @@ private:
     for (auto [raider_entity, raider] : account_.registry().view<RaiderShip>().each()) {
       RaiderHudSnapshot current_raider =
         update_raider_threat(raider, account_.registry(), cargo_escort, ship_, sector_, timestep_.tick_seconds(), raider_tuning_);
+      if (EngineTrailModel* trail = account_.registry().try_get<EngineTrailModel>(raider_entity); trail != nullptr) {
+        if (current_raider.active) {
+          update_raider_engine_trail(*trail, raider, sector_, timestep_.tick_seconds(), raider_tuning_, engine_trail_tuning_);
+        } else {
+          reset_engine_trail(*trail);
+        }
+      }
       if (current_raider.active) {
         active_raiders.emplace_back(raider_entity, current_raider);
         if (!raider_hud.active || raider.role == RaiderRole::CargoThief) {
