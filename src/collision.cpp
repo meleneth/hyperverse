@@ -1,5 +1,6 @@
 #include "hyperverse/collision.hpp"
 
+#include "hyperverse/asteroid_collision.hpp"
 #include "jolt_shape_queries.hpp"
 
 #include <algorithm>
@@ -20,14 +21,15 @@ CollisionHudSnapshot predict_ship_asteroid_collision(
     const Vec2 relative_velocity = asteroid.velocity - ship.velocity;
     const Vec2 ship_motion = (ship.velocity - asteroid.velocity) * probe.warning_seconds;
     const float motion_length = length(ship_motion);
+    const float asteroid_radius = asteroid_solid_radius(asteroid.radius);
     const bool contact =
-      jolt_shapes_overlap(SpriteCollisionShape::Ship, probe.ship_radius, SpriteCollisionShape::Rock, asteroid.radius, relative_position);
+      jolt_shapes_overlap(SpriteCollisionShape::Ship, probe.ship_radius, SpriteCollisionShape::Rock, asteroid_radius, relative_position);
     CollisionHudSnapshot candidate{.contact = contact, .warning = contact, .asteroid = entity};
     if (contact) {
       candidate.impact_speed = length(relative_velocity);
     } else if (motion_length > 0.0001F) {
       const ShapeQueryHit hit =
-        jolt_cast_shape(SpriteCollisionShape::Ship, probe.ship_radius, SpriteCollisionShape::Rock, asteroid.radius, relative_position, ship_motion);
+        jolt_cast_shape(SpriteCollisionShape::Ship, probe.ship_radius, SpriteCollisionShape::Rock, asteroid_radius, relative_position, ship_motion);
       if (hit.hit) {
         candidate.warning = true;
         candidate.separation = hit.fraction * motion_length;

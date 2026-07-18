@@ -179,7 +179,7 @@ TEST_CASE("glancing kinetic particle impacts spin asteroids") {
   account.registry().emplace<hyperverse::ParticleShot>(
     particle,
     hyperverse::ParticleShot{
-      .position = {.x = 100.0F, .y = 150.0F},
+      .position = {.x = 100.0F, .y = 135.0F},
       .velocity = {.x = 400.0F, .y = 0.0F},
       .damage = 25.0F,
       .radius = 10.0F,

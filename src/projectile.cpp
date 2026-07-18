@@ -1,5 +1,6 @@
 #include "hyperverse/projectile.hpp"
 
+#include "hyperverse/asteroid_collision.hpp"
 #include "hyperverse/asteroid_mass.hpp"
 #include "jolt_shape_queries.hpp"
 
@@ -425,7 +426,7 @@ ParticleCannonHudSnapshot update_particle_projectiles(
               SpriteCollisionShape::Particle,
               projectile.radius,
               SpriteCollisionShape::Rock,
-              asteroid.radius,
+              asteroid_solid_radius(asteroid.radius),
               relative_position
             )) {
           apply_projectile_damage(registry, asteroid_entity, asteroid, resource, projectile, ctx.sector(), tuning);

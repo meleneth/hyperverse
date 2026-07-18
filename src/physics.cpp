@@ -1,5 +1,6 @@
 #include "hyperverse/physics.hpp"
 
+#include "hyperverse/asteroid_collision.hpp"
 #include "hyperverse/flight.hpp"
 #include "hyperverse/targeting.hpp"
 
@@ -259,20 +260,22 @@ void PhysicsWorld::integrate_asteroids(entt::registry& registry, const SectorTun
     AsteroidBodyHandle& body = iterator->second;
 
     if (inserted || body.body_id.IsInvalid()) {
+      const float solid_radius = asteroid_solid_radius(asteroid.radius);
       body.body_id = create_dynamic_sphere(
         runtime_->asteroid_system,
-        asteroid.radius,
+        solid_radius,
         asteroid.position,
         asteroid.rotation_radians,
         asteroid.velocity,
         asteroid.angular_velocity
       );
-      body.radius = asteroid.radius;
+      body.radius = solid_radius;
       broadphase_dirty = true;
     } else {
-      if (std::abs(body.radius - asteroid.radius) > std::numeric_limits<float>::epsilon()) {
-        body_interface.SetShape(body.body_id, new JPH::SphereShape(asteroid.radius), true, JPH::EActivation::Activate);
-        body.radius = asteroid.radius;
+      const float solid_radius = asteroid_solid_radius(asteroid.radius);
+      if (std::abs(body.radius - solid_radius) > std::numeric_limits<float>::epsilon()) {
+        body_interface.SetShape(body.body_id, new JPH::SphereShape(solid_radius), true, JPH::EActivation::Activate);
+        body.radius = solid_radius;
         broadphase_dirty = true;
       }
       sync_body_motion(
