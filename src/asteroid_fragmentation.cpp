@@ -1,5 +1,6 @@
 #include "hyperverse/asteroid_fragmentation.hpp"
 
+#include "hyperverse/asteroid_geometry.hpp"
 #include "hyperverse/asteroid_mass.hpp"
 #include "hyperverse/mining.hpp"
 
@@ -7,6 +8,7 @@
 #include <array>
 #include <cmath>
 #include <numbers>
+#include <utility>
 
 namespace hyperverse {
 namespace {
@@ -222,6 +224,7 @@ void emit_fragmented(
   }
 
   const AsteroidBody parent = registry.get<AsteroidBody>(asteroid);
+  const AsteroidGeometry* parent_geometry = registry.try_get<AsteroidGeometry>(asteroid);
   const int parent_remaining_breaks = remaining_breaks_for(registry, asteroid);
   const MineralComposition* parent_composition = registry.try_get<MineralComposition>(asteroid);
   const std::vector<MineralShare> fragment_shares = recoverable_fragment_shares(parent_composition, request.pieces);
@@ -237,6 +240,22 @@ void emit_fragmented(
   const AsteroidMass* parent_mass = registry.try_get<AsteroidMass>(asteroid);
   const int child_remaining_breaks = parent_remaining_breaks - 1;
   const float placement_radius = std::max(child_radius, parent.radius - child_radius);
+  std::vector<AsteroidGeometry> child_geometries;
+  if (parent_geometry != nullptr) {
+    Vec2 fracture_direction = impact_direction(request, parent);
+    if (length(request.impact_position) > 0.0F) {
+      const Vec2 from_parent_to_impact = normalize_or_zero(request.impact_position - parent.position);
+      if (length(from_parent_to_impact) > 0.0F) {
+        fracture_direction = from_parent_to_impact;
+      }
+    }
+    child_geometries = fracture_asteroid_geometry(
+      *parent_geometry,
+      {.x = fracture_direction.x, .y = fracture_direction.y, .z = 0.35F},
+      fragment_count,
+      child_radius
+    );
+  }
   std::vector<entt::entity> fragments;
   fragments.reserve(fragment_shares.size());
 
@@ -258,6 +277,9 @@ void emit_fragmented(
       }
     );
     registry.emplace<AsteroidFragmentation>(fragment, AsteroidFragmentation{.remaining_breaks = child_remaining_breaks});
+    if (static_cast<std::size_t>(index) < child_geometries.size()) {
+      registry.emplace<AsteroidGeometry>(fragment, std::move(child_geometries[static_cast<std::size_t>(index)]));
+    }
     const float child_mass = parent_mass != nullptr ? parent_mass->remaining_mass * share.amount : child_radius;
     registry.emplace<AsteroidMass>(fragment, AsteroidMass{.initial_mass = child_mass, .remaining_mass = child_mass});
     if (parent_resource != nullptr) {

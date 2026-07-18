@@ -40,6 +40,12 @@ struct AsteroidGeometryTuning {
 };
 
 [[nodiscard]] AsteroidGeometry generate_asteroid_geometry(std::uint32_t seed, float radius, const AsteroidGeometryTuning& tuning = {});
+[[nodiscard]] std::vector<AsteroidGeometry> fracture_asteroid_geometry(
+  const AsteroidGeometry& parent,
+  Vec3 impact_direction,
+  int pieces,
+  float child_radius
+);
 void update_asteroid_tumble(AsteroidGeometry& geometry, float dt_seconds);
 
 }  // namespace hyperverse

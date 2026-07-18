@@ -1,6 +1,7 @@
 #include "test_common.hpp"
 
 #include "hyperverse/asteroid_fragmentation.hpp"
+#include "hyperverse/asteroid_geometry.hpp"
 
 #include <algorithm>
 
@@ -23,6 +24,21 @@ namespace {
   registry.emplace<hyperverse::MiningResource>(asteroid, hyperverse::MiningResource{.tier = hyperverse::OreTier::Rare});
   registry.emplace<hyperverse::MineralComposition>(asteroid, hyperverse::mineral_composition_for_tier(hyperverse::OreTier::Rare));
   return asteroid;
+}
+
+[[nodiscard]] bool contains_parent_surface_color(const hyperverse::AsteroidGeometry& parent, const hyperverse::AsteroidGeometry& child) {
+  for (const hyperverse::AsteroidMeshVertex& child_vertex : child.vertices) {
+    for (const hyperverse::AsteroidMeshVertex& parent_vertex : parent.vertices) {
+      if (
+        child_vertex.r == Catch::Approx(parent_vertex.r) &&
+        child_vertex.g == Catch::Approx(parent_vertex.g) &&
+        child_vertex.b == Catch::Approx(parent_vertex.b)
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 }  // namespace
@@ -213,4 +229,33 @@ TEST_CASE("explosive fragmentation scatters children in opposing directions") {
   CHECK(std::ranges::any_of(fragments, [&](entt::entity fragment) {
     return registry.get<hyperverse::AsteroidBody>(fragment).velocity.y < -100.0F;
   }));
+}
+
+TEST_CASE("asteroid fragmentation splits generated geometry into renderable chunks") {
+  entt::registry registry;
+  const entt::entity asteroid = make_fragmentable_asteroid(registry, {.x = 10.0F, .y = 5.0F});
+  hyperverse::AsteroidGeometry parent_geometry = hyperverse::generate_asteroid_geometry(48879U, 240.0F);
+  parent_geometry.tumble_velocity = {.x = 0.14F, .y = 0.08F, .z = 0.22F};
+  registry.emplace<hyperverse::AsteroidGeometry>(asteroid, parent_geometry);
+
+  const std::vector<entt::entity> fragments = hyperverse::fragment_asteroid(
+    registry,
+    asteroid,
+    {
+      .impact_kind = hyperverse::AsteroidImpactKind::Kinetic,
+      .impact_position = {.x = 90.0F, .y = 100.0F},
+      .impact_velocity = {.x = 900.0F, .y = 0.0F},
+      .pieces = 4,
+    }
+  );
+
+  REQUIRE(fragments.size() == 3U);
+  for (entt::entity fragment : fragments) {
+    REQUIRE(registry.all_of<hyperverse::AsteroidGeometry>(fragment));
+    const hyperverse::AsteroidGeometry& geometry = registry.get<hyperverse::AsteroidGeometry>(fragment);
+    CHECK_FALSE(geometry.vertices.empty());
+    CHECK_FALSE(geometry.triangles.empty());
+    CHECK(contains_parent_surface_color(parent_geometry, geometry));
+    CHECK(geometry.tumble_velocity.z > 0.0F);
+  }
 }
