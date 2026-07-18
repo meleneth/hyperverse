@@ -520,7 +520,6 @@ void add_asteroid_radar_panel(
   const float half_width = std::max(sector.width * 0.5F, 1.0F);
   const float half_height = std::max(sector.height * 0.5F, 1.0F);
   for (auto [entity, asteroid] : registry.view<hyperverse::AsteroidBody>().each()) {
-    (void)entity;
     if (asteroid.radius < AsteroidRadarMinimumRadius) {
       continue;
     }
@@ -536,7 +535,13 @@ void add_asteroid_radar_panel(
       AsteroidRadarCenterY - AsteroidRadarHalfSize + size,
       AsteroidRadarCenterY + AsteroidRadarHalfSize - size
     );
-    add_asteroid_radar_marker(lines, x, y, size, 0.68F, 0.72F, 0.74F);
+    hyperverse::OreTint tint{.r = 0.68F, .g = 0.72F, .b = 0.74F};
+    if (const hyperverse::MiningResource* resource = registry.try_get<hyperverse::MiningResource>(entity); resource != nullptr) {
+      tint = hyperverse::ore_tint(resource->tier);
+    } else if (const hyperverse::MineralComposition* composition = registry.try_get<hyperverse::MineralComposition>(entity); composition != nullptr) {
+      tint = hyperverse::ore_tint(*composition);
+    }
+    add_asteroid_radar_marker(lines, x, y, size, tint.r, tint.g, tint.b);
   }
 }
 
@@ -879,6 +884,97 @@ void add_world_line(
     .b = std::clamp(tint.b * shade, 0.04F, 1.0F),
     .a = alpha,
   };
+}
+
+[[nodiscard]] hyperverse::TriangleVertexDraw cargo_legend_vertex(
+  hyperverse::Vec2 center_ndc,
+  hyperverse::Vec2 offset_ndc,
+  hyperverse::OreTint tint,
+  float shade,
+  float alpha = 0.95F
+) {
+  return {
+    .x_ndc = center_ndc.x + offset_ndc.x,
+    .y_ndc = center_ndc.y + offset_ndc.y,
+    .r = std::clamp(tint.r * shade, 0.04F, 1.0F),
+    .g = std::clamp(tint.g * shade, 0.04F, 1.0F),
+    .b = std::clamp(tint.b * shade, 0.04F, 1.0F),
+    .a = alpha,
+  };
+}
+
+void add_hud_line(
+  std::vector<hyperverse::LineDraw>& lines,
+  hyperverse::Vec2 center_ndc,
+  hyperverse::Vec2 a,
+  hyperverse::Vec2 b,
+  float r,
+  float g,
+  float blue,
+  float alpha = 0.9F
+) {
+  lines.push_back({
+    .start_x_ndc = center_ndc.x + a.x,
+    .start_y_ndc = center_ndc.y + a.y,
+    .end_x_ndc = center_ndc.x + b.x,
+    .end_y_ndc = center_ndc.y + b.y,
+    .r = r,
+    .g = g,
+    .b = blue,
+    .a = alpha,
+  });
+}
+
+void add_hud_cargo_container(
+  std::vector<hyperverse::TriangleDraw>& triangles,
+  std::vector<hyperverse::LineDraw>& lines,
+  hyperverse::Vec2 center_ndc,
+  hyperverse::OreTint tint
+) {
+  std::array<hyperverse::Vec2, 5> top{};
+  std::array<hyperverse::Vec2, 5> bottom{};
+  for (int index = 0; index < 5; ++index) {
+    const float angle = -std::numbers::pi_v<float> * 0.5F + (static_cast<float>(index) / 5.0F) * std::numbers::pi_v<float> * 2.0F;
+    const hyperverse::Vec2 top_world = rotated_point(angle, 52.0F, 28.0F) + hyperverse::Vec2{.x = 0.0F, .y = -20.0F};
+    const hyperverse::Vec2 bottom_world = rotated_point(angle + 0.32F, 46.0F, 26.0F) + hyperverse::Vec2{.x = 0.0F, .y = 24.0F};
+    top[static_cast<std::size_t>(index)] = top_world * 0.00028F;
+    bottom[static_cast<std::size_t>(index)] = bottom_world * 0.00028F;
+  }
+
+  const hyperverse::Vec2 top_center{.x = 0.0F, .y = -20.0F * 0.00028F};
+  const hyperverse::Vec2 bottom_center{.x = 0.0F, .y = 24.0F * 0.00028F};
+  for (int index = 0; index < 5; ++index) {
+    const int next = (index + 1) % 5;
+    const float side_shade = 0.58F + (static_cast<float>(index) * 0.055F);
+    triangles.push_back({
+      .a = cargo_legend_vertex(center_ndc, top[static_cast<std::size_t>(index)], tint, side_shade),
+      .b = cargo_legend_vertex(center_ndc, bottom[static_cast<std::size_t>(index)], tint, side_shade * 0.82F),
+      .c = cargo_legend_vertex(center_ndc, bottom[static_cast<std::size_t>(next)], tint, side_shade * 0.72F),
+    });
+    triangles.push_back({
+      .a = cargo_legend_vertex(center_ndc, top[static_cast<std::size_t>(index)], tint, side_shade),
+      .b = cargo_legend_vertex(center_ndc, bottom[static_cast<std::size_t>(next)], tint, side_shade * 0.72F),
+      .c = cargo_legend_vertex(center_ndc, top[static_cast<std::size_t>(next)], tint, side_shade * 1.08F),
+    });
+    triangles.push_back({
+      .a = cargo_legend_vertex(center_ndc, top_center, tint, 0.92F),
+      .b = cargo_legend_vertex(center_ndc, top[static_cast<std::size_t>(index)], tint, 0.84F),
+      .c = cargo_legend_vertex(center_ndc, top[static_cast<std::size_t>(next)], tint, 0.98F),
+    });
+    triangles.push_back({
+      .a = cargo_legend_vertex(center_ndc, bottom_center, tint, 0.42F),
+      .b = cargo_legend_vertex(center_ndc, bottom[static_cast<std::size_t>(next)], tint, 0.48F),
+      .c = cargo_legend_vertex(center_ndc, bottom[static_cast<std::size_t>(index)], tint, 0.36F),
+    });
+  }
+
+  for (int index = 0; index < 5; ++index) {
+    const int next = (index + 1) % 5;
+    add_hud_line(lines, center_ndc, top[static_cast<std::size_t>(index)], top[static_cast<std::size_t>(next)], tint.r, tint.g, tint.b);
+    add_hud_line(lines, center_ndc, bottom[static_cast<std::size_t>(index)], bottom[static_cast<std::size_t>(next)], tint.r, tint.g, tint.b);
+    add_hud_line(lines, center_ndc, top[static_cast<std::size_t>(index)], bottom[static_cast<std::size_t>(index)], tint.r, tint.g, tint.b);
+  }
+  add_hud_line(lines, center_ndc, {-0.006F, -0.001F}, {0.006F, 0.002F}, 1.0F, 1.0F, 1.0F, 0.48F);
 }
 
 void add_cargo_container(
@@ -1251,6 +1347,15 @@ SpriteFrame build_sprite_frame(
       tints[index].g,
       tints[index].b
     );
+    legend_y += 0.027F;
+  }
+  legend_y += 0.018F;
+  add_hud_text(frame.sprites, "CARGO COLORS", -0.96F, legend_y, 0.021F, 0.78F, 0.92F, 1.0F);
+  legend_y += 0.032F;
+  for (const OreTier tier : {OreTier::Common, OreTier::Industrial, OreTier::Rare, OreTier::Exotic, OreTier::Anomalous}) {
+    const OreTint tint = ore_tint(tier);
+    add_hud_cargo_container(frame.triangles, frame.lines, {.x = -0.94F, .y = legend_y + 0.006F}, tint);
+    add_hud_text(frame.sprites, ore_tier_name(tier), -0.90F, legend_y, 0.019F, tint.r, tint.g, tint.b);
     legend_y += 0.027F;
   }
   add_hud_text(frame.sprites, "SPD " + std::to_string(static_cast<int>(hud.speed)), -0.96F, 0.92F, 0.045F);

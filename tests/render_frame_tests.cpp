@@ -4,9 +4,32 @@
 #include "hyperverse/vertical_slice_seed.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <optional>
 
 using hyperverse::test::TestAccountWorld;
+
+namespace {
+
+[[nodiscard]] std::size_t test_ore_tier_index(hyperverse::OreTier tier) {
+  switch (tier) {
+    case hyperverse::OreTier::Common:
+      return 0;
+    case hyperverse::OreTier::Industrial:
+      return 1;
+    case hyperverse::OreTier::Rare:
+      return 2;
+    case hyperverse::OreTier::Exotic:
+      return 3;
+    case hyperverse::OreTier::Anomalous:
+      return 4;
+  }
+
+  return 0;
+}
+
+}  // namespace
 
 TEST_CASE("clear color stays stable now that sprites expose state") {
   const hyperverse::RenderColor idle = hyperverse::make_clear_color({});
@@ -165,10 +188,13 @@ TEST_CASE("sprite frame renders all large asteroids in right side radar panel") 
   const hyperverse::SectorTuning sector = hyperverse::default_sector();
   const hyperverse::SemanticInputFrame input{};
   int large_asteroids = 0;
+  std::array<int, hyperverse::OreTierCount> large_asteroids_by_tier{};
   for (auto [entity, asteroid] : account.registry().view<hyperverse::AsteroidBody>().each()) {
-    (void)entity;
     if (asteroid.radius >= 400.0F) {
       ++large_asteroids;
+      const hyperverse::MiningResource* resource = account.registry().try_get<hyperverse::MiningResource>(entity);
+      REQUIRE(resource != nullptr);
+      ++large_asteroids_by_tier[test_ore_tier_index(resource->tier)];
     }
   }
 
@@ -184,25 +210,87 @@ TEST_CASE("sprite frame renders all large asteroids in right side radar panel") 
     720
   );
 
-  int asteroid_marker_lines = 0;
+  std::array<int, hyperverse::OreTierCount> marker_lines_by_tier{};
   for (const hyperverse::LineDraw& line : frame.lines) {
-    const bool asteroid_marker_color =
-      std::abs(line.r - 0.68F) <= 0.001F && std::abs(line.g - 0.72F) <= 0.001F && std::abs(line.b - 0.74F) <= 0.001F;
-    if (!asteroid_marker_color) {
+    const bool inside_asteroid_radar =
+      line.start_x_ndc >= 0.56F && line.start_x_ndc <= 1.0F && line.end_x_ndc >= 0.56F && line.end_x_ndc <= 1.0F &&
+      line.start_y_ndc >= -0.14F && line.start_y_ndc <= 0.30F && line.end_y_ndc >= -0.14F && line.end_y_ndc <= 0.30F;
+    if (!inside_asteroid_radar) {
       continue;
     }
 
-    ++asteroid_marker_lines;
-    CHECK(line.start_x_ndc >= 0.56F);
-    CHECK(line.start_x_ndc <= 1.0F);
-    CHECK(line.end_x_ndc >= 0.56F);
-    CHECK(line.end_x_ndc <= 1.0F);
-    CHECK(line.start_y_ndc >= -0.14F);
-    CHECK(line.start_y_ndc <= 0.30F);
-    CHECK(line.end_y_ndc >= -0.14F);
-    CHECK(line.end_y_ndc <= 0.30F);
+    auto tier = std::optional<hyperverse::OreTier>{};
+    for (const hyperverse::OreTier candidate : {
+           hyperverse::OreTier::Common,
+           hyperverse::OreTier::Industrial,
+           hyperverse::OreTier::Rare,
+           hyperverse::OreTier::Exotic,
+           hyperverse::OreTier::Anomalous,
+         }) {
+      const hyperverse::OreTint tint = hyperverse::ore_tint(candidate);
+      if (std::abs(line.r - tint.r) <= 0.001F && std::abs(line.g - tint.g) <= 0.001F && std::abs(line.b - tint.b) <= 0.001F) {
+        tier = candidate;
+        break;
+      }
+    }
+    if (!tier.has_value()) {
+      continue;
+    }
+
+    ++marker_lines_by_tier[test_ore_tier_index(*tier)];
   }
 
   CHECK(large_asteroids > 0);
-  CHECK(asteroid_marker_lines == large_asteroids * 2);
+  for (std::size_t index = 0; index < large_asteroids_by_tier.size(); ++index) {
+    CHECK(marker_lines_by_tier[index] == large_asteroids_by_tier[index] * 2);
+  }
+}
+
+TEST_CASE("sprite frame teaches cargo colors with mineral container legend") {
+  TestAccountWorld world;
+  hyperverse::AccountCtx account = world.account_context();
+  const hyperverse::VerticalSliceEntities entities = hyperverse::seed_vertical_slice(account);
+  hyperverse::ShipMotion& ship = account.registry().get<hyperverse::ShipMotion>(entities.player);
+  const hyperverse::SectorTuning sector = hyperverse::default_sector();
+  const hyperverse::SemanticInputFrame input{};
+
+  const hyperverse::SpriteFrame frame = hyperverse::build_sprite_frame(
+    account,
+    entities.player,
+    entities.mining_drones,
+    entities.raider,
+    hyperverse::make_flight_hud_snapshot(ship, input, {}, sector),
+    input,
+    sector,
+    1280,
+    720
+  );
+
+  std::array<int, hyperverse::OreTierCount> legend_lines_by_tier{};
+  for (const hyperverse::LineDraw& line : frame.lines) {
+    const bool inside_cargo_legend =
+      line.start_x_ndc >= -0.97F && line.start_x_ndc <= -0.91F && line.end_x_ndc >= -0.97F && line.end_x_ndc <= -0.91F &&
+      line.start_y_ndc >= -0.76F && line.start_y_ndc <= -0.54F && line.end_y_ndc >= -0.76F && line.end_y_ndc <= -0.54F;
+    if (!inside_cargo_legend) {
+      continue;
+    }
+
+    for (const hyperverse::OreTier candidate : {
+           hyperverse::OreTier::Common,
+           hyperverse::OreTier::Industrial,
+           hyperverse::OreTier::Rare,
+           hyperverse::OreTier::Exotic,
+           hyperverse::OreTier::Anomalous,
+         }) {
+      const hyperverse::OreTint tint = hyperverse::ore_tint(candidate);
+      if (std::abs(line.r - tint.r) <= 0.001F && std::abs(line.g - tint.g) <= 0.001F && std::abs(line.b - tint.b) <= 0.001F) {
+        ++legend_lines_by_tier[test_ore_tier_index(candidate)];
+        break;
+      }
+    }
+  }
+
+  for (const int line_count : legend_lines_by_tier) {
+    CHECK(line_count >= 15);
+  }
 }
