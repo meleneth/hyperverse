@@ -12,7 +12,7 @@
 #include "hyperverse/asteroid_mass.hpp"
 #include "hyperverse/fixed_timestep.hpp"
 #include "hyperverse/flight.hpp"
-#include "hyperverse/harpoon.hpp"
+#include "hyperverse/gravity_sling.hpp"
 #include "hyperverse/hud_notice.hpp"
 #include "hyperverse/camera.hpp"
 #include "hyperverse/cargo.hpp"

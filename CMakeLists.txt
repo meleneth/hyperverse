@@ -181,7 +181,7 @@ add_library(
   src/flight.cpp
   src/game_context.cpp
   src/game_session.cpp
-  src/harpoon.cpp
+  src/gravity_sling.cpp
   src/grand_central.cpp
   src/hud_notice.cpp
   src/input.cpp
@@ -315,7 +315,7 @@ if(HYPERVERSE_BUILD_TESTS)
     tests/fixed_timestep_tests.cpp
     tests/flight_tests.cpp
     tests/game_session_tests.cpp
-    tests/harpoon_tests.cpp
+    tests/gravity_sling_tests.cpp
     tests/hud_notice_tests.cpp
     tests/input_tests.cpp
     tests/mining_tests.cpp

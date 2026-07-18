@@ -13,7 +13,7 @@
 #include "hyperverse/fixed_timestep.hpp"
 #include "hyperverse/flight.hpp"
 #include "hyperverse/game_session.hpp"
-#include "hyperverse/harpoon.hpp"
+#include "hyperverse/gravity_sling.hpp"
 #include "hyperverse/hud_notice.hpp"
 #include "hyperverse/input.hpp"
 #include "hyperverse/mining.hpp"
@@ -155,7 +155,6 @@ private:
     SectorTickCtx tick_ctx{account_, sector_, timestep_.tick_seconds()};
     gamepad_.open_first_available();
     latest_intent_ = input_mapper_.map(gamepad_.sample());
-    simulate_assisted_flight(account_, ship_, latest_intent_, flight_, sector_, timestep_.tick_seconds());
     if (latest_intent_.boost_requested && account_.registry().get<CargoEscortState>(player_).phase == CargoEscortPhase::EscortActive) {
       (void)detach_linked_cargo(account_.registry(), ship_.velocity);
     }
@@ -163,8 +162,8 @@ private:
 
     CameraState& camera = account_.registry().get<CameraState>(player_);
     TargetLockModel& target_lock = account_.registry().get<TargetLockModel>(player_);
-    HarpoonModel& harpoon = account_.registry().get<HarpoonModel>(player_);
-    HarpoonHudSnapshot& harpoon_hud = account_.registry().get<HarpoonHudSnapshot>(player_);
+    GravitySlingModel& gravity_sling = account_.registry().get<GravitySlingModel>(player_);
+    GravitySlingHudSnapshot& gravity_sling_hud = account_.registry().get<GravitySlingHudSnapshot>(player_);
     HudNotice& hud_notice = account_.registry().get<HudNotice>(player_);
     ShipHealth& ship_health = account_.registry().get<ShipHealth>(player_);
     RoundTimer& round_timer = account_.registry().get<RoundTimer>(player_);
@@ -184,6 +183,15 @@ private:
     CargoRecoveryHudSnapshot& recovery_hud = account_.registry().get<CargoRecoveryHudSnapshot>(player_);
     CollisionHudSnapshot& collision_hud = account_.registry().get<CollisionHudSnapshot>(player_);
 
+    const GravitySlingPhase previous_sling_phase = gravity_sling.phase;
+    SemanticInputFrame sling_input = latest_intent_;
+    if (sling_input.gravity_sling_requested && length(sling_input.primary_aim) <= 0.0001F && has_locked_target(target_lock)) {
+      sling_input.primary_aim = normalize_or_zero(target_lock.relative_position);
+    }
+    gravity_sling_hud = update_gravity_sling(gravity_sling, account_.registry(), ship_, sling_input, sector_, timestep_.tick_seconds(), gravity_sling_tuning_);
+    if (previous_sling_phase == GravitySlingPhase::FreeFlight && gravity_sling.phase == GravitySlingPhase::FreeFlight) {
+      simulate_assisted_flight(account_, ship_, latest_intent_, flight_, sector_, timestep_.tick_seconds());
+    }
     update_camera_anchor(camera, ship_, sector_, camera_tuning_, timestep_.tick_seconds());
     update_radar_hud(radar_model, account_.registry(), ship_, sector_, timestep_.tick_seconds(), radar_tuning_);
     std::vector<entt::entity> tracked_targets;
@@ -195,7 +203,6 @@ private:
     update_hud_notice(hud_notice, timestep_.tick_seconds());
     update_target_lock(target_lock, account_.registry(), ship_.position, ship_.velocity, latest_intent_, sector_, {}, tracked_targets);
     mining_hud = update_mining_laser(account_.registry(), target_lock, ship_, latest_intent_, sector_, mining_laser_, timestep_.tick_seconds());
-    harpoon_hud = update_harpoon(harpoon, account_.registry(), target_lock, ship_, latest_intent_, sector_, timestep_.tick_seconds(), harpoon_tuning_);
 
     drone_hud = {};
     for (entt::entity drone_entity : entities_.mining_drones) {
@@ -317,7 +324,7 @@ private:
   CargoExtractionTuning cargo_extraction_tuning_{};
   SectorPressureTuning pressure_tuning_{.escalation_interval_seconds = 60.0F};
   MiningDroneTuning mining_drone_tuning_{};
-  HarpoonTuning harpoon_tuning_{};
+  GravitySlingTuning gravity_sling_tuning_{};
   ParticleCannonTuning particle_cannon_tuning_{};
   RaiderTuning raider_tuning_{};
   RadarHudTuning radar_tuning_;

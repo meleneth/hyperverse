@@ -9,7 +9,7 @@
 #include "hyperverse/cargo_train.hpp"
 #include "hyperverse/collision.hpp"
 #include "hyperverse/drone.hpp"
-#include "hyperverse/harpoon.hpp"
+#include "hyperverse/gravity_sling.hpp"
 #include "hyperverse/hud_notice.hpp"
 #include "hyperverse/mining.hpp"
 #include "hyperverse/pressure.hpp"
@@ -198,7 +198,7 @@ void add_face_button_legend(std::vector<hyperverse::SpriteDraw>& sprites, const 
     y += 0.03F;
     add_hud_text(sprites, "X PCANNON", left, y, 0.024F, 0.72F, 0.92F, 1.0F);
     y += 0.03F;
-    add_hud_text(sprites, "Y HARPOON", left, y, 0.024F, 0.95F, 0.82F, 1.0F);
+    add_hud_text(sprites, "Y SLING", left, y, 0.024F, 0.95F, 0.82F, 1.0F);
   } else {
     add_hud_text(sprites, "A ESCORT", left, y, 0.024F, 0.72F, 1.0F, 0.72F);
     y += 0.03F;
@@ -206,7 +206,7 @@ void add_face_button_legend(std::vector<hyperverse::SpriteDraw>& sprites, const 
     y += 0.03F;
     add_hud_text(sprites, "X PCANNON", left, y, 0.024F, 0.72F, 0.92F, 1.0F);
     y += 0.03F;
-    add_hud_text(sprites, "Y HARPOON", left, y, 0.024F, 0.95F, 0.82F, 1.0F);
+    add_hud_text(sprites, "Y SLING", left, y, 0.024F, 0.95F, 0.82F, 1.0F);
   }
 }
 
@@ -435,7 +435,7 @@ SpriteFrame build_sprite_frame(
   const RoundTimer& round_timer = account.registry().get<RoundTimer>(player);
   const CameraState& camera = account.registry().get<CameraState>(player);
   const TargetLockModel& target_lock = account.registry().get<TargetLockModel>(player);
-  const HarpoonHudSnapshot& harpoon_hud = account.registry().get<HarpoonHudSnapshot>(player);
+  const GravitySlingHudSnapshot& gravity_sling_hud = account.registry().get<GravitySlingHudSnapshot>(player);
   const MiningHudSnapshot& mining_hud = account.registry().get<MiningHudSnapshot>(player);
   const CargoHudSnapshot& cargo_hud = account.registry().get<CargoHudSnapshot>(player);
   const CargoEscortHudSnapshot& escort_hud = account.registry().get<CargoEscortHudSnapshot>(player);
@@ -632,8 +632,20 @@ SpriteFrame build_sprite_frame(
   if (particle_hud.active_particles > 0 || particle_hud.impacts > 0) {
     add_hud_text(frame.sprites, "PCN " + std::to_string(particle_hud.active_particles), 0.56F, 0.68F, 0.045F, 0.72F, 0.92F, 1.0F);
   }
-  if (harpoon_hud.latched) {
-    add_hud_text(frame.sprites, "HRP " + std::to_string(static_cast<int>(harpoon_hud.target_speed)), 0.56F, 0.63F, 0.04F, 0.95F, 0.82F, 1.0F);
+  if (gravity_sling_hud.phase != GravitySlingPhase::FreeFlight) {
+    add_hud_text(frame.sprites, "SLG " + std::to_string(static_cast<int>(hyperverse::length(gravity_sling_hud.release_velocity))), 0.56F, 0.63F, 0.04F, 0.95F, 0.82F, 1.0F);
+    add_hud_text(
+      frame.sprites,
+      "RAD " + std::to_string(static_cast<int>(gravity_sling_hud.radius)) + "/" + std::to_string(static_cast<int>(gravity_sling_hud.max_radius)),
+      0.56F,
+      0.59F,
+      0.032F,
+      0.95F,
+      0.82F,
+      1.0F
+    );
+  } else if (gravity_sling_hud.acquisition_failed) {
+    add_hud_text(frame.sprites, "NO SLING", 0.56F, 0.63F, 0.04F, 0.95F, 0.42F, 0.35F);
   }
   if (escort_hud.cargo_train_active) {
     add_hud_text(frame.sprites, "GATE " + std::to_string(static_cast<int>(route_hud.gate_distance)), 0.48F, 0.80F, 0.045F);
@@ -697,9 +709,23 @@ SpriteFrame build_sprite_frame(
     }
     add_world_link_line(frame.lines, ship.position, route_hud.gate_position, camera.position, sector, width, height, 0.2F, 0.55F, 0.85F);
   }
-  if (harpoon_hud.latched && account.registry().valid(harpoon_hud.target) && account.registry().all_of<AsteroidBody>(harpoon_hud.target)) {
-    const AsteroidBody& target = account.registry().get<AsteroidBody>(harpoon_hud.target);
+  if (gravity_sling_hud.phase != GravitySlingPhase::FreeFlight && account.registry().valid(gravity_sling_hud.target) &&
+      account.registry().all_of<AsteroidBody>(gravity_sling_hud.target)) {
+    const AsteroidBody& target = account.registry().get<AsteroidBody>(gravity_sling_hud.target);
     add_world_link_line(frame.lines, ship.position, target.position, camera.position, sector, width, height, 0.95F, 0.82F, 1.0F);
+    const float release_strength = std::clamp(length(gravity_sling_hud.release_velocity) * 0.18F, 80.0F, 420.0F);
+    add_world_link_line(
+      frame.lines,
+      ship.position,
+      ship.position + (normalize_or_zero(gravity_sling_hud.release_velocity) * release_strength),
+      camera.position,
+      sector,
+      width,
+      height,
+      0.65F,
+      1.0F,
+      0.9F
+    );
   }
   for (auto [entity, box] : account.registry().view<CargoBox>().each()) {
     (void)entity;

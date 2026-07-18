@@ -13,7 +13,7 @@ TEST_CASE("flight input maps raw devices into semantic movement intent") {
       .confirm = true,
       .target_cycle = true,
       .boost = true,
-      .harpoon = true,
+      .gravity_sling = true,
       .particle_fire = true,
       .tool_intensity = 0.5F,
       .control_mapping = hyperverse::ControlMapping::Gamepad,
@@ -22,7 +22,7 @@ TEST_CASE("flight input maps raw devices into semantic movement intent") {
   CHECK(moving.confirm_requested);
   CHECK(moving.target_cycle_requested);
   CHECK(moving.boost_requested);
-  CHECK(moving.harpoon_requested);
+  CHECK(moving.gravity_sling_requested);
   CHECK(moving.particle_fire_requested);
   CHECK(moving.particle_fire_active);
   CHECK(moving.tool_intensity == Catch::Approx(0.5F));
@@ -54,10 +54,10 @@ TEST_CASE("stateful flight input mapper emits button requests on rising edges") 
   CHECK(boosted.boost_requested);
   CHECK_FALSE(held_boost.boost_requested);
 
-  const hyperverse::SemanticInputFrame harpooned = mapper.map({.harpoon = true});
-  const hyperverse::SemanticInputFrame held_harpoon = mapper.map({.harpoon = true});
-  CHECK(harpooned.harpoon_requested);
-  CHECK_FALSE(held_harpoon.harpoon_requested);
+  const hyperverse::SemanticInputFrame slung = mapper.map({.gravity_sling = true});
+  const hyperverse::SemanticInputFrame held_sling = mapper.map({.gravity_sling = true});
+  CHECK(slung.gravity_sling_requested);
+  CHECK_FALSE(held_sling.gravity_sling_requested);
 }
 
 TEST_CASE("flight input mapper uses a state machine for active device mapping") {
