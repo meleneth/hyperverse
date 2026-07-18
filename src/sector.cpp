@@ -4,11 +4,14 @@
 
 namespace hyperverse {
 
+SectorTuning default_sector() {
+  return sector_from_viewport(ReferenceScreenWidthPixels, ReferenceScreenHeightPixels, SectorScreensPerAxis);
+}
+
 SectorTuning sector_from_viewport(float viewport_width_pixels, float viewport_height_pixels, float screens) {
-  constexpr float pixels_per_world_unit = 0.35F;
   return {
-    .width = (viewport_width_pixels / pixels_per_world_unit) * screens,
-    .height = (viewport_height_pixels / pixels_per_world_unit) * screens,
+    .width = (viewport_width_pixels / PixelsPerWorldUnit) * screens,
+    .height = (viewport_height_pixels / PixelsPerWorldUnit) * screens,
   };
 }
 

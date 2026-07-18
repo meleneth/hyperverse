@@ -29,7 +29,6 @@
 
 namespace {
 
-constexpr float PixelsPerWorldUnit = 0.35F;
 constexpr float ScreenAnchorYFraction = 0.75F;
 
 [[nodiscard]] hyperverse::SpriteDraw make_world_sprite(
@@ -43,7 +42,7 @@ constexpr float ScreenAnchorYFraction = 0.75F;
   float pixel_height,
   float rotation_radians
 ) {
-  const hyperverse::Vec2 relative = hyperverse::wrapped_delta(camera_position, world_position, sector) * PixelsPerWorldUnit;
+  const hyperverse::Vec2 relative = hyperverse::wrapped_delta(camera_position, world_position, sector) * hyperverse::PixelsPerWorldUnit;
   const float screen_x = (static_cast<float>(width) * 0.5F) + relative.x;
   const float screen_y = (static_cast<float>(height) * ScreenAnchorYFraction) + relative.y;
 
@@ -349,8 +348,8 @@ void add_gathering_edge_indicator(
 ) {
   const hyperverse::Vec2 delta = hyperverse::wrapped_delta(ship_position, gathering_position, sector);
   const hyperverse::Vec2 ndc_direction{
-    .x = (delta.x * PixelsPerWorldUnit * 2.0F) / static_cast<float>(width),
-    .y = (delta.y * PixelsPerWorldUnit * 2.0F) / static_cast<float>(height),
+    .x = (delta.x * hyperverse::PixelsPerWorldUnit * 2.0F) / static_cast<float>(width),
+    .y = (delta.y * hyperverse::PixelsPerWorldUnit * 2.0F) / static_cast<float>(height),
   };
   if (hyperverse::length(ndc_direction) <= 0.0001F) {
     return;
@@ -400,7 +399,7 @@ void add_gathering_edge_indicator(
 ) {
   const hyperverse::Vec2 delta = hyperverse::wrapped_delta(from_world, to_world, sector);
   const hyperverse::Vec2 midpoint = hyperverse::wrap_position(from_world + (delta * 0.5F), sector);
-  const float pixel_length = hyperverse::length(delta) * PixelsPerWorldUnit;
+  const float pixel_length = hyperverse::length(delta) * hyperverse::PixelsPerWorldUnit;
   return make_world_sprite(
     hyperverse::SpriteTexture::Laser,
     midpoint,

@@ -41,7 +41,9 @@ Window::Window() {
     SDL_DestroySurface(icon_surface);
   }
 
+#if !defined(__EMSCRIPTEN__)
   (void)SDL_SetWindowFullscreen(window_, true);
+#endif
 }
 
 Window::~Window() {

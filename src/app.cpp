@@ -57,7 +57,7 @@ public:
       player_{entities_.player},
       ship_{account_.registry().get<ShipMotion>(player_)},
       timestep_{UniverseClock::FixedTickSeconds},
-      sector_{sector_from_viewport(static_cast<float>(renderer_.width()), static_cast<float>(renderer_.height()))},
+      sector_{default_sector()},
       gathering_site_{.position = {.x = 4300.0F, .y = 4300.0F}},
       cargo_box_tuning_{.box_mass = quota_.cargo_box_mass},
       escort_route_{extraction_route_from_gathering(gathering_site_.position, sector_)},

@@ -13,9 +13,16 @@ TEST_CASE("wrapped sector distance uses the shortest edge crossing") {
   CHECK(hyperverse::wrap_position({.x = -10.0F, .y = 9010.0F}, sector).y == Catch::Approx(10.0F));
 }
 
-TEST_CASE("sector dimensions are derived from nine viewport screens") {
+TEST_CASE("default sector dimensions are fixed at nine 4k reference screens") {
+  const hyperverse::SectorTuning sector = hyperverse::default_sector();
+
+  CHECK(sector.width == Catch::Approx((3840.0F / hyperverse::PixelsPerWorldUnit) * 9.0F));
+  CHECK(sector.height == Catch::Approx((2160.0F / hyperverse::PixelsPerWorldUnit) * 9.0F));
+}
+
+TEST_CASE("viewport-derived sector helper remains explicit for tests and tools") {
   const hyperverse::SectorTuning sector = hyperverse::sector_from_viewport(1920.0F, 1080.0F);
 
-  CHECK(sector.width == Catch::Approx((1920.0F / 0.35F) * 9.0F));
-  CHECK(sector.height == Catch::Approx((1080.0F / 0.35F) * 9.0F));
+  CHECK(sector.width == Catch::Approx((1920.0F / hyperverse::PixelsPerWorldUnit) * 9.0F));
+  CHECK(sector.height == Catch::Approx((1080.0F / hyperverse::PixelsPerWorldUnit) * 9.0F));
 }

@@ -9,7 +9,7 @@ The game is about feel, information, and controlled industrial violence.
 ## Current Project Shape
 
 - Playable 2D Dawn/WebGPU prototype in continuous wraparound sectors
-- Each sector is approximately 9 camera-widths by 9 camera-heights
+- Each sector is fixed at 9 by 9 3840x2160 reference screens, independent of the current window or browser resolution
 - Fixed 60 Hz simulation clock through `UniverseClock::FixedTickSeconds`
 - Development round pressure currently escalates every 1 minute
 - The long-form design target remains longer contracts with larger escalation beats

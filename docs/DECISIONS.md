@@ -2,7 +2,7 @@
 
 ## D001: Sector Size
 
-Sectors are approximately 9 screens by 9 screens.
+Sectors are fixed at 9 by 9 3840x2160 reference screens, independent of the current window or browser resolution.
 
 ## D002: Sector Boundaries
 

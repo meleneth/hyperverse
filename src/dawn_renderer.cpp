@@ -13,6 +13,10 @@
 #pragma GCC diagnostic pop
 #endif
 
+#if defined(__EMSCRIPTEN__)
+#include <emscripten/html5.h>
+#endif
+
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -587,9 +591,15 @@ struct DawnRenderer::Impl {
   void refresh_extent() {
     int drawable_width = 0;
     int drawable_height = 0;
+#if defined(__EMSCRIPTEN__)
+    if (emscripten_get_canvas_element_size("#canvas", &drawable_width, &drawable_height) != EMSCRIPTEN_RESULT_SUCCESS) {
+      return;
+    }
+#else
     if (!SDL_GetWindowSizeInPixels(window_, &drawable_width, &drawable_height)) {
       return;
     }
+#endif
 
     const std::uint32_t next_width = static_cast<std::uint32_t>(std::max(drawable_width, 0));
     const std::uint32_t next_height = static_cast<std::uint32_t>(std::max(drawable_height, 0));
