@@ -147,13 +147,13 @@ Large asteroids should support chemical scanning. Composition should influence b
 
 Current breakup creates recoverable component chunks rather than cloning the parent composition onto every child.
 
-## D023: Harpoon Tether
+## D023: Gravity Sling
 
-The harpoon latches to locked asteroids and uses the ship engine as the asteroid slowdown force.
+The Gravity Sling replaces the older asteroid slowdown tool with a relative-frame movement mechanic.
 
-It is not a magic brake. The ship is pulled toward the asteroid surface velocity, including spin, so large spinners are dangerous. Burst speed detaches the harpoon immediately.
+The player acquires an eligible asteroid, settles into that body's rotating frame, adjusts local angle and radius, and releases with velocity inherited from target translation, target spin, and controlled relative orbital motion.
 
-Harpoon influence on the asteroid is mass-limited. Large rocks can be wrangled over time, but they should not stop as if the ship were all-powerful.
+This keeps large moving bodies authoritative and makes the interaction about borrowing motion rather than overpowering mass. Target eligibility and release velocity are centralized so larger structures can reuse the mechanic later.
 
 ## D024: Threat Terminal State
 

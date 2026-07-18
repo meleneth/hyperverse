@@ -59,7 +59,7 @@ These assets are temporary implementation scaffolding, not a permanent visual co
 - Fire mining laser at locked asteroid: `F` or right trigger
 - Fire particle cannon: `E` or west face button
 - Burst of speed: east face button
-- Fire/release harpoon at locked asteroid: `Q` or north face button
+- Engage/release Gravity Sling: `Q` or north face button
 - Activate cargo escort after quota authorization: `Space` or south face button
 - Cancel/quit: `Escape`
 
@@ -67,11 +67,11 @@ These assets are temporary implementation scaffolding, not a permanent visual co
 
 The current Dawn prototype draws Sector7-derived sprites, hardware-uploaded textures, line HUD
 brackets, text glyph HUD, mining beams, dual particle cannon shots, cargo boxes, active cargo train
-links, a harpoon tether, an escort gate route, drones, and raiders.
+links, Gravity Sling reference-frame feedback, an escort gate route, drones, and raiders.
 
 The ship uses assisted desired-motion flight, a short burst-speed mode, shields, armor, and a
 fixed-step simulation loop. Boost doubles top speed briefly and falls off on a short hockey-stick
-curve. Boost detaches both cargo tow links and the harpoon.
+curve. Boost detaches cargo tow links.
 
 Asteroids are large moving bodies with explicit mass, structural break progress, two break levels,
 composition, ore rarity, velocity, and spin. Kinetic particle shots apply linear impulse, and
@@ -79,11 +79,10 @@ glancing hits apply angular impulse. Breakup produces recoverable component chun
 cloned copies of the parent composition, with some material lost when the parent has several
 meaningful component groups.
 
-The harpoon latches to the locked asteroid. While latched, the ship is pulled toward the rock's
-surface motion, including spin, and the asteroid receives full-engine-power velocity matching
-toward the ship velocity. This makes fast spinners dangerous and gives the player a tool for
-slowing rocks enough for drones to mine. Harpoon influence is mass-limited; very large rocks are
-wrangled over time rather than stopped outright.
+The Gravity Sling acquires a nearby eligible asteroid and locks the ship into that body's rotating
+frame of reference. While active, movement input adjusts orbital angle and radius instead of normal
+thrust. Releasing converts target translation, target spin, and player-controlled relative orbital
+motion into a visible launch velocity.
 
 Mining drones operate autonomously against valid target sizes, spread around work targets, return
 to formation, and break off when their target is invalid. The current prototype still starts with
@@ -99,7 +98,7 @@ contacts enter full aggression.
 The HUD reports position, speed, ship health, round timer, threat level, target state, target mass,
 ore rarity value, mineral composition, extracted ore, cargo quota, sector pressure, drone state,
 collision warnings, escort state, raider disruption, stolen cargo escape, recovery state, and
-harpoon state. The upper-right HUD face-button legend shows current face-button meanings and
+Gravity Sling state. The upper-right HUD face-button legend shows current face-button meanings and
 changes when the tool trigger is held. The top-center urgency HUD shows round time remaining,
 current threat level, next threat countdown, and progress toward the next escalation.
 
@@ -110,7 +109,7 @@ current threat level, next threat countdown, and progress toward the next escala
 - Round timer and threat escalation are primary pressure systems. Threat level advances on the development one-minute cadence, spawns raider contacts, and is visible as a countdown/progress bar. Mining eventually destabilizes local space enough to open a terminal space tear.
 - Large asteroids have two break levels. Breakup creates recoverable component chunks from the parent mineral distribution, with some material deliberately lost when the parent has several meaningful components.
 - Kinetic particle impacts transfer velocity into asteroid mass. Glancing kinetic hits also impart rotational velocity from impact angle, so spinning rocks become a real hazard.
-- The harpoon latches to locked asteroids, pulls the ship toward the rock's surface motion, and applies mass-limited full-engine-power velocity matching to help slow a rock for drone harvesting. Boosting detaches the harpoon.
+- The Gravity Sling turns eligible asteroids into temporary moving terrain. The ship follows a local polar offset in the target's rotating frame, adjusts angle/radius with movement input, and releases with inherited orbital velocity.
 - Mining drones cannot work the largest asteroid tier. The player must break big rocks into medium or small pieces before drones can safely mine them.
 - Mined cargo starts at the gathering site. The extraction gate is derived as the furthest wrapped-sector point from that gathering site.
 - During escort, cargo follows the player as a train. Once the player reaches the extraction gate, cargo remains gate-bound and stages as a group near the gate before loading starts.
@@ -123,11 +122,11 @@ current threat level, next threat countdown, and progress toward the next escala
 ## Known Future Directions
 
 - Replace temporary eight-drone development start with progression-aware drone counts, roles, and upgrades.
-- Build explicit modal control FSMs for flight, mining posture, mobile weapons, harpoon/tow, HUD command, and cargo escort.
+- Build explicit modal control FSMs for flight, mining posture, mobile weapons, Gravity Sling, HUD command, and cargo escort.
 - Make ship computer quality drive HUD effectiveness: radar count/range/update cadence, scan confidence, prediction quality, warning clarity, and target detail.
 - Expand asteroid scanning into real pre-breakup decision making with chemical makeup, fracture maps, volatile hazards, and tool recommendations.
 - Add more asteroid families and hazards: heat, gas, radiation, brittle fracture, controlled detonation, debris, and material-specific reactions.
-- Add additional projectile/tool behavior: laser-coherent breakup, kinetic velocity transfer, explosive radial fragmentation, and richer harpoon/tether stress.
+- Add additional projectile/tool behavior: laser-coherent breakup, kinetic velocity transfer, explosive radial fragmentation, and richer Gravity Sling interactions with larger moving structures.
 - Expand threat level effects beyond current raider spawns: richer combat intensity, contract modifiers, gate danger, and pre-tear warning behaviors.
 - Improve cargo escort state machines: detached cargo recovery, tow stress, extraction sequencing, and loss/payment consequences.
 - Move more lifecycle behavior behind EventPP responders and typed contexts; keep shrinking `App` toward platform setup plus `GrandCentral` startup.

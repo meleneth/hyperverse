@@ -139,20 +139,21 @@ Composition should influence child chunks. For example, an asteroid with four ro
 
 Current breakup creates recoverable component chunks from the parent composition. Each child carries a dominant mineral component and a matching ore tier. When a parent has several meaningful component groups, not every group is guaranteed to survive breakup.
 
-Fast-spinning asteroids are a major physical hazard. Default seeded rocks spin visibly, harpooned rocks can pull the ship toward their surface motion, and glancing kinetic particle impacts impart angular velocity according to impact offset and projectile velocity.
+Fast-spinning asteroids are a major physical hazard. Default seeded rocks spin visibly, the Gravity Sling lets the ship borrow that rotating frame, and glancing kinetic particle impacts impart angular velocity according to impact offset and projectile velocity.
 
-## Harpoon
+## Gravity Sling
 
-The harpoon is fired at the currently locked asteroid.
+The Gravity Sling acquires eligible large physical targets such as asteroids.
 
-While latched:
+While active:
 
-- the asteroid receives mass-limited full-engine-power velocity matching toward the ship velocity
-- the ship is pulled toward the asteroid surface velocity, including spin
-- excessive range releases the tether
-- burst speed releases the tether immediately
+- the target remains authoritative for position, rotation, angular velocity, and destruction
+- the ship position is defined by a local polar offset in the target's rotating frame
+- movement input adjusts the local angular offset and sling radius within configured bounds
+- aim and firing remain available
+- release velocity is computed from target translation, target angular velocity, and player-controlled relative angular motion
 
-The intended use is to get ahead of a moving rock, latch it, and use the ship's engine to bleed enough speed for drones to harvest safely. The intended risk is that a large or fast-spinning rock can throw the ship around. The player is a wrangler taming something larger, not an all-powerful stopping machine.
+The intended use is to acquire a moving rock, orbit into a useful firing or escape position, then release into a legible slingshot trajectory. The target temporarily becomes moving terrain rather than a body being slowed by the ship.
 
 ## Threat Pressure
 
