@@ -78,6 +78,14 @@ constexpr float ScreenAnchorYFraction = 0.75F;
   return {.x = lhs.x - rhs.x, .y = lhs.y - rhs.y, .z = lhs.z - rhs.z};
 }
 
+[[nodiscard]] hyperverse::Vec3 operator+(hyperverse::Vec3 lhs, hyperverse::Vec3 rhs) {
+  return {.x = lhs.x + rhs.x, .y = lhs.y + rhs.y, .z = lhs.z + rhs.z};
+}
+
+[[nodiscard]] hyperverse::Vec3 operator*(hyperverse::Vec3 value, float scale) {
+  return {.x = value.x * scale, .y = value.y * scale, .z = value.z * scale};
+}
+
 [[nodiscard]] hyperverse::Vec3 cross(hyperverse::Vec3 lhs, hyperverse::Vec3 rhs) {
   return {
     .x = (lhs.y * rhs.z) - (lhs.z * rhs.y),
@@ -93,6 +101,47 @@ constexpr float ScreenAnchorYFraction = 0.75F;
 [[nodiscard]] hyperverse::Vec3 normalize_or_zero(hyperverse::Vec3 value) {
   const float magnitude = std::sqrt(dot(value, value));
   return magnitude > 0.0001F ? hyperverse::Vec3{.x = value.x / magnitude, .y = value.y / magnitude, .z = value.z / magnitude} : hyperverse::Vec3{};
+}
+
+[[nodiscard]] float fract(float value) {
+  return value - std::floor(value);
+}
+
+[[nodiscard]] float surface_noise(hyperverse::Vec3 point) {
+  return fract(std::sin(dot(point, {.x = 12.9898F, .y = 78.233F, .z = 37.719F})) * 43758.5453F);
+}
+
+[[nodiscard]] hyperverse::TriangleVertexDraw asteroid_triangle_vertex(
+  hyperverse::Vec3 point,
+  hyperverse::Vec3 rotated_point,
+  hyperverse::Vec3 normal,
+  hyperverse::Vec2 center,
+  hyperverse::OreTint tint,
+  std::uint32_t width,
+  std::uint32_t height,
+  float radius,
+  float heat_r,
+  float heat_g,
+  float heat_b
+) {
+  const hyperverse::Vec3 radial = normalize_or_zero(point);
+  const hyperverse::Vec3 light = normalize_or_zero({.x = -0.35F, .y = -0.45F, .z = 0.82F});
+  const float face_lit = std::max(0.0F, std::abs(dot(normal, light)));
+  const float soft_lit = std::max(0.0F, dot(normalize_or_zero(rotated_point), light));
+  const float depth_shade = std::clamp(0.92F + (rotated_point.z / std::max(radius, 1.0F)) * 0.12F, 0.78F, 1.06F);
+  const float height_shade = std::clamp(0.84F + (std::sqrt(dot(point, point)) / std::max(radius, 1.0F)) * 0.34F, 0.72F, 1.08F);
+  const float freckle = surface_noise((radial * 8.0F) + hyperverse::Vec3{.x = 0.31F, .y = 0.67F, .z = 0.19F});
+  const float shade = (0.32F + (face_lit * 0.30F) + (soft_lit * 0.20F)) * depth_shade * height_shade;
+  const float mineral = 0.88F + (freckle * 0.20F);
+  return {
+    .x_ndc = center.x + ((rotated_point.x * hyperverse::PixelsPerWorldUnit * 2.0F) / static_cast<float>(width)),
+    .y_ndc = center.y + ((rotated_point.y * hyperverse::PixelsPerWorldUnit * 2.0F) / static_cast<float>(height)),
+    .u = (radial.x * 0.52F) + (radial.z * 0.27F) + (point.x / std::max(radius, 1.0F)),
+    .v = (radial.y * 0.52F) - (radial.z * 0.23F) + (point.y / std::max(radius, 1.0F)),
+    .r = std::clamp(tint.r * heat_r * shade * mineral, 0.04F, 1.0F),
+    .g = std::clamp(tint.g * heat_g * shade * (0.92F + (freckle * 0.16F)), 0.04F, 1.0F),
+    .b = std::clamp(tint.b * heat_b * shade * (0.86F + (freckle * 0.18F)), 0.04F, 1.0F),
+  };
 }
 
 [[nodiscard]] hyperverse::Vec3 rotate_mesh_point(hyperverse::Vec3 point, hyperverse::Vec3 angles) {
@@ -156,26 +205,29 @@ void add_asteroid_mesh(
     const float lit = std::max(0.0F, std::abs(dot(normal, light)));
     const float depth = (a.z + b.z + c.z) / 3.0F;
     const float depth_shade = std::clamp(0.92F + (depth / std::max(asteroid.radius, 1.0F)) * 0.12F, 0.78F, 1.06F);
-    const float shade = (0.42F + (lit * 0.46F)) * depth_shade;
+    const float shade = 0.92F + (lit * 0.08F) + ((depth_shade - 1.0F) * 0.25F);
     const hyperverse::AsteroidMeshVertex& av = geometry.vertices[triangle.a];
     const hyperverse::AsteroidMeshVertex& bv = geometry.vertices[triangle.b];
     const hyperverse::AsteroidMeshVertex& cv = geometry.vertices[triangle.c];
-    const float base_r = ((av.r + bv.r + cv.r) / 3.0F) * tint.r * heat_r * shade;
-    const float base_g = ((av.g + bv.g + cv.g) / 3.0F) * tint.g * heat_g * shade;
-    const float base_b = ((av.b + bv.b + cv.b) / 3.0F) * tint.b * heat_b * shade;
+    hyperverse::TriangleVertexDraw draw_a = asteroid_triangle_vertex(av.position, a, normal, center, tint, width, height, asteroid.radius, heat_r, heat_g, heat_b);
+    hyperverse::TriangleVertexDraw draw_b = asteroid_triangle_vertex(bv.position, b, normal, center, tint, width, height, asteroid.radius, heat_r, heat_g, heat_b);
+    hyperverse::TriangleVertexDraw draw_c = asteroid_triangle_vertex(cv.position, c, normal, center, tint, width, height, asteroid.radius, heat_r, heat_g, heat_b);
+    draw_a.r *= av.r * shade;
+    draw_a.g *= av.g * shade;
+    draw_a.b *= av.b * shade;
+    draw_b.r *= bv.r * shade;
+    draw_b.g *= bv.g * shade;
+    draw_b.b *= bv.b * shade;
+    draw_c.r *= cv.r * shade;
+    draw_c.g *= cv.g * shade;
+    draw_c.b *= cv.b * shade;
     pending.push_back(
       PendingTriangle{
         .depth = depth,
         .draw = {
-          .ax_ndc = center.x + ((a.x * hyperverse::PixelsPerWorldUnit * 2.0F) / static_cast<float>(width)),
-          .ay_ndc = center.y + ((a.y * hyperverse::PixelsPerWorldUnit * 2.0F) / static_cast<float>(height)),
-          .bx_ndc = center.x + ((b.x * hyperverse::PixelsPerWorldUnit * 2.0F) / static_cast<float>(width)),
-          .by_ndc = center.y + ((b.y * hyperverse::PixelsPerWorldUnit * 2.0F) / static_cast<float>(height)),
-          .cx_ndc = center.x + ((c.x * hyperverse::PixelsPerWorldUnit * 2.0F) / static_cast<float>(width)),
-          .cy_ndc = center.y + ((c.y * hyperverse::PixelsPerWorldUnit * 2.0F) / static_cast<float>(height)),
-          .r = std::clamp(base_r, 0.04F, 1.0F),
-          .g = std::clamp(base_g, 0.04F, 1.0F),
-          .b = std::clamp(base_b, 0.04F, 1.0F),
+          .a = draw_a,
+          .b = draw_b,
+          .c = draw_c,
         },
       }
     );

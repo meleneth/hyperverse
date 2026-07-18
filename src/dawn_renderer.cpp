@@ -60,6 +60,17 @@ struct LineVertex {
   float a{};
 };
 
+struct TriangleVertex {
+  float x{};
+  float y{};
+  float u{};
+  float v{};
+  float r{};
+  float g{};
+  float b{};
+  float a{};
+};
+
 [[nodiscard]] LoadedSprite crop_rgba(
   const SpriteAlphaMask& source,
   const std::uint32_t x,
@@ -829,39 +840,66 @@ fn fs_main(input: LineOutput) -> @location(0) vec4f {
     constexpr std::string_view shader = R"(
 struct TriangleInput {
   @location(0) position: vec2f,
-  @location(1) color: vec4f,
+  @location(1) surface: vec2f,
+  @location(2) color: vec4f,
 };
 
 struct TriangleOutput {
   @builtin(position) position: vec4f,
-  @location(0) color: vec4f,
+  @location(0) surface: vec2f,
+  @location(1) color: vec4f,
 };
 
 @vertex
 fn vs_main(input: TriangleInput) -> TriangleOutput {
   var output: TriangleOutput;
   output.position = vec4f(input.position, 0.0, 1.0);
+  output.surface = input.surface;
   output.color = input.color;
   return output;
 }
 
+fn hash21(p: vec2f) -> f32 {
+  let h = dot(p, vec2f(127.1, 311.7));
+  return fract(sin(h) * 43758.5453123);
+}
+
+fn value_noise(p: vec2f) -> f32 {
+  let i = floor(p);
+  let f = fract(p);
+  let u = f * f * (3.0 - (2.0 * f));
+  return mix(
+    mix(hash21(i + vec2f(0.0, 0.0)), hash21(i + vec2f(1.0, 0.0)), u.x),
+    mix(hash21(i + vec2f(0.0, 1.0)), hash21(i + vec2f(1.0, 1.0)), u.x),
+    u.y
+  );
+}
+
 @fragment
 fn fs_main(input: TriangleOutput) -> @location(0) vec4f {
-  return input.color;
+  let coarse = value_noise(input.surface * 8.0);
+  let fine = value_noise((input.surface * 29.0) + vec2f(17.0, 5.0));
+  let strata = sin((input.surface.x * 31.0) + (input.surface.y * 11.0) + (fine * 2.4));
+  let mottled = 0.78 + (coarse * 0.22) + (fine * 0.12) + (strata * 0.045);
+  let vein = smoothstep(0.82, 1.0, value_noise((input.surface * 13.0) + vec2f(3.0, 19.0))) * 0.08;
+  return vec4f(input.color.rgb * (mottled + vein), input.color.a);
 }
 )";
 
     wgpu::ShaderModule module = create_shader_module(device_, shader);
-    std::array<wgpu::VertexAttribute, 2> attributes{};
+    std::array<wgpu::VertexAttribute, 3> attributes{};
     attributes[0].format = wgpu::VertexFormat::Float32x2;
-    attributes[0].offset = offsetof(LineVertex, x);
+    attributes[0].offset = offsetof(TriangleVertex, x);
     attributes[0].shaderLocation = 0;
-    attributes[1].format = wgpu::VertexFormat::Float32x4;
-    attributes[1].offset = offsetof(LineVertex, r);
+    attributes[1].format = wgpu::VertexFormat::Float32x2;
+    attributes[1].offset = offsetof(TriangleVertex, u);
     attributes[1].shaderLocation = 1;
+    attributes[2].format = wgpu::VertexFormat::Float32x4;
+    attributes[2].offset = offsetof(TriangleVertex, r);
+    attributes[2].shaderLocation = 2;
 
     wgpu::VertexBufferLayout vertex_buffer{};
-    vertex_buffer.arrayStride = sizeof(LineVertex);
+    vertex_buffer.arrayStride = sizeof(TriangleVertex);
     vertex_buffer.attributeCount = attributes.size();
     vertex_buffer.attributes = attributes.data();
 
@@ -966,15 +1004,21 @@ fn fs_main(input: TriangleOutput) -> @location(0) vec4f {
       return;
     }
 
-    std::vector<LineVertex> vertices;
+    std::vector<TriangleVertex> vertices;
     vertices.reserve(triangles.size() * 3U);
     for (const TriangleDraw& triangle : triangles) {
-      vertices.push_back(LineVertex{.x = triangle.ax_ndc, .y = -triangle.ay_ndc, .r = triangle.r, .g = triangle.g, .b = triangle.b, .a = triangle.a});
-      vertices.push_back(LineVertex{.x = triangle.bx_ndc, .y = -triangle.by_ndc, .r = triangle.r, .g = triangle.g, .b = triangle.b, .a = triangle.a});
-      vertices.push_back(LineVertex{.x = triangle.cx_ndc, .y = -triangle.cy_ndc, .r = triangle.r, .g = triangle.g, .b = triangle.b, .a = triangle.a});
+      vertices.push_back(
+        TriangleVertex{.x = triangle.a.x_ndc, .y = -triangle.a.y_ndc, .u = triangle.a.u, .v = triangle.a.v, .r = triangle.a.r, .g = triangle.a.g, .b = triangle.a.b, .a = triangle.a.a}
+      );
+      vertices.push_back(
+        TriangleVertex{.x = triangle.b.x_ndc, .y = -triangle.b.y_ndc, .u = triangle.b.u, .v = triangle.b.v, .r = triangle.b.r, .g = triangle.b.g, .b = triangle.b.b, .a = triangle.b.a}
+      );
+      vertices.push_back(
+        TriangleVertex{.x = triangle.c.x_ndc, .y = -triangle.c.y_ndc, .u = triangle.c.u, .v = triangle.c.v, .r = triangle.c.r, .g = triangle.c.g, .b = triangle.c.b, .a = triangle.c.a}
+      );
     }
 
-    const wgpu::Buffer vertex_buffer = transient_buffer(vertices.data(), sizeof(LineVertex) * vertices.size());
+    const wgpu::Buffer vertex_buffer = transient_buffer(vertices.data(), sizeof(TriangleVertex) * vertices.size());
     pass.SetPipeline(triangle_pipeline_);
     pass.SetVertexBuffer(0, vertex_buffer);
     pass.Draw(static_cast<std::uint32_t>(vertices.size()));

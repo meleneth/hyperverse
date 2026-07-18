@@ -118,3 +118,34 @@ TEST_CASE("sprite frame renders generated asteroid geometry as triangles") {
 
   CHECK_FALSE(frame.triangles.empty());
 }
+
+TEST_CASE("sprite frame asteroid triangles carry procedural surface variation") {
+  hyperverse::test::TestAccountWorld world;
+  hyperverse::AccountCtx account = world.account_context();
+  const hyperverse::VerticalSliceEntities entities = hyperverse::seed_vertical_slice(account);
+
+  const hyperverse::SpriteFrame frame = hyperverse::build_sprite_frame(
+    account,
+    entities.player,
+    entities.mining_drones,
+    entities.raider,
+    {},
+    {},
+    hyperverse::default_sector(),
+    1920,
+    1080
+  );
+
+  REQUIRE_FALSE(frame.triangles.empty());
+
+  bool has_varying_color = false;
+  bool has_surface_coordinates = false;
+  for (const hyperverse::TriangleDraw& triangle : frame.triangles) {
+    has_varying_color = has_varying_color || std::abs(triangle.a.r - triangle.b.r) > 0.001F || std::abs(triangle.b.r - triangle.c.r) > 0.001F ||
+                        std::abs(triangle.a.g - triangle.b.g) > 0.001F || std::abs(triangle.b.g - triangle.c.g) > 0.001F;
+    has_surface_coordinates = has_surface_coordinates || std::abs(triangle.a.u - triangle.b.u) > 0.001F || std::abs(triangle.b.v - triangle.c.v) > 0.001F;
+  }
+
+  CHECK(has_varying_color);
+  CHECK(has_surface_coordinates);
+}
