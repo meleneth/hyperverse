@@ -42,6 +42,7 @@ struct RaiderShip {
   float max_integrity{120.0F};
   float facing_radians{0.0F};
   float orbit_radians{0.0F};
+  float cloak_fade_seconds{0.0F};
 };
 
 struct RaiderTuning {
@@ -54,6 +55,9 @@ struct RaiderTuning {
   float combat_orbit_y_radius{620.0F};
   float combat_orbit_radians_per_second{0.72F};
   float combat_orbit_arrival_tolerance{90.0F};
+  float combat_acceleration{720.0F};
+  float combat_damping{0.92F};
+  float cloak_fade_seconds{1.15F};
 };
 
 void spawn_gate_combat_raiders(

@@ -106,6 +106,7 @@ VerticalSliceEntities seed_vertical_slice(AccountCtx& account) {
         .work_angle_radians = angle,
       }
     );
+    account.registry().emplace<ParticleCannonModel>(drone_entity);
     account.registry().emplace<EngineTrailModel>(drone_entity);
     entities.mining_drones.push_back(drone_entity);
   }

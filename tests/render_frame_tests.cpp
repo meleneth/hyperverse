@@ -119,3 +119,40 @@ TEST_CASE("sprite frame includes deterministic parallax starfield") {
   CHECK(saw_changed_position);
   CHECK(saw_different_shades);
 }
+
+TEST_CASE("sprite frame fades active raiders in from cloak") {
+  TestAccountWorld world;
+  hyperverse::AccountCtx account = world.account_context();
+  const hyperverse::VerticalSliceEntities entities = hyperverse::seed_vertical_slice(account);
+  hyperverse::ShipMotion& ship = account.registry().get<hyperverse::ShipMotion>(entities.player);
+  const hyperverse::SectorTuning sector = hyperverse::default_sector();
+  const hyperverse::SemanticInputFrame input{};
+  const entt::entity raider = account.registry().create();
+  account.registry().emplace<hyperverse::RaiderShip>(
+    raider,
+    hyperverse::RaiderShip{
+      .position = {.x = ship.position.x + 300.0F, .y = ship.position.y},
+      .role = hyperverse::RaiderRole::Combat,
+      .cloak_fade_seconds = 0.575F,
+    }
+  );
+
+  const hyperverse::SpriteFrame frame = hyperverse::build_sprite_frame(
+    account,
+    entities.player,
+    entities.mining_drones,
+    entities.raider,
+    hyperverse::make_flight_hud_snapshot(ship, input, {}, sector),
+    input,
+    sector,
+    1280,
+    720
+  );
+
+  const auto visible_raider = std::ranges::find_if(frame.sprites, [](const hyperverse::SpriteDraw& sprite) {
+    return sprite.texture == hyperverse::SpriteTexture::Drone && sprite.tint_r == Catch::Approx(0.95F);
+  });
+
+  REQUIRE(visible_raider != frame.sprites.end());
+  CHECK(visible_raider->tint_a == Catch::Approx(0.5F));
+}

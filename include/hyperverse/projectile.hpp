@@ -1,6 +1,7 @@
 #pragma once
 
 #include "hyperverse/asteroid_fragmentation.hpp"
+#include "hyperverse/drone.hpp"
 #include "hyperverse/flight.hpp"
 #include "hyperverse/game_context.hpp"
 #include "hyperverse/input.hpp"
@@ -43,10 +44,12 @@ struct ParticleCannonTuning {
   float projectile_radius{10.0F};
   float damage{22.0F};
   float fire_interval_seconds{0.25F};
+  float drone_fire_interval_seconds{0.50F};
   float raider_fire_interval_seconds{0.68F};
   float muzzle_forward_offset{46.0F};
   float muzzle_side_offset{14.0F};
   float raider_fire_range{1800.0F};
+  float drone_player_clearance{86.0F};
   float asteroid_kinetic_impulse_scale{0.18F};
   float asteroid_angular_impulse_scale{0.12F};
   AsteroidImpactKind impact_kind{AsteroidImpactKind::Kinetic};
@@ -98,6 +101,13 @@ private:
   const ParticleCannonTuning& tuning = {}
 );
 
+[[nodiscard]] std::optional<ParticleCannonFireCommand> request_drone_particle_fire(
+  WeaponCtx ctx,
+  EntityCtx player,
+  WeaponTrigger trigger,
+  const ParticleCannonTuning& tuning = {}
+);
+
 void spawn_requested_particle_fire(
   WeaponCtx ctx,
   const ParticleCannonFireCommand& command,
@@ -130,6 +140,13 @@ void update_player_particle_cannon(
 void update_raider_particle_cannon(
   WeaponCtx ctx,
   EntityCtx target,
+  WeaponTrigger trigger,
+  const ParticleCannonTuning& tuning = {}
+);
+
+void update_drone_particle_cannon(
+  WeaponCtx ctx,
+  EntityCtx player,
   WeaponTrigger trigger,
   const ParticleCannonTuning& tuning = {}
 );

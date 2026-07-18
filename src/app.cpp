@@ -394,6 +394,17 @@ private:
         )) {
       spawn_requested_particle_fire(player_weapon, *player_fire, particle_cannon_tuning_);
     }
+    for (entt::entity drone_entity : entities_.mining_drones) {
+      WeaponCtx drone_weapon{tick_ctx.entity_context(drone_entity)};
+      if (const std::optional<ParticleCannonFireCommand> drone_fire = request_drone_particle_fire(
+            drone_weapon,
+            tick_ctx.entity_context(player_),
+            WeaponTrigger{.aim = latest_intent_.primary_aim, .active = latest_intent_.particle_fire_active},
+            particle_cannon_tuning_
+          )) {
+        spawn_requested_particle_fire(drone_weapon, *drone_fire, particle_cannon_tuning_);
+      }
+    }
     for (const auto& [raider_entity, current_raider] : active_raiders) {
       WeaponCtx raider_weapon{tick_ctx.entity_context(raider_entity)};
       if (const std::optional<ParticleCannonFireCommand> raider_fire = request_raider_particle_fire(

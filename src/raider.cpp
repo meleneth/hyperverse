@@ -78,24 +78,19 @@ void update_raider_facing(RaiderShip& raider) {
   }
 }
 
-void move_raider_toward(RaiderShip& raider, Vec2 target, const SectorTuning& sector, float dt_seconds, float max_speed) {
+void accelerate_raider_toward(RaiderShip& raider, Vec2 target, const SectorTuning& sector, float dt_seconds, float max_speed, const RaiderTuning& tuning) {
   const float scaled_dt = std::max(0.0F, dt_seconds);
-  const Vec2 delta = wrapped_delta(raider.position, target, sector);
-  const float distance = length(delta);
-  if (scaled_dt <= 0.0F || distance <= 0.001F) {
-    raider.velocity = {};
+  if (scaled_dt <= 0.0F) {
     return;
   }
 
-  const Vec2 desired_velocity = normalize_or_zero(delta) * max_speed;
-  const Vec2 step = desired_velocity * scaled_dt;
-  if (length(step) >= distance) {
-    raider.velocity = delta * (1.0F / std::max(scaled_dt, std::numeric_limits<float>::epsilon()));
-    raider.position = wrap_position(target, sector);
-  } else {
-    raider.velocity = desired_velocity;
-    raider.position = wrap_position(raider.position + step, sector);
-  }
+  const Vec2 delta = wrapped_delta(raider.position, target, sector);
+  const float distance = length(delta);
+  const Vec2 desired_direction = distance > 0.001F ? normalize_or_zero(delta) : normalize_or_zero(raider.velocity);
+  const Vec2 desired_velocity = desired_direction * max_speed;
+  const Vec2 steering = clamp_length(desired_velocity - raider.velocity, tuning.combat_acceleration * scaled_dt);
+  raider.velocity = clamp_length((raider.velocity + steering) * tuning.combat_damping, max_speed);
+  raider.position = wrap_position(raider.position + (raider.velocity * scaled_dt), sector);
   update_raider_facing(raider);
 }
 
@@ -152,7 +147,7 @@ void update_combat_raider(RaiderShip& raider, const ShipMotion& ship, const Sect
   const float distance_to_orbit = length(wrapped_delta(raider.position, desired_position, sector));
 
   raider.phase = distance_to_orbit > tuning.combat_orbit_arrival_tolerance ? RaiderPhase::Approaching : RaiderPhase::Disrupting;
-  move_raider_toward(raider, desired_position, sector, scaled_dt, tuning.max_speed * speed_scale);
+  accelerate_raider_toward(raider, desired_position, sector, scaled_dt, tuning.max_speed * speed_scale, tuning);
 }
 
 }  // namespace
@@ -219,6 +214,7 @@ RaiderHudSnapshot update_raider_threat(
   }
 
   raider.task = select_raider_task(raider, registry, escort);
+  raider.cloak_fade_seconds = std::min(tuning.cloak_fade_seconds, raider.cloak_fade_seconds + std::max(0.0F, dt_seconds));
   if (raider.role == RaiderRole::Combat) {
     const Vec2 to_player = wrapped_delta(raider.position, ship.position, sector);
     const float player_distance = length(to_player);

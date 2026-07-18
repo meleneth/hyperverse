@@ -71,6 +71,79 @@ void replay_phase(sml::sm<ParticleCannonMachine>& machine, ParticleCannonPhase p
   return tuning;
 }
 
+[[nodiscard]] ParticleCannonTuning drone_cannon_tuning(ParticleCannonTuning tuning) {
+  tuning.fire_interval_seconds = tuning.drone_fire_interval_seconds;
+  return tuning;
+}
+
+[[nodiscard]] Vec2 perpendicular(Vec2 direction) {
+  return {.x = -direction.y, .y = direction.x};
+}
+
+[[nodiscard]] float cross(Vec2 lhs, Vec2 rhs) {
+  return (lhs.x * rhs.y) - (lhs.y * rhs.x);
+}
+
+[[nodiscard]] Vec2 lead_target_direction(Vec2 origin, Vec2 source_velocity, const ShipMotion& target, const SectorTuning& sector, float projectile_speed) {
+  const Vec2 to_target = wrapped_delta(origin, target.position, sector);
+  const Vec2 relative_velocity = target.velocity - source_velocity;
+  const float speed_squared = projectile_speed * projectile_speed;
+  const float a = dot(relative_velocity, relative_velocity) - speed_squared;
+  const float b = 2.0F * dot(to_target, relative_velocity);
+  const float c = dot(to_target, to_target);
+  float intercept_seconds = 0.0F;
+
+  if (std::abs(a) <= 0.0001F) {
+    if (std::abs(b) > 0.0001F) {
+      intercept_seconds = std::max(0.0F, -c / b);
+    }
+  } else {
+    const float discriminant = (b * b) - (4.0F * a * c);
+    if (discriminant >= 0.0F) {
+      const float root = std::sqrt(discriminant);
+      const float first = (-b - root) / (2.0F * a);
+      const float second = (-b + root) / (2.0F * a);
+      if (first > 0.0F && second > 0.0F) {
+        intercept_seconds = std::min(first, second);
+      } else {
+        intercept_seconds = std::max(first, second);
+      }
+      intercept_seconds = std::clamp(intercept_seconds, 0.0F, 1.4F);
+    }
+  }
+
+  Vec2 direction = normalize_or_zero(to_target + (relative_velocity * intercept_seconds));
+  if (length(direction) <= 0.0001F) {
+    direction = normalize_or_zero(to_target);
+  }
+  return direction;
+}
+
+[[nodiscard]] Vec2 drone_clear_muzzle_origin(
+  const MiningDrone& drone,
+  const ShipMotion& player,
+  Vec2 fire_direction,
+  const SectorTuning& sector,
+  const ParticleCannonTuning& tuning
+) {
+  const Vec2 right = perpendicular(fire_direction);
+  const Vec2 drone_to_player = wrapped_delta(drone.position, player.position, sector);
+  const float lateral = dot(drone_to_player, right);
+  const float required_clearance = tuning.drone_player_clearance + tuning.muzzle_side_offset;
+  if (std::abs(lateral) >= required_clearance) {
+    return drone.position;
+  }
+
+  float side = lateral < 0.0F ? -1.0F : 1.0F;
+  if (std::abs(lateral) <= 0.001F) {
+    side = cross(fire_direction, drone_to_player) < 0.0F ? -1.0F : 1.0F;
+    if (std::abs(cross(fire_direction, drone_to_player)) <= 0.001F) {
+      side = std::sin(drone.work_angle_radians) < 0.0F ? -1.0F : 1.0F;
+    }
+  }
+  return wrap_position(drone.position + (right * side * (required_clearance - std::abs(lateral))), sector);
+}
+
 void apply_projectile_damage(
   entt::registry& registry,
   entt::entity asteroid_entity,
@@ -225,9 +298,37 @@ std::optional<ParticleCannonFireCommand> request_raider_particle_fire(
 
   return ParticleCannonFireCommand{
     .origin = raider.position,
-    .direction = normalize_or_zero(to_target),
+    .direction = lead_target_direction(raider.position, raider.velocity, target_motion, ctx.sector(), tuning.projectile_speed),
     .source_velocity = raider.velocity,
     .owner = ProjectileOwner::Raider,
+  };
+}
+
+std::optional<ParticleCannonFireCommand> request_drone_particle_fire(
+  WeaponCtx ctx,
+  EntityCtx player,
+  WeaponTrigger trigger,
+  const ParticleCannonTuning& tuning
+) {
+  const EntityCtx drone_entity = ctx.entity_context();
+  const MiningDrone& drone = drone_entity.get<MiningDrone>();
+  if (drone.phase != MiningDronePhase::Idle) {
+    (void)advance_particle_cannon_fsm(ctx.cannon(), false, ctx.dt(), drone_cannon_tuning(tuning));
+    return std::nullopt;
+  }
+
+  const ShipMotion& ship = player.get<ShipMotion>();
+  const Vec2 fallback = facing_direction(ship.facing_radians);
+  const Vec2 direction = length(trigger.aim) > 0.0F ? normalize_or_zero(trigger.aim) : fallback;
+  if (!advance_particle_cannon_fsm(ctx.cannon(), trigger.active && length(direction) > 0.0001F, ctx.dt(), drone_cannon_tuning(tuning))) {
+    return std::nullopt;
+  }
+
+  return ParticleCannonFireCommand{
+    .origin = drone_clear_muzzle_origin(drone, ship, direction, ctx.sector(), tuning),
+    .direction = direction,
+    .source_velocity = drone.velocity,
+    .owner = ProjectileOwner::Player,
   };
 }
 
@@ -286,6 +387,17 @@ void update_raider_particle_cannon(
   const ParticleCannonTuning& tuning
 ) {
   if (const std::optional<ParticleCannonFireCommand> command = request_raider_particle_fire(ctx, target, trigger, tuning)) {
+    spawn_requested_particle_fire(ctx, *command, tuning);
+  }
+}
+
+void update_drone_particle_cannon(
+  WeaponCtx ctx,
+  EntityCtx player,
+  WeaponTrigger trigger,
+  const ParticleCannonTuning& tuning
+) {
+  if (const std::optional<ParticleCannonFireCommand> command = request_drone_particle_fire(ctx, player, trigger, tuning)) {
     spawn_requested_particle_fire(ctx, *command, tuning);
   }
 }

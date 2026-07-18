@@ -298,3 +298,90 @@ TEST_CASE("raider particle cannon uses slower dedicated cadence") {
   );
   CHECK(particle_count(account.registry()) == 4);
 }
+
+TEST_CASE("following drones fire past the player at half player cadence") {
+  TestAccountWorld world;
+  hyperverse::AccountCtx account = world.account_context();
+  const entt::entity player = make_player(world, {.x = 200.0F, .y = 100.0F});
+  const entt::entity drone = world.registry.create();
+  world.registry.emplace<hyperverse::MiningDrone>(
+    drone,
+    hyperverse::MiningDrone{.position = {.x = 100.0F, .y = 100.0F}, .phase = hyperverse::MiningDronePhase::Idle}
+  );
+  world.registry.emplace<hyperverse::ParticleCannonModel>(drone);
+  const hyperverse::ParticleCannonTuning tuning{
+    .projectile_speed = 100.0F,
+    .fire_interval_seconds = 0.25F,
+    .drone_fire_interval_seconds = 0.50F,
+    .drone_player_clearance = 86.0F,
+  };
+
+  hyperverse::update_drone_particle_cannon(
+    hyperverse::WeaponCtx{tick_context(account, 0.0F).entity_context(drone)},
+    tick_context(account, 0.0F).entity_context(player),
+    {.aim = {.x = 1.0F, .y = 0.0F}, .active = true},
+    tuning
+  );
+  hyperverse::update_drone_particle_cannon(
+    hyperverse::WeaponCtx{tick_context(account, 0.25F).entity_context(drone)},
+    tick_context(account, 0.25F).entity_context(player),
+    {.aim = {.x = 1.0F, .y = 0.0F}, .active = true},
+    tuning
+  );
+
+  CHECK(particle_count(account.registry()) == 2);
+  for (auto [entity, shot] : account.registry().view<hyperverse::ParticleShot>().each()) {
+    (void)entity;
+    CHECK(shot.owner == hyperverse::ProjectileOwner::Player);
+    CHECK(std::abs(shot.position.y - world.registry.get<hyperverse::ShipMotion>(player).position.y) >= tuning.drone_player_clearance);
+  }
+
+  hyperverse::update_drone_particle_cannon(
+    hyperverse::WeaponCtx{tick_context(account, 0.25F).entity_context(drone)},
+    tick_context(account, 0.25F).entity_context(player),
+    {.aim = {.x = 1.0F, .y = 0.0F}, .active = true},
+    tuning
+  );
+  CHECK(particle_count(account.registry()) == 4);
+}
+
+TEST_CASE("working drones do not fire while away from player formation") {
+  TestAccountWorld world;
+  hyperverse::AccountCtx account = world.account_context();
+  const entt::entity player = make_player(world, {.x = 200.0F, .y = 100.0F});
+  const entt::entity drone = world.registry.create();
+  world.registry.emplace<hyperverse::MiningDrone>(
+    drone,
+    hyperverse::MiningDrone{.position = {.x = 100.0F, .y = 100.0F}, .phase = hyperverse::MiningDronePhase::Mining}
+  );
+  world.registry.emplace<hyperverse::ParticleCannonModel>(drone);
+
+  hyperverse::update_drone_particle_cannon(
+    hyperverse::WeaponCtx{tick_context(account, 0.0F).entity_context(drone)},
+    tick_context(account, 0.0F).entity_context(player),
+    {.aim = {.x = 1.0F, .y = 0.0F}, .active = true}
+  );
+
+  CHECK(particle_count(account.registry()) == 0);
+}
+
+TEST_CASE("raider particle cannon leads a moving player") {
+  TestAccountWorld world;
+  hyperverse::AccountCtx account = world.account_context();
+  const entt::entity player = make_player(world, {.x = 500.0F, .y = 100.0F});
+  world.registry.get<hyperverse::ShipMotion>(player).velocity = {.x = 0.0F, .y = 300.0F};
+  const entt::entity raider = world.registry.create();
+  world.registry.emplace<hyperverse::RaiderShip>(raider, hyperverse::RaiderShip{.position = {.x = 100.0F, .y = 100.0F}});
+  world.registry.emplace<hyperverse::ParticleCannonModel>(raider);
+
+  const std::optional<hyperverse::ParticleCannonFireCommand> command = hyperverse::request_raider_particle_fire(
+    hyperverse::WeaponCtx{tick_context(account, 0.0F).entity_context(raider)},
+    tick_context(account, 0.0F).entity_context(player),
+    {.active = true},
+    {.projectile_speed = 1000.0F}
+  );
+
+  REQUIRE(command.has_value());
+  CHECK(command->direction.x > 0.0F);
+  CHECK(command->direction.y > 0.0F);
+}

@@ -77,5 +77,6 @@ TEST_CASE("vertical slice drones and raiders own engine trail components") {
   CHECK(account.registry().all_of<hyperverse::EngineTrailModel>(entities.raider));
   for (entt::entity drone : entities.mining_drones) {
     CHECK(account.registry().all_of<hyperverse::EngineTrailModel>(drone));
+    CHECK(account.registry().all_of<hyperverse::ParticleCannonModel>(drone));
   }
 }

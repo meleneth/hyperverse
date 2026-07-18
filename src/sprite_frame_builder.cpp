@@ -39,6 +39,7 @@ constexpr std::array<float, 4> StarLayerCellSize{420.0F, 340.0F, 270.0F, 215.0F}
 constexpr std::array<float, 4> StarLayerPixelSize{1.0F, 1.25F, 1.55F, 1.9F};
 constexpr std::array<float, 4> StarLayerBaseGrey{0.20F, 0.32F, 0.46F, 0.62F};
 constexpr std::array<float, 4> StarLayerGreyRange{0.16F, 0.18F, 0.20F, 0.22F};
+constexpr float RaiderCloakFadeSeconds = 1.15F;
 
 [[nodiscard]] hyperverse::SpriteDraw make_world_sprite(
   hyperverse::SpriteTexture texture,
@@ -1099,12 +1100,13 @@ SpriteFrame build_sprite_frame(
       46.0F,
       ship_sprite_rotation(raider.facing_radians)
     );
+    const float cloak_alpha = std::clamp(raider.cloak_fade_seconds / RaiderCloakFadeSeconds, 0.0F, 1.0F);
     if (raider.role == RaiderRole::Combat) {
-      tint_sprite(raider_sprite, 0.95F, 0.18F, 0.14F);
+      tint_sprite(raider_sprite, 0.95F, 0.18F, 0.14F, cloak_alpha);
     } else if (raider.phase == RaiderPhase::Disrupting) {
-      tint_sprite(raider_sprite, 0.86F, 0.32F, 0.12F);
+      tint_sprite(raider_sprite, 0.86F, 0.32F, 0.12F, cloak_alpha);
     } else {
-      tint_sprite(raider_sprite, 0.55F, 0.34F, 0.16F);
+      tint_sprite(raider_sprite, 0.55F, 0.34F, 0.16F, cloak_alpha);
     }
     frame.sprites.push_back(raider_sprite);
   }

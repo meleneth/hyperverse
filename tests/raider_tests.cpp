@@ -252,6 +252,57 @@ TEST_CASE("combat raiders buzz the player in moving oval attack runs") {
   CHECK(combat.orbit_radians == Catch::Approx(0.5F));
 }
 
+TEST_CASE("combat raider movement is acceleration constrained") {
+  entt::registry registry;
+  hyperverse::RaiderShip combat{
+    .position = {.x = 1000.0F, .y = 1000.0F},
+    .role = hyperverse::RaiderRole::Combat,
+  };
+
+  (void)hyperverse::update_raider_threat(
+    combat,
+    registry,
+    {.phase = hyperverse::CargoEscortPhase::Mining},
+    {.position = {.x = 1000.0F, .y = 1000.0F}, .facing_radians = 0.0F},
+    {.width = 9000.0F, .height = 9000.0F},
+    0.1F,
+    {.max_speed = 500.0F, .combat_acceleration = 100.0F, .combat_damping = 1.0F}
+  );
+
+  CHECK(hyperverse::length(combat.velocity) == Catch::Approx(10.0F));
+  CHECK(hyperverse::length(combat.velocity) < 500.0F);
+}
+
+TEST_CASE("active raiders fade in from cloak") {
+  entt::registry registry;
+  hyperverse::RaiderShip combat{
+    .position = {.x = 1000.0F, .y = 1000.0F},
+    .role = hyperverse::RaiderRole::Combat,
+  };
+
+  (void)hyperverse::update_raider_threat(
+    combat,
+    registry,
+    {.phase = hyperverse::CargoEscortPhase::Mining},
+    {.position = {.x = 1000.0F, .y = 1000.0F}, .facing_radians = 0.0F},
+    {.width = 9000.0F, .height = 9000.0F},
+    0.25F,
+    {.cloak_fade_seconds = 1.0F}
+  );
+  CHECK(combat.cloak_fade_seconds == Catch::Approx(0.25F));
+
+  (void)hyperverse::update_raider_threat(
+    combat,
+    registry,
+    {.phase = hyperverse::CargoEscortPhase::Mining},
+    {.position = {.x = 1000.0F, .y = 1000.0F}, .facing_radians = 0.0F},
+    {.width = 9000.0F, .height = 9000.0F},
+    2.0F,
+    {.cloak_fade_seconds = 1.0F}
+  );
+  CHECK(combat.cloak_fade_seconds == Catch::Approx(1.0F));
+}
+
 TEST_CASE("combat raiders switch to cover when a thief is stealing cargo") {
   entt::registry registry;
   const entt::entity thief_entity = registry.create();
