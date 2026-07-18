@@ -56,7 +56,7 @@ constexpr float Pi = 3.14159265358979323846F;
 }
 
 [[nodiscard]] Vec2 local_offset_to_world(const GravitySlingTargetFrame& target, const float local_angle, const float radius) {
-  return target.position + (unit_from_angle(target.rotation_radians + local_angle) * radius);
+  return target.position + (unit_from_angle(local_angle) * radius);
 }
 
 void disengage(
@@ -93,7 +93,7 @@ void disengage(
     hud.target_angular_velocity = target->angular_velocity;
     hud.release_velocity = gravity_sling_release_velocity(
       *target,
-      target->rotation_radians + model.local_angle_radians,
+      model.local_angle_radians,
       model.radius,
       model.relative_angular_velocity,
       model.entry_velocity,
@@ -159,7 +159,8 @@ Vec2 gravity_sling_release_velocity(
   const float entry_velocity_fraction
 ) {
   const Vec2 tangent = tangent_from_angle(world_angle_radians);
-  return target.velocity + (tangent * radius * (target.angular_velocity + relative_angular_velocity)) + (entry_velocity * entry_velocity_fraction);
+  (void)target.angular_velocity;
+  return target.velocity + (tangent * radius * relative_angular_velocity) + (entry_velocity * entry_velocity_fraction);
 }
 
 GravitySlingHudSnapshot update_gravity_sling(
@@ -191,8 +192,10 @@ GravitySlingHudSnapshot update_gravity_sling(
     model.phase = GravitySlingPhase::Engaging;
     model.target = target;
     model.radius = radius;
-    model.local_angle_radians = wrap_angle(angle_of(radial) - target_state.rotation_radians);
-    model.relative_angular_velocity = 0.0F;
+    model.local_angle_radians = wrap_angle(angle_of(radial));
+    const Vec2 tangent = tangent_from_angle(model.local_angle_radians);
+    const Vec2 relative_velocity = ship.velocity - target_state.velocity;
+    model.relative_angular_velocity = radius > 0.0001F ? dot(relative_velocity, tangent) / radius : 0.0F;
     model.engagement_elapsed_seconds = 0.0F;
     model.engagement_start_position = ship.position;
     model.previous_position = ship.position;
@@ -220,7 +223,7 @@ GravitySlingHudSnapshot update_gravity_sling(
       ship,
       gravity_sling_release_velocity(
         target_state,
-        target_state.rotation_radians + model.local_angle_radians,
+        model.local_angle_radians,
         model.radius,
         model.relative_angular_velocity,
         model.entry_velocity,
@@ -231,17 +234,16 @@ GravitySlingHudSnapshot update_gravity_sling(
     return snapshot(model, nullptr, tuning);
   }
 
-  const float world_angle = target_state.rotation_radians + model.local_angle_radians;
-  const Vec2 radial_direction = unit_from_angle(world_angle);
+  const float world_angle = model.local_angle_radians;
   const Vec2 tangent_direction = tangent_from_angle(world_angle);
-  const float radial_input = dot(input.desired_movement, radial_direction);
   const float tangential_input = dot(input.desired_movement, tangent_direction);
 
-  model.radius += radial_input * tuning.radial_adjust_speed * dt;
   model.radius = std::clamp(model.radius, minimum_radius, maximum_radius);
-  const float desired_relative_angular_velocity = tangential_input * tuning.angular_adjust_speed;
-  const float angular_blend = std::clamp(tuning.relative_angular_damping * dt, 0.0F, 1.0F);
-  model.relative_angular_velocity += (desired_relative_angular_velocity - model.relative_angular_velocity) * angular_blend;
+  model.relative_angular_velocity += tangential_input * tuning.angular_adjust_speed * dt;
+  if (tuning.relative_angular_damping > 0.0F && length(input.desired_movement) <= 0.0001F) {
+    const float damping = std::clamp(tuning.relative_angular_damping * dt, 0.0F, 1.0F);
+    model.relative_angular_velocity += (0.0F - model.relative_angular_velocity) * damping;
+  }
   model.local_angle_radians = wrap_angle(model.local_angle_radians + (model.relative_angular_velocity * dt));
 
   const Vec2 target_position = local_offset_to_world(target_state, model.local_angle_radians, model.radius);

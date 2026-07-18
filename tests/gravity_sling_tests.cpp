@@ -135,21 +135,25 @@ TEST_CASE("gravity sling preserves stable relative position under target transla
   CHECK(after.y == Catch::Approx(before.y).margin(0.01F));
 }
 
-TEST_CASE("gravity sling preserves stable relative bearing under target rotation") {
+TEST_CASE("gravity sling ignores target tumble when preserving bearing") {
   entt::registry registry;
   const entt::entity target = asteroid(registry, {.x = 500.0F, .y = 0.0F}, {}, 100.0F, 0.0F);
   hyperverse::GravitySlingModel model{};
   hyperverse::ShipMotion ship{.position = {.x = 250.0F, .y = 0.0F}};
   activate(model, registry, ship);
   const float local_angle = model.local_angle_radians;
+  const hyperverse::Vec2 before = hyperverse::wrapped_delta(registry.get<hyperverse::AsteroidBody>(target).position, ship.position, Sector);
 
   registry.get<hyperverse::AsteroidBody>(target).rotation_radians += 1.0F;
   (void)hyperverse::update_gravity_sling(model, registry, ship, {}, Sector, 0.1F);
+  const hyperverse::Vec2 after = hyperverse::wrapped_delta(registry.get<hyperverse::AsteroidBody>(target).position, ship.position, Sector);
 
   CHECK(model.local_angle_radians == Catch::Approx(local_angle).margin(0.001F));
+  CHECK(after.x == Catch::Approx(before.x).margin(0.01F));
+  CHECK(after.y == Catch::Approx(before.y).margin(0.01F));
 }
 
-TEST_CASE("gravity sling radial adjustment stays within bounds") {
+TEST_CASE("gravity sling radial input cannot change constrained radius") {
   entt::registry registry;
   asteroid(registry, {.x = 500.0F, .y = 0.0F}, {}, 100.0F);
   hyperverse::GravitySlingModel model{};
@@ -159,9 +163,9 @@ TEST_CASE("gravity sling radial adjustment stays within bounds") {
   (void)hyperverse::update_gravity_sling(model, registry, ship, {}, Sector, 0.1F, tuning);
 
   (void)hyperverse::update_gravity_sling(model, registry, ship, {.desired_movement = {.x = -1.0F}}, Sector, 1.0F, tuning);
-  CHECK(model.radius == Catch::Approx(300.0F));
+  CHECK(model.radius == Catch::Approx(250.0F));
   (void)hyperverse::update_gravity_sling(model, registry, ship, {.desired_movement = {.x = 1.0F}}, Sector, 1.0F, tuning);
-  CHECK(model.radius == Catch::Approx(150.0F));
+  CHECK(model.radius == Catch::Approx(250.0F));
 }
 
 TEST_CASE("gravity sling angular adjustment changes local bearing") {
@@ -175,6 +179,20 @@ TEST_CASE("gravity sling angular adjustment changes local bearing") {
   (void)hyperverse::update_gravity_sling(model, registry, ship, {.desired_movement = {.y = -1.0F}}, Sector, 0.5F, {.angular_adjust_speed = 1.0F, .relative_angular_damping = 100.0F});
 
   CHECK(model.local_angle_radians != Catch::Approx(before));
+}
+
+TEST_CASE("gravity sling counter thrust slows relative orbit") {
+  entt::registry registry;
+  asteroid(registry, {.x = 500.0F, .y = 0.0F});
+  hyperverse::GravitySlingModel model{};
+  hyperverse::ShipMotion ship{.position = {.x = 250.0F, .y = 0.0F}, .velocity = {.x = 0.0F, .y = -200.0F}};
+  activate(model, registry, ship);
+  REQUIRE(model.relative_angular_velocity > 0.0F);
+  const float before = model.relative_angular_velocity;
+
+  (void)hyperverse::update_gravity_sling(model, registry, ship, {.desired_movement = {.y = 1.0F}}, Sector, 0.5F, {.angular_adjust_speed = 1.0F});
+
+  CHECK(model.relative_angular_velocity < before);
 }
 
 TEST_CASE("gravity sling release velocity from stationary target") {
@@ -193,14 +211,14 @@ TEST_CASE("gravity sling release velocity from translating target") {
 TEST_CASE("gravity sling release velocity from rotating target") {
   const hyperverse::Vec2 velocity =
     hyperverse::gravity_sling_release_velocity({.angular_velocity = 2.0F}, 0.0F, 150.0F, 0.0F);
-  CHECK(velocity.y == Catch::Approx(300.0F));
+  CHECK(velocity.y == Catch::Approx(0.0F));
 }
 
-TEST_CASE("gravity sling release velocity combines translation and rotation") {
+TEST_CASE("gravity sling release velocity combines translation and relative orbit") {
   const hyperverse::Vec2 velocity =
     hyperverse::gravity_sling_release_velocity({.velocity = {.x = 40.0F, .y = 5.0F}, .angular_velocity = 2.0F}, 0.0F, 150.0F, 1.0F);
   CHECK(velocity.x == Catch::Approx(40.0F));
-  CHECK(velocity.y == Catch::Approx(455.0F));
+  CHECK(velocity.y == Catch::Approx(155.0F));
 }
 
 TEST_CASE("gravity sling target destruction while slinging preserves instantaneous velocity") {
@@ -224,7 +242,7 @@ TEST_CASE("gravity sling explicit player release returns to free flight") {
   entt::registry registry;
   asteroid(registry, {.x = 500.0F, .y = 0.0F}, {}, 100.0F, 0.0F, 2.0F);
   hyperverse::GravitySlingModel model{};
-  hyperverse::ShipMotion ship{.position = {.x = 250.0F, .y = 0.0F}};
+  hyperverse::ShipMotion ship{.position = {.x = 250.0F, .y = 0.0F}, .velocity = {.x = 0.0F, .y = -80.0F}};
   activate(model, registry, ship);
 
   (void)hyperverse::update_gravity_sling(model, registry, ship, {.gravity_sling_requested = true}, Sector, 0.1F);

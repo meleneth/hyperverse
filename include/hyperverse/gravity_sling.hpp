@@ -49,7 +49,7 @@ struct GravitySlingTuning {
   float max_radius_padding{920.0F};
   float radial_adjust_speed{280.0F};
   float angular_adjust_speed{1.7F};
-  float relative_angular_damping{7.0F};
+  float relative_angular_damping{0.0F};
   float release_entry_velocity_fraction{0.0F};
   float radius_break_tolerance{180.0F};
 };
