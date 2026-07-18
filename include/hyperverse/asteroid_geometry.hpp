@@ -33,9 +33,10 @@ struct AsteroidGeometry {
 };
 
 struct AsteroidGeometryTuning {
-  int face_subdivisions{4};
-  float min_radius_scale{0.72F};
-  float max_radius_scale{1.18F};
+  int face_subdivisions{3};
+  float min_radius_scale{0.34F};
+  float max_radius_scale{0.62F};
+  float chip_strength{0.18F};
 };
 
 [[nodiscard]] AsteroidGeometry generate_asteroid_geometry(std::uint32_t seed, float radius, const AsteroidGeometryTuning& tuning = {});

@@ -4,6 +4,7 @@
 #include "hyperverse/sprite_frame_builder.hpp"
 #include "hyperverse/vertical_slice_seed.hpp"
 
+#include <algorithm>
 #include <cmath>
 
 TEST_CASE("asteroid geometry generation is deterministic by seed") {
@@ -21,7 +22,7 @@ TEST_CASE("asteroid geometry generation is deterministic by seed") {
 
 TEST_CASE("asteroid geometry stays inside configured radius envelope") {
   constexpr float radius = 240.0F;
-  const hyperverse::AsteroidGeometryTuning tuning{.min_radius_scale = 0.70F, .max_radius_scale = 1.20F};
+  const hyperverse::AsteroidGeometryTuning tuning{.min_radius_scale = 0.32F, .max_radius_scale = 0.64F};
   const hyperverse::AsteroidGeometry geometry = hyperverse::generate_asteroid_geometry(99U, radius, tuning);
 
   REQUIRE_FALSE(geometry.vertices.empty());
@@ -35,6 +36,38 @@ TEST_CASE("asteroid geometry stays inside configured radius envelope") {
     CHECK(distance >= Catch::Approx(radius * tuning.min_radius_scale).margin(0.001F));
     CHECK(distance <= Catch::Approx(radius * tuning.max_radius_scale).margin(0.001F));
   }
+}
+
+TEST_CASE("asteroid geometry has a chipped non-round silhouette") {
+  constexpr float radius = 260.0F;
+  const hyperverse::AsteroidGeometry geometry = hyperverse::generate_asteroid_geometry(177U, radius);
+
+  float min_distance = std::numeric_limits<float>::max();
+  float max_distance = 0.0F;
+  for (const hyperverse::AsteroidMeshVertex& vertex : geometry.vertices) {
+    const float distance = std::sqrt(
+      (vertex.position.x * vertex.position.x) +
+      (vertex.position.y * vertex.position.y) +
+      (vertex.position.z * vertex.position.z)
+    );
+    min_distance = std::min(min_distance, distance);
+    max_distance = std::max(max_distance, distance);
+  }
+
+  CHECK(max_distance - min_distance >= radius * 0.16F);
+}
+
+TEST_CASE("asteroid geometry visual radius fits inside radar bounds") {
+  constexpr float radius = 300.0F;
+  const hyperverse::AsteroidGeometry geometry = hyperverse::generate_asteroid_geometry(211U, radius);
+
+  float max_xy_radius = 0.0F;
+  for (const hyperverse::AsteroidMeshVertex& vertex : geometry.vertices) {
+    max_xy_radius = std::max(max_xy_radius, std::sqrt((vertex.position.x * vertex.position.x) + (vertex.position.y * vertex.position.y)));
+  }
+
+  const float radar_half_width_world = ((radius * 0.48F) + 18.0F) / (2.0F * hyperverse::PixelsPerWorldUnit);
+  CHECK(max_xy_radius < radar_half_width_world);
 }
 
 TEST_CASE("asteroid tumble advances independently on three axes") {
@@ -59,7 +92,7 @@ TEST_CASE("vertical slice asteroids receive generated render geometry") {
     (void)entity;
     (void)asteroid;
     ++asteroid_count;
-    CHECK(geometry.vertices.size() >= 100U);
+    CHECK(geometry.vertices.size() >= 90U);
     CHECK(geometry.triangles.size() >= 100U);
   }
 

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <numbers>
+#include <vector>
 
 namespace hyperverse {
 namespace {
@@ -29,6 +30,10 @@ struct Rng32 {
 
 [[nodiscard]] Vec3 operator*(Vec3 value, float scale) {
   return {.x = value.x * scale, .y = value.y * scale, .z = value.z * scale};
+}
+
+[[nodiscard]] Vec3 operator-(Vec3 lhs, Vec3 rhs) {
+  return {.x = lhs.x - rhs.x, .y = lhs.y - rhs.y, .z = lhs.z - rhs.z};
 }
 
 [[nodiscard]] float dot(Vec3 lhs, Vec3 rhs) {
@@ -70,6 +75,15 @@ struct Rng32 {
   return value;
 }
 
+[[nodiscard]] float chip_distance(Vec3 direction, const std::vector<Vec3>& chips, const std::vector<float>& depths) {
+  float distance = 0.0F;
+  for (std::size_t index = 0; index < chips.size(); ++index) {
+    const float plane_distance = std::max(0.0F, dot(direction, chips[index]) - 0.42F);
+    distance += depths[index] * plane_distance;
+  }
+  return distance;
+}
+
 }  // namespace
 
 AsteroidGeometry generate_asteroid_geometry(std::uint32_t seed, float radius, const AsteroidGeometryTuning& tuning) {
@@ -96,6 +110,15 @@ AsteroidGeometry generate_asteroid_geometry(std::uint32_t seed, float radius, co
     weights.push_back(rng.range(-0.18F, 0.22F));
   }
 
+  std::vector<Vec3> chips;
+  std::vector<float> chip_depths;
+  chips.reserve(10);
+  chip_depths.reserve(10);
+  for (int index = 0; index < 10; ++index) {
+    chips.push_back(normalize_or_zero({.x = rng.range(-1.0F, 1.0F), .y = rng.range(-1.0F, 1.0F), .z = rng.range(-1.0F, 1.0F)}));
+    chip_depths.push_back(rng.range(0.10F, tuning.chip_strength));
+  }
+
   const int subdivisions = std::clamp(tuning.face_subdivisions, 1, 8);
   const float step = 2.0F / static_cast<float>(subdivisions);
   const float min_radius = radius * tuning.min_radius_scale;
@@ -111,12 +134,20 @@ AsteroidGeometry generate_asteroid_geometry(std::uint32_t seed, float radius, co
         const float u = -1.0F + (static_cast<float>(x) * step);
         const float v = -1.0F + (static_cast<float>(y) * step);
         Vec3 direction = normalize_or_zero(face_point(face, u, v));
-        const float distortion = std::clamp(1.0F + directional_noise(direction, lobes, weights), tuning.min_radius_scale, tuning.max_radius_scale);
-        const float surface_radius = std::clamp(radius * distortion, min_radius, max_radius);
-        const float shade = std::clamp(0.58F + ((distortion - 1.0F) * 0.8F) + rng.range(-0.08F, 0.08F), 0.30F, 0.82F);
+        const float lumpy_radius = 0.54F + (directional_noise(direction, lobes, weights) * 0.62F);
+        const float chipped_radius = lumpy_radius - chip_distance(direction, chips, chip_depths);
+        const float distortion = std::clamp(chipped_radius, tuning.min_radius_scale, tuning.max_radius_scale);
+        Vec3 surface = direction * std::clamp(radius * distortion, min_radius, max_radius);
+        for (std::size_t chip_index = 0; chip_index < chips.size(); ++chip_index) {
+          const float excess = dot(surface, chips[chip_index]) - (radius * (0.32F + chip_depths[chip_index]));
+          if (excess > 0.0F) {
+            surface = surface - (chips[chip_index] * (excess * 0.82F));
+          }
+        }
+        const float shade = std::clamp(0.58F + ((distortion - 0.48F) * 1.1F) + rng.range(-0.10F, 0.10F), 0.26F, 0.86F);
         geometry.vertices.push_back(
           AsteroidMeshVertex{
-            .position = direction * surface_radius,
+            .position = surface,
             .r = shade * rng.range(0.86F, 1.04F),
             .g = shade * rng.range(0.82F, 0.98F),
             .b = shade * rng.range(0.74F, 0.92F),
