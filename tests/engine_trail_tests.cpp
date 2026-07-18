@@ -89,6 +89,35 @@ TEST_CASE("thrust off stops new active engine trail samples") {
   CHECK(model.engines[0].samples[model.engines[0].start].age_seconds == Catch::Approx(0.20F));
 }
 
+TEST_CASE("engine source decays after thrust instead of disappearing between frames") {
+  hyperverse::EngineTrailModel model;
+  hyperverse::ShipMotion ship{.position = {.x = 1000.0F, .y = 1000.0F}};
+  const hyperverse::EngineTrailTuning tuning{.sample_interval_seconds = 0.01F, .source_decay_seconds = 0.25F};
+
+  (void)hyperverse::update_engine_trail(model, ship, thrust(), Sector, 0.02F, tuning);
+  const hyperverse::EngineTrailUpdate update = hyperverse::update_engine_trail(model, ship, {}, Sector, 0.05F, tuning);
+
+  REQUIRE(update.active_sources == 2U);
+  CHECK(update.sources[0].intensity > 0.0F);
+  CHECK(update.sources[0].intensity < 1.0F);
+}
+
+TEST_CASE("player engine trail stays alive during sustained long thrust") {
+  hyperverse::EngineTrailModel model;
+  hyperverse::ShipMotion ship{.position = {.x = 1000.0F, .y = 1000.0F}, .facing_radians = 0.0F};
+  const hyperverse::EngineTrailTuning tuning{};
+
+  for (int tick = 0; tick < 1200; ++tick) {
+    ship.position = hyperverse::wrap_position(ship.position + hyperverse::Vec2{.x = 15.0F, .y = 0.0F}, Sector);
+    (void)hyperverse::update_engine_trail(model, ship, thrust(), Sector, 1.0F / 60.0F, tuning);
+  }
+
+  CHECK(model.active_sources == 2U);
+  CHECK(model.sources[0].intensity == Catch::Approx(1.0F));
+  CHECK(model.engines[0].count >= 2U);
+  CHECK_FALSE(hyperverse::build_engine_trail_ribbon(model.engines[0], Sector, tuning).empty());
+}
+
 TEST_CASE("engine trail reset clears history") {
   hyperverse::EngineTrailModel model;
   hyperverse::ShipMotion ship{.position = {.x = 1000.0F, .y = 1000.0F}};

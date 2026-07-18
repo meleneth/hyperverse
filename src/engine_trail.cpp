@@ -112,6 +112,9 @@ void reset_engine(EngineTrailEngine& engine, Vec2 position, Vec2 direction, floa
   engine.previous_intensity = intensity;
   engine.previous_position = position;
   engine.previous_direction = direction;
+  engine.source_intensity = intensity;
+  engine.source_position = position;
+  engine.source_direction = direction;
   engine.has_previous = true;
 }
 
@@ -187,6 +190,16 @@ EngineTrailUpdate update_engine_trail_from_nozzles(
 
     engine.sample_accumulator_seconds += scaled_dt;
     age_samples(engine, scaled_dt, tuning.sample_lifetime_seconds);
+    if (intensity > 0.001F) {
+      engine.source_intensity = intensity;
+      engine.source_position = position;
+      engine.source_direction = exhaust_direction;
+    } else {
+      const float decay_seconds = std::max(tuning.source_decay_seconds, std::numeric_limits<float>::epsilon());
+      engine.source_intensity = std::max(0.0F, engine.source_intensity - (scaled_dt / decay_seconds));
+      engine.source_position = position;
+      engine.source_direction = exhaust_direction;
+    }
     const bool force_sample = should_force_sample(engine, position, exhaust_direction, intensity, sector, tuning);
     if (force_sample) {
       push_sample(engine, EngineTrailSample{.world_position = position, .exhaust_direction = exhaust_direction, .intensity = intensity});
@@ -207,8 +220,9 @@ EngineTrailUpdate update_engine_trail_from_nozzles(
     engine.previous_intensity = intensity;
     engine.has_previous = true;
 
-    if (intensity > 0.001F) {
-      update.sources[update.active_sources] = EngineSourceDraw{.position = position, .exhaust_direction = exhaust_direction, .intensity = intensity};
+    if (engine.source_intensity > 0.001F && update.active_sources < update.sources.size()) {
+      update.sources[update.active_sources] =
+        EngineSourceDraw{.position = engine.source_position, .exhaust_direction = engine.source_direction, .intensity = engine.source_intensity};
       ++update.active_sources;
     }
   }

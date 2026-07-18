@@ -23,6 +23,7 @@ struct EngineTrailTuning {
   float max_width{30.0F};
   float source_width{22.0F};
   float source_length{30.0F};
+  float source_decay_seconds{0.14F};
   float brightness_multiplier{1.35F};
   float decay_rate{3.8F};
   float exposure_steps{7.0F};
@@ -63,6 +64,9 @@ struct EngineTrailEngine {
   float previous_intensity{0.0F};
   Vec2 previous_position{};
   Vec2 previous_direction{.x = -1.0F, .y = 0.0F};
+  float source_intensity{0.0F};
+  Vec2 source_position{};
+  Vec2 source_direction{.x = -1.0F, .y = 0.0F};
   bool has_previous{false};
 };
 
