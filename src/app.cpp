@@ -12,6 +12,7 @@
 #include "hyperverse/collision.hpp"
 #include "hyperverse/dawn_renderer.hpp"
 #include "hyperverse/drone.hpp"
+#include "hyperverse/engine_trail.hpp"
 #include "hyperverse/fixed_timestep.hpp"
 #include "hyperverse/flight.hpp"
 #include "hyperverse/game_session.hpp"
@@ -183,6 +184,7 @@ private:
     GravitySlingHudSnapshot& gravity_sling_hud = account_.registry().get<GravitySlingHudSnapshot>(player_);
     HudNotice& hud_notice = account_.registry().get<HudNotice>(player_);
     ShipHealth& ship_health = account_.registry().get<ShipHealth>(player_);
+    EngineTrailModel& engine_trail = account_.registry().get<EngineTrailModel>(player_);
     RoundTimer& round_timer = account_.registry().get<RoundTimer>(player_);
     MiningHudSnapshot& mining_hud = account_.registry().get<MiningHudSnapshot>(player_);
     CargoManifest& cargo_manifest = account_.registry().get<CargoManifest>(player_);
@@ -208,6 +210,11 @@ private:
     gravity_sling_hud = update_gravity_sling(gravity_sling, account_.registry(), ship_, sling_input, sector_, timestep_.tick_seconds(), gravity_sling_tuning_);
     if (previous_sling_phase == GravitySlingPhase::FreeFlight && gravity_sling.phase == GravitySlingPhase::FreeFlight) {
       simulate_assisted_flight(account_, ship_, latest_intent_, flight_, sector_, timestep_.tick_seconds());
+    }
+    if (ship_health.armor <= 0.0F) {
+      reset_engine_trail(engine_trail);
+    } else {
+      (void)update_engine_trail(engine_trail, ship_, latest_intent_, sector_, timestep_.tick_seconds(), engine_trail_tuning_);
     }
     update_camera_anchor(camera, ship_, sector_, camera_tuning_, timestep_.tick_seconds());
     update_radar_hud(radar_model, account_.registry(), ship_, sector_, timestep_.tick_seconds(), radar_tuning_);
@@ -352,6 +359,7 @@ private:
   CargoExtractionTuning cargo_extraction_tuning_{};
   SectorPressureTuning pressure_tuning_{.escalation_interval_seconds = 60.0F};
   MiningDroneTuning mining_drone_tuning_{};
+  EngineTrailTuning engine_trail_tuning_{};
   GravitySlingTuning gravity_sling_tuning_{};
   ParticleCannonTuning particle_cannon_tuning_{};
   RaiderTuning raider_tuning_{};

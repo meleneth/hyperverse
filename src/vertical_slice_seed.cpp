@@ -10,6 +10,7 @@
 #include "hyperverse/cargo_train.hpp"
 #include "hyperverse/collision.hpp"
 #include "hyperverse/drone.hpp"
+#include "hyperverse/engine_trail.hpp"
 #include "hyperverse/flight.hpp"
 #include "hyperverse/gravity_sling.hpp"
 #include "hyperverse/hud_notice.hpp"
@@ -91,6 +92,7 @@ VerticalSliceEntities seed_vertical_slice(AccountCtx& account) {
   account.registry().emplace<RaiderHudSnapshot>(entities.player);
   account.registry().emplace<CargoRecoveryHudSnapshot>(entities.player);
   account.registry().emplace<CollisionHudSnapshot>(entities.player);
+  account.registry().emplace<EngineTrailModel>(entities.player);
 
   entities.mining_drones.reserve(8);
   for (int index = 0; index < 8; ++index) {

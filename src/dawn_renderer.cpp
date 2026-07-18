@@ -71,6 +71,14 @@ struct TriangleVertex {
   float a{};
 };
 
+struct EngineTrailGpuVertex {
+  float x{};
+  float y{};
+  float normalized_age{};
+  float intensity{};
+  float side{};
+};
+
 [[nodiscard]] LoadedSprite crop_rgba(
   const SpriteAlphaMask& source,
   const std::uint32_t x,
@@ -315,6 +323,7 @@ struct DawnRenderer::Impl {
     wgpu::CommandEncoder encoder = device_.CreateCommandEncoder();
     wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&pass_descriptor);
     draw_triangles(pass, frame.triangles);
+    draw_engine_trails(pass, frame.engine_trails);
     draw_sprites(pass, frame.sprites);
     draw_lines(pass, frame.lines);
     pass.End();
@@ -355,6 +364,7 @@ struct DawnRenderer::Impl {
       texture_views_.clear();
       textures_.clear();
       line_pipeline_ = {};
+      engine_trail_pipeline_ = {};
       triangle_pipeline_ = {};
       sprite_pipeline_ = {};
       sprite_pipeline_layout_ = {};
@@ -681,6 +691,7 @@ struct DawnRenderer::Impl {
   void create_pipelines() {
     create_sprite_pipeline();
     create_triangle_pipeline();
+    create_engine_trail_pipeline();
     create_line_pipeline();
   }
 
@@ -934,6 +945,111 @@ fn fs_main(input: TriangleOutput) -> @location(0) vec4f {
     triangle_pipeline_ = device_.CreateRenderPipeline(&descriptor);
   }
 
+  void create_engine_trail_pipeline() {
+    constexpr std::string_view shader = R"(
+struct EngineTrailInput {
+  @location(0) position: vec2f,
+  @location(1) normalized_age: f32,
+  @location(2) intensity: f32,
+  @location(3) side: f32,
+};
+
+struct EngineTrailOutput {
+  @builtin(position) position: vec4f,
+  @location(0) normalized_age: f32,
+  @location(1) intensity: f32,
+  @location(2) side: f32,
+};
+
+const exposure_steps: f32 = 7.0;
+const decay_rate: f32 = 3.8;
+const brightness_multiplier: f32 = 1.35;
+const deep_red: vec3f = vec3f(0.90, 0.02, 0.00);
+const warm_edge: vec3f = vec3f(1.00, 0.28, 0.04);
+const hot_center_color: vec3f = vec3f(1.00, 0.92, 0.58);
+const white_core_color: vec3f = vec3f(1.00, 0.98, 0.86);
+
+@vertex
+fn vs_main(input: EngineTrailInput) -> EngineTrailOutput {
+  var output: EngineTrailOutput;
+  output.position = vec4f(input.position, 0.0, 1.0);
+  output.normalized_age = input.normalized_age;
+  output.intensity = input.intensity;
+  output.side = input.side;
+  return output;
+}
+
+@fragment
+fn fs_main(input: EngineTrailOutput) -> @location(0) vec4f {
+  let lateral = clamp(abs(input.side), 0.0, 1.0);
+  let soft_edge = 1.0 - smoothstep(0.04, 1.0, lateral);
+  let hot_center = pow(1.0 - lateral, 5.0);
+  let is_source = select(0.0, 1.0, input.normalized_age < 0.0);
+  let age = max(input.normalized_age, 0.0);
+  let stepped_age = floor(age * exposure_steps) / exposure_steps;
+  let exposure_band = 0.72 + (0.28 * step(0.5, fract(age * exposure_steps)));
+  let fade = mix(exp(-stepped_age * decay_rate) * (1.0 - (age * 0.42)) * exposure_band, 1.0, is_source);
+  let warm = mix(deep_red, warm_edge, clamp(input.intensity, 0.0, 1.0));
+  let heated = mix(warm, hot_center_color, hot_center * 0.72);
+  let source_color = mix(heated, white_core_color, hot_center);
+  let color = mix(heated, source_color, is_source);
+  let source_boost = mix(1.0, 1.8, is_source);
+  let alpha = soft_edge * fade * clamp(input.intensity, 0.0, 1.0);
+  return vec4f(color * alpha * brightness_multiplier * source_boost, alpha);
+}
+)";
+
+    wgpu::ShaderModule module = create_shader_module(device_, shader);
+    std::array<wgpu::VertexAttribute, 4> attributes{};
+    attributes[0].format = wgpu::VertexFormat::Float32x2;
+    attributes[0].offset = offsetof(EngineTrailGpuVertex, x);
+    attributes[0].shaderLocation = 0;
+    attributes[1].format = wgpu::VertexFormat::Float32;
+    attributes[1].offset = offsetof(EngineTrailGpuVertex, normalized_age);
+    attributes[1].shaderLocation = 1;
+    attributes[2].format = wgpu::VertexFormat::Float32;
+    attributes[2].offset = offsetof(EngineTrailGpuVertex, intensity);
+    attributes[2].shaderLocation = 2;
+    attributes[3].format = wgpu::VertexFormat::Float32;
+    attributes[3].offset = offsetof(EngineTrailGpuVertex, side);
+    attributes[3].shaderLocation = 3;
+
+    wgpu::VertexBufferLayout vertex_buffer{};
+    vertex_buffer.arrayStride = sizeof(EngineTrailGpuVertex);
+    vertex_buffer.attributeCount = attributes.size();
+    vertex_buffer.attributes = attributes.data();
+
+    wgpu::BlendState blend{};
+    blend.color.srcFactor = wgpu::BlendFactor::One;
+    blend.color.dstFactor = wgpu::BlendFactor::One;
+    blend.color.operation = wgpu::BlendOperation::Add;
+    blend.alpha.srcFactor = wgpu::BlendFactor::One;
+    blend.alpha.dstFactor = wgpu::BlendFactor::OneMinusSrcAlpha;
+    blend.alpha.operation = wgpu::BlendOperation::Add;
+
+    wgpu::ColorTargetState color_target{};
+    color_target.format = surface_format_;
+    color_target.blend = &blend;
+    color_target.writeMask = wgpu::ColorWriteMask::All;
+
+    wgpu::FragmentState fragment{};
+    fragment.module = module;
+    fragment.entryPoint = "fs_main";
+    fragment.targetCount = 1;
+    fragment.targets = &color_target;
+
+    wgpu::RenderPipelineDescriptor descriptor{};
+    descriptor.vertex.module = module;
+    descriptor.vertex.entryPoint = "vs_main";
+    descriptor.vertex.bufferCount = 1;
+    descriptor.vertex.buffers = &vertex_buffer;
+    descriptor.primitive.topology = wgpu::PrimitiveTopology::TriangleList;
+    descriptor.primitive.cullMode = wgpu::CullMode::None;
+    descriptor.multisample.count = 1;
+    descriptor.fragment = &fragment;
+    engine_trail_pipeline_ = device_.CreateRenderPipeline(&descriptor);
+  }
+
   void create_textures() {
     for (const LoadedSprite& sprite : load_sprite_textures()) {
       wgpu::TextureDescriptor texture_descriptor{};
@@ -1042,6 +1158,29 @@ fn fs_main(input: TriangleOutput) -> @location(0) vec4f {
     pass.Draw(static_cast<std::uint32_t>(vertices.size()));
   }
 
+  void draw_engine_trails(wgpu::RenderPassEncoder& pass, const std::vector<EngineTrailVertexDraw>& trails) {
+    if (trails.empty()) {
+      return;
+    }
+
+    std::vector<EngineTrailGpuVertex> vertices;
+    vertices.reserve(trails.size());
+    for (const EngineTrailVertexDraw& vertex : trails) {
+      vertices.push_back(EngineTrailGpuVertex{
+        .x = vertex.x_ndc,
+        .y = -vertex.y_ndc,
+        .normalized_age = vertex.normalized_age,
+        .intensity = vertex.intensity,
+        .side = vertex.side,
+      });
+    }
+
+    const wgpu::Buffer vertex_buffer = transient_buffer(vertices.data(), sizeof(EngineTrailGpuVertex) * vertices.size());
+    pass.SetPipeline(engine_trail_pipeline_);
+    pass.SetVertexBuffer(0, vertex_buffer);
+    pass.Draw(static_cast<std::uint32_t>(vertices.size()));
+  }
+
   [[nodiscard]] wgpu::Buffer transient_buffer(const void* data, const std::size_t size) {
     wgpu::BufferDescriptor descriptor{};
     descriptor.size = size;
@@ -1073,6 +1212,7 @@ fn fs_main(input: TriangleOutput) -> @location(0) vec4f {
   wgpu::PipelineLayout sprite_pipeline_layout_{};
   wgpu::RenderPipeline sprite_pipeline_{};
   wgpu::RenderPipeline triangle_pipeline_{};
+  wgpu::RenderPipeline engine_trail_pipeline_{};
   wgpu::RenderPipeline line_pipeline_{};
   std::vector<wgpu::Texture> textures_{};
   std::vector<wgpu::TextureView> texture_views_{};

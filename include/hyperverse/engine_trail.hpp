@@ -61,6 +61,8 @@ struct EngineTrailEngine {
 
 struct EngineTrailModel {
   std::array<EngineTrailEngine, 2> engines{};
+  std::array<EngineSourceDraw, 2> sources{};
+  std::size_t active_sources{0U};
 };
 
 struct EngineTrailUpdate {

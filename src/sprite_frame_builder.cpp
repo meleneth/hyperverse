@@ -10,6 +10,7 @@
 #include "hyperverse/cargo_train.hpp"
 #include "hyperverse/collision.hpp"
 #include "hyperverse/drone.hpp"
+#include "hyperverse/engine_trail.hpp"
 #include "hyperverse/gravity_sling.hpp"
 #include "hyperverse/hud_notice.hpp"
 #include "hyperverse/mining.hpp"
@@ -528,6 +529,126 @@ void add_world_link_line(
   });
 }
 
+[[nodiscard]] hyperverse::EngineTrailVertexDraw engine_trail_vertex(
+  hyperverse::Vec2 world_position,
+  hyperverse::Vec2 camera_position,
+  const hyperverse::SectorTuning& sector,
+  std::uint32_t width,
+  std::uint32_t height,
+  float normalized_age,
+  float intensity,
+  float side
+) {
+  const hyperverse::Vec2 ndc = world_to_ndc(world_position, camera_position, sector, width, height);
+  return {
+    .x_ndc = ndc.x,
+    .y_ndc = ndc.y,
+    .normalized_age = normalized_age,
+    .intensity = intensity,
+    .side = side,
+  };
+}
+
+void append_engine_trail_triangle(
+  std::vector<hyperverse::EngineTrailVertexDraw>& vertices,
+  hyperverse::EngineTrailVertexDraw a,
+  hyperverse::EngineTrailVertexDraw b,
+  hyperverse::EngineTrailVertexDraw c
+) {
+  vertices.push_back(a);
+  vertices.push_back(b);
+  vertices.push_back(c);
+}
+
+void append_engine_trail_source(
+  std::vector<hyperverse::EngineTrailVertexDraw>& vertices,
+  const hyperverse::EngineSourceDraw& source,
+  hyperverse::Vec2 camera_position,
+  const hyperverse::SectorTuning& sector,
+  std::uint32_t width,
+  std::uint32_t height,
+  const hyperverse::EngineTrailTuning& tuning
+) {
+  const hyperverse::Vec2 direction = hyperverse::normalize_or_zero(source.exhaust_direction);
+  if (hyperverse::length(direction) <= 0.0001F) {
+    return;
+  }
+  const hyperverse::Vec2 perpendicular{.x = -direction.y, .y = direction.x};
+  const float half_width = tuning.source_width * 0.5F;
+  const float half_length = tuning.source_length * 0.5F;
+  const hyperverse::Vec2 front = source.position - (direction * half_length);
+  const hyperverse::Vec2 rear = source.position + (direction * half_length);
+  const hyperverse::EngineTrailVertexDraw a =
+    engine_trail_vertex(front + (perpendicular * half_width), camera_position, sector, width, height, -0.2F, source.intensity, -1.0F);
+  const hyperverse::EngineTrailVertexDraw b =
+    engine_trail_vertex(front - (perpendicular * half_width), camera_position, sector, width, height, -0.2F, source.intensity, 1.0F);
+  const hyperverse::EngineTrailVertexDraw c =
+    engine_trail_vertex(rear - (perpendicular * half_width), camera_position, sector, width, height, -0.2F, source.intensity, 1.0F);
+  const hyperverse::EngineTrailVertexDraw d =
+    engine_trail_vertex(rear + (perpendicular * half_width), camera_position, sector, width, height, -0.2F, source.intensity, -1.0F);
+  append_engine_trail_triangle(vertices, a, b, c);
+  append_engine_trail_triangle(vertices, a, c, d);
+}
+
+void append_engine_trail_ribbon(
+  std::vector<hyperverse::EngineTrailVertexDraw>& vertices,
+  const hyperverse::EngineTrailEngine& engine,
+  hyperverse::Vec2 camera_position,
+  const hyperverse::SectorTuning& sector,
+  std::uint32_t width,
+  std::uint32_t height,
+  const hyperverse::EngineTrailTuning& tuning
+) {
+  const std::vector<hyperverse::EngineTrailVertex> ribbon = hyperverse::build_engine_trail_ribbon(engine, sector, tuning);
+  if (ribbon.size() < 4U) {
+    return;
+  }
+  for (std::size_t index = 0; index + 3U < ribbon.size(); index += 2U) {
+    const hyperverse::EngineTrailVertexDraw a = engine_trail_vertex(
+      ribbon[index].position,
+      camera_position,
+      sector,
+      width,
+      height,
+      ribbon[index].normalized_age,
+      ribbon[index].intensity,
+      ribbon[index].side
+    );
+    const hyperverse::EngineTrailVertexDraw b = engine_trail_vertex(
+      ribbon[index + 1U].position,
+      camera_position,
+      sector,
+      width,
+      height,
+      ribbon[index + 1U].normalized_age,
+      ribbon[index + 1U].intensity,
+      ribbon[index + 1U].side
+    );
+    const hyperverse::EngineTrailVertexDraw c = engine_trail_vertex(
+      ribbon[index + 2U].position,
+      camera_position,
+      sector,
+      width,
+      height,
+      ribbon[index + 2U].normalized_age,
+      ribbon[index + 2U].intensity,
+      ribbon[index + 2U].side
+    );
+    const hyperverse::EngineTrailVertexDraw d = engine_trail_vertex(
+      ribbon[index + 3U].position,
+      camera_position,
+      sector,
+      width,
+      height,
+      ribbon[index + 3U].normalized_age,
+      ribbon[index + 3U].intensity,
+      ribbon[index + 3U].side
+    );
+    append_engine_trail_triangle(vertices, a, b, c);
+    append_engine_trail_triangle(vertices, b, d, c);
+  }
+}
+
 void add_world_line(
   std::vector<hyperverse::LineDraw>& lines,
   hyperverse::Vec2 center,
@@ -758,6 +879,7 @@ SpriteFrame build_sprite_frame(
 ) {
   const ShipMotion& ship = account.registry().get<ShipMotion>(player);
   const ShipHealth& ship_health = account.registry().get<ShipHealth>(player);
+  const EngineTrailModel* engine_trail = account.registry().try_get<EngineTrailModel>(player);
   const ShipComputer& ship_computer = account.registry().get<ShipComputer>(player);
   const RoundTimer& round_timer = account.registry().get<RoundTimer>(player);
   const CameraState& camera = account.registry().get<CameraState>(player);
@@ -848,6 +970,15 @@ SpriteFrame build_sprite_frame(
       tint_sprite(particle_sprite, 0.72F, 0.92F, 1.0F);
     }
     frame.sprites.push_back(particle_sprite);
+  }
+  if (engine_trail != nullptr) {
+    const EngineTrailTuning engine_trail_tuning{};
+    for (const EngineTrailEngine& engine : engine_trail->engines) {
+      append_engine_trail_ribbon(frame.engine_trails, engine, camera.position, sector, width, height, engine_trail_tuning);
+    }
+    for (std::size_t index = 0; index < engine_trail->active_sources; ++index) {
+      append_engine_trail_source(frame.engine_trails, engine_trail->sources[index], camera.position, sector, width, height, engine_trail_tuning);
+    }
   }
   for (entt::entity drone_entity : mining_drones) {
     const MiningDrone& drone = account.registry().get<MiningDrone>(drone_entity);

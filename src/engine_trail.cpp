@@ -125,6 +125,8 @@ void reset_engine_trail(EngineTrailModel& model) {
     engine = {};
     engine.previous_direction = {.x = -1.0F, .y = 0.0F};
   }
+  model.sources = {};
+  model.active_sources = 0U;
 }
 
 EngineTrailUpdate update_engine_trail(
@@ -180,6 +182,8 @@ EngineTrailUpdate update_engine_trail(
     }
   }
 
+  model.sources = update.sources;
+  model.active_sources = update.active_sources;
   return update;
 }
 
