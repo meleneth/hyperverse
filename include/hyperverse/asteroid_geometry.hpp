@@ -16,6 +16,7 @@ struct AsteroidMeshVertex {
   float r{0.55F};
   float g{0.52F};
   float b{0.48F};
+  float tint_blend{1.0F};
 };
 
 struct AsteroidMeshTriangle {
@@ -44,7 +45,8 @@ struct AsteroidGeometryTuning {
   const AsteroidGeometry& parent,
   Vec3 impact_direction,
   int pieces,
-  float child_radius
+  float child_radius,
+  Vec3 inherited_tint = {.x = 1.0F, .y = 1.0F, .z = 1.0F}
 );
 void update_asteroid_tumble(AsteroidGeometry& geometry, float dt_seconds);
 

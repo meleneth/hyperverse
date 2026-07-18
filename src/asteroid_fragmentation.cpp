@@ -249,11 +249,18 @@ void emit_fragmented(
         fracture_direction = from_parent_to_impact;
       }
     }
+    OreTint inherited_tint{.r = 0.82F, .g = 0.78F, .b = 0.70F};
+    if (parent_resource != nullptr) {
+      inherited_tint = ore_tint(parent_resource->tier);
+    } else if (parent_composition != nullptr) {
+      inherited_tint = ore_tint(*parent_composition);
+    }
     child_geometries = fracture_asteroid_geometry(
       *parent_geometry,
       {.x = fracture_direction.x, .y = fracture_direction.y, .z = 0.35F},
       fragment_count,
-      child_radius
+      child_radius,
+      {.x = inherited_tint.r, .y = inherited_tint.g, .z = inherited_tint.b}
     );
   }
   std::vector<entt::entity> fragments;

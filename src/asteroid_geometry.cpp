@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <map>
 #include <limits>
 #include <numbers>
 #include <vector>
@@ -115,12 +116,13 @@ struct Rng32 {
   return std::clamp(static_cast<int>(normalized * static_cast<float>(pieces)), 0, pieces - 1);
 }
 
-[[nodiscard]] AsteroidMeshVertex scaled_fragment_vertex(const AsteroidMeshVertex& source, Vec3 center, float scale) {
+[[nodiscard]] AsteroidMeshVertex scaled_fragment_vertex(const AsteroidMeshVertex& source, Vec3 center, float scale, Vec3 inherited_tint) {
   return {
     .position = (source.position - center) * scale,
-    .r = source.r,
-    .g = source.g,
-    .b = source.b,
+    .r = source.r * inherited_tint.x,
+    .g = source.g * inherited_tint.y,
+    .b = source.b * inherited_tint.z,
+    .tint_blend = 0.0F,
   };
 }
 
@@ -131,7 +133,58 @@ struct Rng32 {
     .r = shade * rng.range(0.86F, 1.02F),
     .g = shade * rng.range(0.82F, 0.96F),
     .b = shade * rng.range(0.76F, 0.90F),
+    .tint_blend = 1.0F,
   };
+}
+
+struct VertexKey {
+  int x{};
+  int y{};
+  int z{};
+
+  [[nodiscard]] auto operator<=>(const VertexKey&) const = default;
+};
+
+struct EdgeKey {
+  std::uint16_t a{};
+  std::uint16_t b{};
+
+  [[nodiscard]] auto operator<=>(const EdgeKey&) const = default;
+};
+
+[[nodiscard]] VertexKey vertex_key(Vec3 position) {
+  constexpr float scale = 64.0F;
+  return {
+    .x = static_cast<int>(std::round(position.x * scale)),
+    .y = static_cast<int>(std::round(position.y * scale)),
+    .z = static_cast<int>(std::round(position.z * scale)),
+  };
+}
+
+[[nodiscard]] EdgeKey edge_key(std::uint16_t lhs, std::uint16_t rhs) {
+  return lhs < rhs ? EdgeKey{.a = lhs, .b = rhs} : EdgeKey{.a = rhs, .b = lhs};
+}
+
+void count_edge(std::map<EdgeKey, int>& edge_counts, std::uint16_t lhs, std::uint16_t rhs) {
+  ++edge_counts[edge_key(lhs, rhs)];
+}
+
+[[nodiscard]] std::uint16_t copied_fragment_vertex(
+  AsteroidGeometry& fragment,
+  std::map<VertexKey, std::uint16_t>& copied_vertices,
+  const AsteroidMeshVertex& source,
+  Vec3 center,
+  float scale,
+  Vec3 inherited_tint
+) {
+  const VertexKey key = vertex_key(source.position);
+  if (const auto found = copied_vertices.find(key); found != copied_vertices.end()) {
+    return found->second;
+  }
+  const std::uint16_t index = static_cast<std::uint16_t>(fragment.vertices.size());
+  copied_vertices.emplace(key, index);
+  fragment.vertices.push_back(scaled_fragment_vertex(source, center, scale, inherited_tint));
+  return index;
 }
 
 }  // namespace
@@ -226,7 +279,8 @@ std::vector<AsteroidGeometry> fracture_asteroid_geometry(
   const AsteroidGeometry& parent,
   Vec3 impact_direction,
   int pieces,
-  float child_radius
+  float child_radius,
+  Vec3 inherited_tint
 ) {
   if (pieces < 2 || parent.vertices.empty() || parent.triangles.empty()) {
     return {};
@@ -242,6 +296,7 @@ std::vector<AsteroidGeometry> fracture_asteroid_geometry(
   std::vector<AsteroidGeometry> fragments(static_cast<std::size_t>(fragment_count));
   std::vector<Vec3> centers(static_cast<std::size_t>(fragment_count));
   std::vector<int> center_counts(static_cast<std::size_t>(fragment_count), 0);
+  std::vector<std::map<VertexKey, std::uint16_t>> copied_vertices(static_cast<std::size_t>(fragment_count));
 
   for (const AsteroidMeshTriangle& triangle : parent.triangles) {
     const Vec3 center = (parent.vertices[triangle.a].position + parent.vertices[triangle.b].position + parent.vertices[triangle.c].position) * (1.0F / 3.0F);
@@ -278,11 +333,13 @@ std::vector<AsteroidGeometry> fracture_asteroid_geometry(
     if (fragment.vertices.size() + 3U > static_cast<std::size_t>(std::numeric_limits<std::uint16_t>::max())) {
       continue;
     }
-    const std::uint16_t base = static_cast<std::uint16_t>(fragment.vertices.size());
-    fragment.vertices.push_back(scaled_fragment_vertex(parent.vertices[triangle.a], fragment_center, scale));
-    fragment.vertices.push_back(scaled_fragment_vertex(parent.vertices[triangle.b], fragment_center, scale));
-    fragment.vertices.push_back(scaled_fragment_vertex(parent.vertices[triangle.c], fragment_center, scale));
-    fragment.triangles.push_back({.a = base, .b = static_cast<std::uint16_t>(base + 1U), .c = static_cast<std::uint16_t>(base + 2U)});
+    std::map<VertexKey, std::uint16_t>& vertex_map = copied_vertices[static_cast<std::size_t>(slice)];
+    const std::uint16_t a = copied_fragment_vertex(fragment, vertex_map, parent.vertices[triangle.a], fragment_center, scale, inherited_tint);
+    const std::uint16_t b = copied_fragment_vertex(fragment, vertex_map, parent.vertices[triangle.b], fragment_center, scale, inherited_tint);
+    const std::uint16_t c = copied_fragment_vertex(fragment, vertex_map, parent.vertices[triangle.c], fragment_center, scale, inherited_tint);
+    if (a != b && b != c && a != c) {
+      fragment.triangles.push_back({.a = a, .b = b, .c = c});
+    }
   }
 
   for (int index = 0; index < fragment_count; ++index) {
@@ -293,31 +350,20 @@ std::vector<AsteroidGeometry> fracture_asteroid_geometry(
     }
 
     Rng32 rng{fragment.seed};
+    std::map<EdgeKey, int> edge_counts;
+    for (const AsteroidMeshTriangle& triangle : fragment.triangles) {
+      count_edge(edge_counts, triangle.a, triangle.b);
+      count_edge(edge_counts, triangle.b, triangle.c);
+      count_edge(edge_counts, triangle.c, triangle.a);
+    }
+
     const std::uint16_t center_index = static_cast<std::uint16_t>(fragment.vertices.size());
     const Vec3 cap_center = normalize_or_zero(centers[static_cast<std::size_t>(index)] * -1.0F) * (child_radius * rng.range(0.10F, 0.24F));
     fragment.vertices.push_back(fracture_cap_vertex(cap_center, rng));
-    const int cap_points = std::clamp(static_cast<int>(fragment.vertices.size() / 7U), 5, 12);
-    const Vec3 cap_normal = normalize_or_zero(cap_center * -1.0F);
-    const Vec3 cap_tangent = perpendicular_axis(cap_normal);
-    const Vec3 cap_bitangent = normalize_or_zero(cross(cap_normal, cap_tangent));
-    const float cap_radius = child_radius * rng.range(0.28F, 0.48F);
-    std::vector<std::uint16_t> ring;
-    ring.reserve(static_cast<std::size_t>(cap_points));
-    for (int point = 0; point < cap_points; ++point) {
-      const float angle = (static_cast<float>(point) / static_cast<float>(cap_points)) * std::numbers::pi_v<float> * 2.0F;
-      const float rough = rng.range(0.72F, 1.16F);
-      const Vec3 position = cap_center + (cap_tangent * (std::cos(angle) * cap_radius * rough)) + (cap_bitangent * (std::sin(angle) * cap_radius * rough));
-      ring.push_back(static_cast<std::uint16_t>(fragment.vertices.size()));
-      fragment.vertices.push_back(fracture_cap_vertex(position, rng));
-    }
-    for (int point = 0; point < cap_points; ++point) {
-      fragment.triangles.push_back(
-        {
-          .a = center_index,
-          .b = ring[static_cast<std::size_t>(point)],
-          .c = ring[static_cast<std::size_t>((point + 1) % cap_points)],
-        }
-      );
+    for (const auto& [edge, count] : edge_counts) {
+      if (count == 1) {
+        fragment.triangles.push_back({.a = edge.a, .b = edge.b, .c = center_index});
+      }
     }
   }
 

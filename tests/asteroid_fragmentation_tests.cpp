@@ -4,6 +4,7 @@
 #include "hyperverse/asteroid_geometry.hpp"
 
 #include <algorithm>
+#include <map>
 
 namespace {
 
@@ -26,19 +27,52 @@ namespace {
   return asteroid;
 }
 
-[[nodiscard]] bool contains_parent_surface_color(const hyperverse::AsteroidGeometry& parent, const hyperverse::AsteroidGeometry& child) {
+[[nodiscard]] bool contains_parent_surface_color(const hyperverse::AsteroidGeometry& parent, const hyperverse::AsteroidGeometry& child, hyperverse::OreTint inherited_tint) {
   for (const hyperverse::AsteroidMeshVertex& child_vertex : child.vertices) {
+    if (child_vertex.tint_blend != Catch::Approx(0.0F)) {
+      continue;
+    }
     for (const hyperverse::AsteroidMeshVertex& parent_vertex : parent.vertices) {
       if (
-        child_vertex.r == Catch::Approx(parent_vertex.r) &&
-        child_vertex.g == Catch::Approx(parent_vertex.g) &&
-        child_vertex.b == Catch::Approx(parent_vertex.b)
+        child_vertex.r == Catch::Approx(parent_vertex.r * inherited_tint.r) &&
+        child_vertex.g == Catch::Approx(parent_vertex.g * inherited_tint.g) &&
+        child_vertex.b == Catch::Approx(parent_vertex.b * inherited_tint.b)
       ) {
         return true;
       }
     }
   }
   return false;
+}
+
+[[nodiscard]] bool has_new_fracture_material(const hyperverse::AsteroidGeometry& child) {
+  return std::ranges::any_of(child.vertices, [](const hyperverse::AsteroidMeshVertex& vertex) {
+    return vertex.tint_blend == Catch::Approx(1.0F);
+  });
+}
+
+struct EdgeKey {
+  std::uint16_t a{};
+  std::uint16_t b{};
+
+  [[nodiscard]] auto operator<=>(const EdgeKey&) const = default;
+};
+
+[[nodiscard]] EdgeKey edge_key(std::uint16_t lhs, std::uint16_t rhs) {
+  return lhs < rhs ? EdgeKey{.a = lhs, .b = rhs} : EdgeKey{.a = rhs, .b = lhs};
+}
+
+[[nodiscard]] int open_edge_count(const hyperverse::AsteroidGeometry& geometry) {
+  std::map<EdgeKey, int> edge_counts;
+  for (const hyperverse::AsteroidMeshTriangle& triangle : geometry.triangles) {
+    ++edge_counts[edge_key(triangle.a, triangle.b)];
+    ++edge_counts[edge_key(triangle.b, triangle.c)];
+    ++edge_counts[edge_key(triangle.c, triangle.a)];
+  }
+
+  return static_cast<int>(std::ranges::count_if(edge_counts, [](const auto& edge_count) {
+    return edge_count.second == 1;
+  }));
 }
 
 }  // namespace
@@ -250,12 +284,15 @@ TEST_CASE("asteroid fragmentation splits generated geometry into renderable chun
   );
 
   REQUIRE(fragments.size() == 3U);
+  const hyperverse::OreTint inherited_tint = hyperverse::ore_tint(hyperverse::OreTier::Rare);
   for (entt::entity fragment : fragments) {
     REQUIRE(registry.all_of<hyperverse::AsteroidGeometry>(fragment));
     const hyperverse::AsteroidGeometry& geometry = registry.get<hyperverse::AsteroidGeometry>(fragment);
     CHECK_FALSE(geometry.vertices.empty());
     CHECK_FALSE(geometry.triangles.empty());
-    CHECK(contains_parent_surface_color(parent_geometry, geometry));
+    CHECK(contains_parent_surface_color(parent_geometry, geometry, inherited_tint));
+    CHECK(has_new_fracture_material(geometry));
     CHECK(geometry.tumble_velocity.z > 0.0F);
+    CHECK(open_edge_count(geometry) == 0);
   }
 }

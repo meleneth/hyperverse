@@ -122,10 +122,16 @@ constexpr float ScreenAnchorYFraction = 0.75F;
   float radius,
   float heat_r,
   float heat_g,
-  float heat_b
+  float heat_b,
+  float tint_blend
 ) {
   const hyperverse::Vec3 radial = normalize_or_zero(point);
   const hyperverse::Vec3 light = normalize_or_zero({.x = -0.35F, .y = -0.45F, .z = 0.82F});
+  const hyperverse::OreTint blended_tint{
+    .r = 1.0F + ((tint.r - 1.0F) * tint_blend),
+    .g = 1.0F + ((tint.g - 1.0F) * tint_blend),
+    .b = 1.0F + ((tint.b - 1.0F) * tint_blend),
+  };
   const float face_lit = std::max(0.0F, std::abs(dot(normal, light)));
   const float soft_lit = std::max(0.0F, dot(normalize_or_zero(rotated_point), light));
   const float depth_shade = std::clamp(0.92F + (rotated_point.z / std::max(radius, 1.0F)) * 0.12F, 0.78F, 1.06F);
@@ -138,9 +144,9 @@ constexpr float ScreenAnchorYFraction = 0.75F;
     .y_ndc = center.y + ((rotated_point.y * hyperverse::PixelsPerWorldUnit * 2.0F) / static_cast<float>(height)),
     .u = (radial.x * 0.52F) + (radial.z * 0.27F) + (point.x / std::max(radius, 1.0F)),
     .v = (radial.y * 0.52F) - (radial.z * 0.23F) + (point.y / std::max(radius, 1.0F)),
-    .r = std::clamp(tint.r * heat_r * shade * mineral, 0.04F, 1.0F),
-    .g = std::clamp(tint.g * heat_g * shade * (0.92F + (freckle * 0.16F)), 0.04F, 1.0F),
-    .b = std::clamp(tint.b * heat_b * shade * (0.86F + (freckle * 0.18F)), 0.04F, 1.0F),
+    .r = std::clamp(blended_tint.r * heat_r * shade * mineral, 0.04F, 1.0F),
+    .g = std::clamp(blended_tint.g * heat_g * shade * (0.92F + (freckle * 0.16F)), 0.04F, 1.0F),
+    .b = std::clamp(blended_tint.b * heat_b * shade * (0.86F + (freckle * 0.18F)), 0.04F, 1.0F),
   };
 }
 
@@ -209,9 +215,9 @@ void add_asteroid_mesh(
     const hyperverse::AsteroidMeshVertex& av = geometry.vertices[triangle.a];
     const hyperverse::AsteroidMeshVertex& bv = geometry.vertices[triangle.b];
     const hyperverse::AsteroidMeshVertex& cv = geometry.vertices[triangle.c];
-    hyperverse::TriangleVertexDraw draw_a = asteroid_triangle_vertex(av.position, a, normal, center, tint, width, height, asteroid.radius, heat_r, heat_g, heat_b);
-    hyperverse::TriangleVertexDraw draw_b = asteroid_triangle_vertex(bv.position, b, normal, center, tint, width, height, asteroid.radius, heat_r, heat_g, heat_b);
-    hyperverse::TriangleVertexDraw draw_c = asteroid_triangle_vertex(cv.position, c, normal, center, tint, width, height, asteroid.radius, heat_r, heat_g, heat_b);
+    hyperverse::TriangleVertexDraw draw_a = asteroid_triangle_vertex(av.position, a, normal, center, tint, width, height, asteroid.radius, heat_r, heat_g, heat_b, av.tint_blend);
+    hyperverse::TriangleVertexDraw draw_b = asteroid_triangle_vertex(bv.position, b, normal, center, tint, width, height, asteroid.radius, heat_r, heat_g, heat_b, bv.tint_blend);
+    hyperverse::TriangleVertexDraw draw_c = asteroid_triangle_vertex(cv.position, c, normal, center, tint, width, height, asteroid.radius, heat_r, heat_g, heat_b, cv.tint_blend);
     draw_a.r *= av.r * shade;
     draw_a.g *= av.g * shade;
     draw_a.b *= av.b * shade;
