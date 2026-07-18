@@ -40,6 +40,10 @@ constexpr std::array<float, 4> StarLayerPixelSize{1.0F, 1.25F, 1.55F, 1.9F};
 constexpr std::array<float, 4> StarLayerBaseGrey{0.20F, 0.32F, 0.46F, 0.62F};
 constexpr std::array<float, 4> StarLayerGreyRange{0.16F, 0.18F, 0.20F, 0.22F};
 constexpr float RaiderCloakFadeSeconds = 1.15F;
+constexpr float AsteroidRadarCenterX = 0.78F;
+constexpr float AsteroidRadarCenterY = 0.08F;
+constexpr float AsteroidRadarHalfSize = 0.20F;
+constexpr float AsteroidRadarMinimumRadius = 400.0F;
 
 [[nodiscard]] hyperverse::SpriteDraw make_world_sprite(
   hyperverse::SpriteTexture texture,
@@ -453,6 +457,87 @@ void add_box_lines(std::vector<hyperverse::LineDraw>& lines, const hyperverse::S
   add_line(right, top, right, bottom);
   add_line(right, bottom, left, bottom);
   add_line(left, bottom, left, top);
+}
+
+void add_asteroid_radar_marker(std::vector<hyperverse::LineDraw>& lines, float center_x, float center_y, float half_size, float r, float g, float b) {
+  lines.push_back({
+    .start_x_ndc = center_x - half_size,
+    .start_y_ndc = center_y,
+    .end_x_ndc = center_x + half_size,
+    .end_y_ndc = center_y,
+    .r = r,
+    .g = g,
+    .b = b,
+    .a = 0.86F,
+  });
+  lines.push_back({
+    .start_x_ndc = center_x,
+    .start_y_ndc = center_y - half_size,
+    .end_x_ndc = center_x,
+    .end_y_ndc = center_y + half_size,
+    .r = r,
+    .g = g,
+    .b = b,
+    .a = 0.86F,
+  });
+}
+
+void add_asteroid_radar_panel(
+  std::vector<hyperverse::LineDraw>& lines,
+  hyperverse::Vec2 player_position,
+  entt::registry& registry,
+  const hyperverse::SectorTuning& sector
+) {
+  const hyperverse::SpriteDraw panel{
+    .center_x_ndc = AsteroidRadarCenterX,
+    .center_y_ndc = AsteroidRadarCenterY,
+    .half_width_ndc = AsteroidRadarHalfSize,
+    .half_height_ndc = AsteroidRadarHalfSize,
+  };
+  add_box_lines(lines, panel, 0.22F, 0.38F, 0.46F, 0.72F);
+  lines.push_back({
+    .start_x_ndc = AsteroidRadarCenterX - AsteroidRadarHalfSize,
+    .start_y_ndc = AsteroidRadarCenterY,
+    .end_x_ndc = AsteroidRadarCenterX + AsteroidRadarHalfSize,
+    .end_y_ndc = AsteroidRadarCenterY,
+    .r = 0.15F,
+    .g = 0.22F,
+    .b = 0.28F,
+    .a = 0.38F,
+  });
+  lines.push_back({
+    .start_x_ndc = AsteroidRadarCenterX,
+    .start_y_ndc = AsteroidRadarCenterY - AsteroidRadarHalfSize,
+    .end_x_ndc = AsteroidRadarCenterX,
+    .end_y_ndc = AsteroidRadarCenterY + AsteroidRadarHalfSize,
+    .r = 0.15F,
+    .g = 0.22F,
+    .b = 0.28F,
+    .a = 0.38F,
+  });
+  add_asteroid_radar_marker(lines, AsteroidRadarCenterX, AsteroidRadarCenterY, 0.008F, 0.35F, 0.92F, 1.0F);
+
+  const float half_width = std::max(sector.width * 0.5F, 1.0F);
+  const float half_height = std::max(sector.height * 0.5F, 1.0F);
+  for (auto [entity, asteroid] : registry.view<hyperverse::AsteroidBody>().each()) {
+    (void)entity;
+    if (asteroid.radius < AsteroidRadarMinimumRadius) {
+      continue;
+    }
+    const hyperverse::Vec2 delta = hyperverse::wrapped_delta(player_position, asteroid.position, sector);
+    const float size = std::clamp(asteroid.radius / 36000.0F, 0.006F, 0.024F);
+    const float x = std::clamp(
+      AsteroidRadarCenterX + std::clamp(delta.x / half_width, -1.0F, 1.0F) * AsteroidRadarHalfSize,
+      AsteroidRadarCenterX - AsteroidRadarHalfSize + size,
+      AsteroidRadarCenterX + AsteroidRadarHalfSize - size
+    );
+    const float y = std::clamp(
+      AsteroidRadarCenterY + std::clamp(delta.y / half_height, -1.0F, 1.0F) * AsteroidRadarHalfSize,
+      AsteroidRadarCenterY - AsteroidRadarHalfSize + size,
+      AsteroidRadarCenterY + AsteroidRadarHalfSize - size
+    );
+    add_asteroid_radar_marker(lines, x, y, size, 0.68F, 0.72F, 0.74F);
+  }
 }
 
 void add_hud_bar(
@@ -1119,6 +1204,7 @@ SpriteFrame build_sprite_frame(
   }
 
   add_urgency_hud(frame.sprites, frame.lines, round_timer, pressure_hud);
+  add_asteroid_radar_panel(frame.lines, ship.position, account.registry(), sector);
   add_face_button_legend(frame.sprites, input);
   add_hud_text(frame.sprites, "MINERALS", -0.96F, -0.955F, 0.026F, 0.78F, 0.92F, 1.0F);
   std::array<float, 7> mineral_mass{};

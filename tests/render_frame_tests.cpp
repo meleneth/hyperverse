@@ -156,3 +156,53 @@ TEST_CASE("sprite frame fades active raiders in from cloak") {
   REQUIRE(visible_raider != frame.sprites.end());
   CHECK(visible_raider->tint_a == Catch::Approx(0.5F));
 }
+
+TEST_CASE("sprite frame renders all large asteroids in right side radar panel") {
+  TestAccountWorld world;
+  hyperverse::AccountCtx account = world.account_context();
+  const hyperverse::VerticalSliceEntities entities = hyperverse::seed_vertical_slice(account);
+  hyperverse::ShipMotion& ship = account.registry().get<hyperverse::ShipMotion>(entities.player);
+  const hyperverse::SectorTuning sector = hyperverse::default_sector();
+  const hyperverse::SemanticInputFrame input{};
+  int large_asteroids = 0;
+  for (auto [entity, asteroid] : account.registry().view<hyperverse::AsteroidBody>().each()) {
+    (void)entity;
+    if (asteroid.radius >= 400.0F) {
+      ++large_asteroids;
+    }
+  }
+
+  const hyperverse::SpriteFrame frame = hyperverse::build_sprite_frame(
+    account,
+    entities.player,
+    entities.mining_drones,
+    entities.raider,
+    hyperverse::make_flight_hud_snapshot(ship, input, {}, sector),
+    input,
+    sector,
+    1280,
+    720
+  );
+
+  int asteroid_marker_lines = 0;
+  for (const hyperverse::LineDraw& line : frame.lines) {
+    const bool asteroid_marker_color =
+      std::abs(line.r - 0.68F) <= 0.001F && std::abs(line.g - 0.72F) <= 0.001F && std::abs(line.b - 0.74F) <= 0.001F;
+    if (!asteroid_marker_color) {
+      continue;
+    }
+
+    ++asteroid_marker_lines;
+    CHECK(line.start_x_ndc >= 0.56F);
+    CHECK(line.start_x_ndc <= 1.0F);
+    CHECK(line.end_x_ndc >= 0.56F);
+    CHECK(line.end_x_ndc <= 1.0F);
+    CHECK(line.start_y_ndc >= -0.14F);
+    CHECK(line.start_y_ndc <= 0.30F);
+    CHECK(line.end_y_ndc >= -0.14F);
+    CHECK(line.end_y_ndc <= 0.30F);
+  }
+
+  CHECK(large_asteroids > 0);
+  CHECK(asteroid_marker_lines == large_asteroids * 2);
+}
