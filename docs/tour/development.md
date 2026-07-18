@@ -15,6 +15,15 @@ Build the published site with:
 npm run build
 ```
 
+## Published Docs
+
+GitHub Pages publishes the VitePress build on pushes to `main`.
+
+- Source: `docs/tour`
+- Build output: `docs/tour/.vitepress/dist`
+- Workflow: `.github/workflows/deploy.yml`
+- Public URL: `https://meleneth.github.io/hyperverse/`
+
 ## Generated API Docs
 
 The repository also includes the same local Doxygen entry point used by Fairlanes:

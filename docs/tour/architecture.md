@@ -25,6 +25,12 @@ Persistent gameplay state lives in three places:
 
 Events are transient. They are processed each simulation tick and must not be used as storage.
 
+## Sector Scale
+
+The sector is intentionally independent of the browser or native window resolution. Gameplay
+currently uses a fixed 9 by 9 grid of 1920x1080 reference screens, with wraparound distance
+helpers keeping movement and targeting deterministic across sector edges.
+
 ## Fixed Simulation
 
 `AppRuntime` accumulates real elapsed time into `FixedTimestep` and runs gameplay ticks at `UniverseClock::FixedTickSeconds`. Rendering may observe interpolation-oriented state, but gameplay logic should stay deterministic under representative timestep splits.

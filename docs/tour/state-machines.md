@@ -89,3 +89,26 @@ Some systems currently use explicit phase enums without SML transition tables:
 - `MiningDrone` uses `MiningDronePhase` outside the cargo-hauling subset.
 
 These are still first-class state models. When transitions become complex, add a private SML transition table and keep the public enum/model as the durable state.
+
+## Gravity Sling
+
+```mermaid
+stateDiagram-v2
+  [*] --> FreeFlight
+  FreeFlight --> Engaging: sling_pressed / target_acquired
+  FreeFlight --> FreeFlight: sling_pressed / no_target
+  Engaging --> Active: engagement_elapsed
+  Engaging --> FreeFlight: target_invalid
+  Active --> FreeFlight: sling_pressed
+  Active --> FreeFlight: target_invalid
+  Active --> FreeFlight: radius_out_of_bounds
+```
+
+`GravitySlingModel` is intentionally renderer-neutral. It records the target entity, constrained
+radius, local angle, relative angular velocity, entry velocity, current world velocity, and the last
+disengage reason.
+
+The current mechanic does not couple player bearing to asteroid visual tumble. It treats the target
+as moving terrain with a stable radial constraint: player movement input changes relative orbital
+velocity, and release computes a free-flight velocity from target translation plus the player-shaped
+orbital component.

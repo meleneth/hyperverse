@@ -4,6 +4,9 @@ Hyperverse is a C++23 arcade space game built around fast ship feel, asteroid mi
 
 This documentation is the embedded project guide. It is meant to sit next to the code and stay accurate as vertical slices land.
 
+The published site is built from this directory by `.github/workflows/deploy.yml` and served
+through GitHub Pages at `https://meleneth.github.io/hyperverse/`.
+
 ## Start Here
 
 - [Architecture](./architecture.md) explains the runtime shape and where state is allowed to live.

@@ -9,7 +9,7 @@ The game is about feel, information, and controlled industrial violence.
 ## Current Project Shape
 
 - Playable 2D Dawn/WebGPU prototype in continuous wraparound sectors
-- Each sector is fixed at 9 by 9 3840x2160 reference screens, independent of the current window or browser resolution
+- Each sector is fixed at 9 by 9 1920x1080 reference screens, independent of the current window or browser resolution
 - Fixed 60 Hz simulation clock through `UniverseClock::FixedTickSeconds`
 - Development round pressure currently escalates every 1 minute
 - The long-form design target remains longer contracts with larger escalation beats
@@ -37,6 +37,33 @@ and runs the playable mining/escort prototype.
 
 See [Installation and Bootstrap](docs/INSTALL.md) for Linux, Steam Deck, MSYS2, CI, and install
 commands.
+
+## Documentation
+
+The embedded project guide is published through GitHub Pages at
+`https://meleneth.github.io/hyperverse/`. The source lives in [docs/tour](docs/tour),
+uses VitePress, and is deployed by [.github/workflows/deploy.yml](.github/workflows/deploy.yml)
+on pushes to `main`.
+
+Run the docs site locally with:
+
+```sh
+cd docs/tour
+npm ci
+npm run dev
+```
+
+Build the same artifact that Pages publishes with:
+
+```sh
+cd docs/tour
+npm run build
+```
+
+Architecture docs should be updated with gameplay changes, especially [events](docs/tour/event-reference.md),
+[context objects](docs/tour/context-objects.md), and
+[state machines](docs/tour/state-machines.md). Local generated API docs can be built with
+`./make_docs.sh` when Doxygen is installed; output is written to `docs/html`.
 
 ## Visual Bootstrap
 
@@ -67,7 +94,7 @@ These assets are temporary implementation scaffolding, not a permanent visual co
 
 The current Dawn prototype draws Sector7-derived sprites, hardware-uploaded textures, line HUD
 brackets, text glyph HUD, mining beams, dual particle cannon shots, cargo boxes, active cargo train
-links, Gravity Sling reference-frame feedback, an escort gate route, drones, and raiders.
+links, Gravity Sling constraint feedback, an escort gate route, drones, and raiders.
 
 The ship uses assisted desired-motion flight, a short burst-speed mode, shields, armor, and a
 fixed-step simulation loop. Boost doubles top speed briefly and falls off on a short hockey-stick
@@ -79,10 +106,10 @@ glancing hits apply angular impulse. Breakup produces recoverable component chun
 cloned copies of the parent composition, with some material lost when the parent has several
 meaningful component groups.
 
-The Gravity Sling acquires a nearby eligible asteroid and locks the ship into that body's rotating
-frame of reference. While active, movement input adjusts orbital angle and radius instead of normal
-thrust. Releasing converts target translation, target spin, and player-controlled relative orbital
-motion into a visible launch velocity.
+The Gravity Sling acquires a nearby eligible asteroid and constrains the ship to a stable radius
+around that body. While active, normal thrust is redirected into relative orbital motion so the
+player can bleed speed, build a launch angle, and release into free flight from the resulting
+world-space velocity.
 
 Mining drones operate autonomously against valid target sizes, spread around work targets, return
 to formation, and break off when their target is invalid. The current prototype still starts with
@@ -109,7 +136,7 @@ current threat level, next threat countdown, and progress toward the next escala
 - Round timer and threat escalation are primary pressure systems. Threat level advances on the development one-minute cadence, spawns raider contacts, and is visible as a countdown/progress bar. Mining eventually destabilizes local space enough to open a terminal space tear.
 - Large asteroids have two break levels. Breakup creates recoverable component chunks from the parent mineral distribution, with some material deliberately lost when the parent has several meaningful components.
 - Kinetic particle impacts transfer velocity into asteroid mass. Glancing kinetic hits also impart rotational velocity from impact angle, so spinning rocks become a real hazard.
-- The Gravity Sling turns eligible asteroids into temporary moving terrain. The ship follows a local polar offset in the target's rotating frame, adjusts angle/radius with movement input, and releases with inherited orbital velocity.
+- The Gravity Sling turns eligible asteroids into temporary moving terrain. The ship maintains a constrained radius around the target, uses thrust to change relative orbital motion, and releases with inherited target translation plus player-shaped orbital velocity.
 - Mining drones cannot work the largest asteroid tier. The player must break big rocks into medium or small pieces before drones can safely mine them.
 - Mined cargo starts at the gathering site. The extraction gate is derived as the furthest wrapped-sector point from that gathering site.
 - During escort, cargo follows the player as a train. Once the player reaches the extraction gate, cargo remains gate-bound and stages as a group near the gate before loading starts.
