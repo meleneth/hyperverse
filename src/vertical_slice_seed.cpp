@@ -1,6 +1,7 @@
 #include "hyperverse/vertical_slice_seed.hpp"
 
 #include "hyperverse/asteroid_fragmentation.hpp"
+#include "hyperverse/asteroid_geometry.hpp"
 #include "hyperverse/asteroid_mass.hpp"
 #include "hyperverse/camera.hpp"
 #include "hyperverse/cargo_escort.hpp"
@@ -134,6 +135,7 @@ VerticalSliceEntities seed_vertical_slice(AccountCtx& account) {
   for (const AsteroidBody& asteroid : asteroid_field) {
     const entt::entity entity = account.registry().create();
     account.registry().emplace<AsteroidBody>(entity, asteroid);
+    account.registry().emplace<AsteroidGeometry>(entity, generate_asteroid_geometry(static_cast<std::uint32_t>(0xA57E0000U + asteroid_index), asteroid.radius));
     account.registry().emplace<AsteroidFragmentation>(entity, AsteroidFragmentation{.remaining_breaks = 2});
     account.registry().emplace<AsteroidMass>(entity, asteroid_mass_from_radius(asteroid.radius));
     const OreTier tier =

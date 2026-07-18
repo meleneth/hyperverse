@@ -166,6 +166,7 @@ add_library(
   src/account_state.cpp
   src/app.cpp
   src/asteroid_fragmentation.cpp
+  src/asteroid_geometry.cpp
   src/asteroid_mass.cpp
   src/camera.cpp
   src/cargo_box.cpp
@@ -308,6 +309,7 @@ if(HYPERVERSE_BUILD_TESTS)
     hyperverse_tests
     tests/architecture_tests.cpp
     tests/asteroid_fragmentation_tests.cpp
+    tests/asteroid_geometry_tests.cpp
     tests/bootstrap_tests.cpp
     tests/cargo_tests.cpp
     tests/collision_tests.cpp

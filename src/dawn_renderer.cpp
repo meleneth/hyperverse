@@ -303,6 +303,7 @@ struct DawnRenderer::Impl {
 
     wgpu::CommandEncoder encoder = device_.CreateCommandEncoder();
     wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&pass_descriptor);
+    draw_triangles(pass, frame.triangles);
     draw_sprites(pass, frame.sprites);
     draw_lines(pass, frame.lines);
     pass.End();
@@ -343,6 +344,7 @@ struct DawnRenderer::Impl {
       texture_views_.clear();
       textures_.clear();
       line_pipeline_ = {};
+      triangle_pipeline_ = {};
       sprite_pipeline_ = {};
       sprite_pipeline_layout_ = {};
       texture_bind_group_layout_ = {};
@@ -667,6 +669,7 @@ struct DawnRenderer::Impl {
 
   void create_pipelines() {
     create_sprite_pipeline();
+    create_triangle_pipeline();
     create_line_pipeline();
   }
 
@@ -822,6 +825,77 @@ fn fs_main(input: LineOutput) -> @location(0) vec4f {
     line_pipeline_ = device_.CreateRenderPipeline(&descriptor);
   }
 
+  void create_triangle_pipeline() {
+    constexpr std::string_view shader = R"(
+struct TriangleInput {
+  @location(0) position: vec2f,
+  @location(1) color: vec4f,
+};
+
+struct TriangleOutput {
+  @builtin(position) position: vec4f,
+  @location(0) color: vec4f,
+};
+
+@vertex
+fn vs_main(input: TriangleInput) -> TriangleOutput {
+  var output: TriangleOutput;
+  output.position = vec4f(input.position, 0.0, 1.0);
+  output.color = input.color;
+  return output;
+}
+
+@fragment
+fn fs_main(input: TriangleOutput) -> @location(0) vec4f {
+  return input.color;
+}
+)";
+
+    wgpu::ShaderModule module = create_shader_module(device_, shader);
+    std::array<wgpu::VertexAttribute, 2> attributes{};
+    attributes[0].format = wgpu::VertexFormat::Float32x2;
+    attributes[0].offset = offsetof(LineVertex, x);
+    attributes[0].shaderLocation = 0;
+    attributes[1].format = wgpu::VertexFormat::Float32x4;
+    attributes[1].offset = offsetof(LineVertex, r);
+    attributes[1].shaderLocation = 1;
+
+    wgpu::VertexBufferLayout vertex_buffer{};
+    vertex_buffer.arrayStride = sizeof(LineVertex);
+    vertex_buffer.attributeCount = attributes.size();
+    vertex_buffer.attributes = attributes.data();
+
+    wgpu::BlendState blend{};
+    blend.color.srcFactor = wgpu::BlendFactor::SrcAlpha;
+    blend.color.dstFactor = wgpu::BlendFactor::OneMinusSrcAlpha;
+    blend.color.operation = wgpu::BlendOperation::Add;
+    blend.alpha.srcFactor = wgpu::BlendFactor::One;
+    blend.alpha.dstFactor = wgpu::BlendFactor::OneMinusSrcAlpha;
+    blend.alpha.operation = wgpu::BlendOperation::Add;
+
+    wgpu::ColorTargetState color_target{};
+    color_target.format = surface_format_;
+    color_target.blend = &blend;
+    color_target.writeMask = wgpu::ColorWriteMask::All;
+
+    wgpu::FragmentState fragment{};
+    fragment.module = module;
+    fragment.entryPoint = "fs_main";
+    fragment.targetCount = 1;
+    fragment.targets = &color_target;
+
+    wgpu::RenderPipelineDescriptor descriptor{};
+    descriptor.vertex.module = module;
+    descriptor.vertex.entryPoint = "vs_main";
+    descriptor.vertex.bufferCount = 1;
+    descriptor.vertex.buffers = &vertex_buffer;
+    descriptor.primitive.topology = wgpu::PrimitiveTopology::TriangleList;
+    descriptor.primitive.cullMode = wgpu::CullMode::None;
+    descriptor.multisample.count = 1;
+    descriptor.fragment = &fragment;
+    triangle_pipeline_ = device_.CreateRenderPipeline(&descriptor);
+  }
+
   void create_textures() {
     for (const LoadedSprite& sprite : load_sprite_textures()) {
       wgpu::TextureDescriptor texture_descriptor{};
@@ -887,6 +961,25 @@ fn fs_main(input: LineOutput) -> @location(0) vec4f {
     }
   }
 
+  void draw_triangles(wgpu::RenderPassEncoder& pass, const std::vector<TriangleDraw>& triangles) {
+    if (triangles.empty()) {
+      return;
+    }
+
+    std::vector<LineVertex> vertices;
+    vertices.reserve(triangles.size() * 3U);
+    for (const TriangleDraw& triangle : triangles) {
+      vertices.push_back(LineVertex{.x = triangle.ax_ndc, .y = -triangle.ay_ndc, .r = triangle.r, .g = triangle.g, .b = triangle.b, .a = triangle.a});
+      vertices.push_back(LineVertex{.x = triangle.bx_ndc, .y = -triangle.by_ndc, .r = triangle.r, .g = triangle.g, .b = triangle.b, .a = triangle.a});
+      vertices.push_back(LineVertex{.x = triangle.cx_ndc, .y = -triangle.cy_ndc, .r = triangle.r, .g = triangle.g, .b = triangle.b, .a = triangle.a});
+    }
+
+    const wgpu::Buffer vertex_buffer = transient_buffer(vertices.data(), sizeof(LineVertex) * vertices.size());
+    pass.SetPipeline(triangle_pipeline_);
+    pass.SetVertexBuffer(0, vertex_buffer);
+    pass.Draw(static_cast<std::uint32_t>(vertices.size()));
+  }
+
   void draw_lines(wgpu::RenderPassEncoder& pass, const std::vector<LineDraw>& lines) {
     if (lines.empty()) {
       return;
@@ -935,6 +1028,7 @@ fn fs_main(input: LineOutput) -> @location(0) vec4f {
   wgpu::BindGroupLayout texture_bind_group_layout_{};
   wgpu::PipelineLayout sprite_pipeline_layout_{};
   wgpu::RenderPipeline sprite_pipeline_{};
+  wgpu::RenderPipeline triangle_pipeline_{};
   wgpu::RenderPipeline line_pipeline_{};
   std::vector<wgpu::Texture> textures_{};
   std::vector<wgpu::TextureView> texture_views_{};

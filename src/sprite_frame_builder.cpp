@@ -1,6 +1,7 @@
 #include "hyperverse/sprite_frame_builder.hpp"
 
 #include "hyperverse/asteroid_mass.hpp"
+#include "hyperverse/asteroid_geometry.hpp"
 #include "hyperverse/camera.hpp"
 #include "hyperverse/cargo_box.hpp"
 #include "hyperverse/cargo_escort.hpp"
@@ -26,6 +27,7 @@
 #include <numbers>
 #include <string>
 #include <string_view>
+#include <tuple>
 
 namespace {
 
@@ -54,6 +56,137 @@ constexpr float ScreenAnchorYFraction = 0.75F;
     .half_height_ndc = pixel_height / static_cast<float>(height),
     .rotation_radians = rotation_radians,
   };
+}
+
+[[nodiscard]] hyperverse::Vec2 world_to_ndc(
+  hyperverse::Vec2 world_position,
+  hyperverse::Vec2 camera_position,
+  const hyperverse::SectorTuning& sector,
+  std::uint32_t width,
+  std::uint32_t height
+) {
+  const hyperverse::Vec2 relative = hyperverse::wrapped_delta(camera_position, world_position, sector) * hyperverse::PixelsPerWorldUnit;
+  const float screen_x = (static_cast<float>(width) * 0.5F) + relative.x;
+  const float screen_y = (static_cast<float>(height) * ScreenAnchorYFraction) + relative.y;
+  return {
+    .x = ((screen_x / static_cast<float>(width)) * 2.0F) - 1.0F,
+    .y = ((screen_y / static_cast<float>(height)) * 2.0F) - 1.0F,
+  };
+}
+
+[[nodiscard]] hyperverse::Vec3 operator-(hyperverse::Vec3 lhs, hyperverse::Vec3 rhs) {
+  return {.x = lhs.x - rhs.x, .y = lhs.y - rhs.y, .z = lhs.z - rhs.z};
+}
+
+[[nodiscard]] hyperverse::Vec3 cross(hyperverse::Vec3 lhs, hyperverse::Vec3 rhs) {
+  return {
+    .x = (lhs.y * rhs.z) - (lhs.z * rhs.y),
+    .y = (lhs.z * rhs.x) - (lhs.x * rhs.z),
+    .z = (lhs.x * rhs.y) - (lhs.y * rhs.x),
+  };
+}
+
+[[nodiscard]] float dot(hyperverse::Vec3 lhs, hyperverse::Vec3 rhs) {
+  return (lhs.x * rhs.x) + (lhs.y * rhs.y) + (lhs.z * rhs.z);
+}
+
+[[nodiscard]] hyperverse::Vec3 normalize_or_zero(hyperverse::Vec3 value) {
+  const float magnitude = std::sqrt(dot(value, value));
+  return magnitude > 0.0001F ? hyperverse::Vec3{.x = value.x / magnitude, .y = value.y / magnitude, .z = value.z / magnitude} : hyperverse::Vec3{};
+}
+
+[[nodiscard]] hyperverse::Vec3 rotate_mesh_point(hyperverse::Vec3 point, hyperverse::Vec3 angles) {
+  const float cx = std::cos(angles.x);
+  const float sx = std::sin(angles.x);
+  const float cy = std::cos(angles.y);
+  const float sy = std::sin(angles.y);
+  const float cz = std::cos(angles.z);
+  const float sz = std::sin(angles.z);
+
+  hyperverse::Vec3 rotated{
+    .x = point.x,
+    .y = (point.y * cx) - (point.z * sx),
+    .z = (point.y * sx) + (point.z * cx),
+  };
+  rotated = {
+    .x = (rotated.x * cy) + (rotated.z * sy),
+    .y = rotated.y,
+    .z = (-rotated.x * sy) + (rotated.z * cy),
+  };
+  return {
+    .x = (rotated.x * cz) - (rotated.y * sz),
+    .y = (rotated.x * sz) + (rotated.y * cz),
+    .z = rotated.z,
+  };
+}
+
+void add_asteroid_mesh(
+  std::vector<hyperverse::TriangleDraw>& triangles,
+  const hyperverse::AsteroidBody& asteroid,
+  const hyperverse::AsteroidGeometry& geometry,
+  const hyperverse::OreTint tint,
+  hyperverse::Vec2 camera_position,
+  const hyperverse::SectorTuning& sector,
+  std::uint32_t width,
+  std::uint32_t height,
+  float heat_r = 1.0F,
+  float heat_g = 1.0F,
+  float heat_b = 1.0F
+) {
+  const hyperverse::Vec2 center = world_to_ndc(asteroid.position, camera_position, sector, width, height);
+  std::vector<hyperverse::Vec3> rotated_vertices;
+  rotated_vertices.reserve(geometry.vertices.size());
+  for (const hyperverse::AsteroidMeshVertex& vertex : geometry.vertices) {
+    rotated_vertices.push_back(rotate_mesh_point(vertex.position, geometry.tumble_angles));
+  }
+
+  struct PendingTriangle {
+    float depth{};
+    hyperverse::TriangleDraw draw{};
+  };
+  std::vector<PendingTriangle> pending;
+  pending.reserve(geometry.triangles.size());
+
+  const hyperverse::Vec3 light = normalize_or_zero({.x = -0.35F, .y = -0.45F, .z = 0.82F});
+  for (const hyperverse::AsteroidMeshTriangle& triangle : geometry.triangles) {
+    const hyperverse::Vec3 a = rotated_vertices[triangle.a];
+    const hyperverse::Vec3 b = rotated_vertices[triangle.b];
+    const hyperverse::Vec3 c = rotated_vertices[triangle.c];
+    const hyperverse::Vec3 normal = normalize_or_zero(cross(b - a, c - a));
+    const float lit = std::max(0.0F, std::abs(dot(normal, light)));
+    const float depth = (a.z + b.z + c.z) / 3.0F;
+    const float depth_shade = std::clamp(0.92F + (depth / std::max(asteroid.radius, 1.0F)) * 0.12F, 0.78F, 1.06F);
+    const float shade = (0.42F + (lit * 0.46F)) * depth_shade;
+    const hyperverse::AsteroidMeshVertex& av = geometry.vertices[triangle.a];
+    const hyperverse::AsteroidMeshVertex& bv = geometry.vertices[triangle.b];
+    const hyperverse::AsteroidMeshVertex& cv = geometry.vertices[triangle.c];
+    const float base_r = ((av.r + bv.r + cv.r) / 3.0F) * tint.r * heat_r * shade;
+    const float base_g = ((av.g + bv.g + cv.g) / 3.0F) * tint.g * heat_g * shade;
+    const float base_b = ((av.b + bv.b + cv.b) / 3.0F) * tint.b * heat_b * shade;
+    pending.push_back(
+      PendingTriangle{
+        .depth = depth,
+        .draw = {
+          .ax_ndc = center.x + ((a.x * hyperverse::PixelsPerWorldUnit * 2.0F) / static_cast<float>(width)),
+          .ay_ndc = center.y + ((a.y * hyperverse::PixelsPerWorldUnit * 2.0F) / static_cast<float>(height)),
+          .bx_ndc = center.x + ((b.x * hyperverse::PixelsPerWorldUnit * 2.0F) / static_cast<float>(width)),
+          .by_ndc = center.y + ((b.y * hyperverse::PixelsPerWorldUnit * 2.0F) / static_cast<float>(height)),
+          .cx_ndc = center.x + ((c.x * hyperverse::PixelsPerWorldUnit * 2.0F) / static_cast<float>(width)),
+          .cy_ndc = center.y + ((c.y * hyperverse::PixelsPerWorldUnit * 2.0F) / static_cast<float>(height)),
+          .r = std::clamp(base_r, 0.04F, 1.0F),
+          .g = std::clamp(base_g, 0.04F, 1.0F),
+          .b = std::clamp(base_b, 0.04F, 1.0F),
+        },
+      }
+    );
+  }
+
+  std::ranges::sort(pending, [](const PendingTriangle& lhs, const PendingTriangle& rhs) {
+    return lhs.depth < rhs.depth;
+  });
+  for (const PendingTriangle& triangle : pending) {
+    triangles.push_back(triangle.draw);
+  }
 }
 
 [[nodiscard]] bool sprite_overlaps_screen(const hyperverse::SpriteDraw& sprite) {
@@ -460,29 +593,40 @@ SpriteFrame build_sprite_frame(
   };
 
   for (auto [entity, asteroid] : account.registry().view<AsteroidBody>().each()) {
-    SpriteDraw asteroid_sprite = make_world_sprite(
-      SpriteTexture::Rock,
-      asteroid.position,
-      camera.position,
-      sector,
-      width,
-      height,
-      asteroid_sprite_size(asteroid),
-      asteroid.rotation_radians
-    );
+    OreTint tint{.r = 0.82F, .g = 0.78F, .b = 0.70F};
     if (const MiningResource* resource = account.registry().try_get<MiningResource>(entity); resource != nullptr) {
-      const OreTint tint = ore_tint(resource->tier);
-      tint_sprite(asteroid_sprite, tint.r, tint.g, tint.b);
+      tint = ore_tint(resource->tier);
     } else if (const MineralComposition* composition = account.registry().try_get<MineralComposition>(entity); composition != nullptr) {
-      const OreTint tint = ore_tint(*composition);
-      tint_sprite(asteroid_sprite, tint.r, tint.g, tint.b);
+      tint = ore_tint(*composition);
     }
+    float heat_r = 1.0F;
+    float heat_g = 1.0F;
+    float heat_b = 1.0F;
     if (entity == mining_hud.target && mining_hud.blowout) {
-      tint_sprite(asteroid_sprite, 1.0F, 0.24F, 0.12F);
+      heat_r = 1.8F;
+      heat_g = 0.45F;
+      heat_b = 0.22F;
     } else if (entity == mining_hud.target && mining_hud.unstable) {
-      tint_sprite(asteroid_sprite, 1.0F, 0.68F, 0.18F);
+      heat_r = 1.45F;
+      heat_g = 0.95F;
+      heat_b = 0.35F;
     }
-    frame.sprites.push_back(asteroid_sprite);
+    if (const AsteroidGeometry* geometry = account.registry().try_get<AsteroidGeometry>(entity); geometry != nullptr) {
+      add_asteroid_mesh(frame.triangles, asteroid, *geometry, tint, camera.position, sector, width, height, heat_r, heat_g, heat_b);
+    } else {
+      SpriteDraw asteroid_sprite = make_world_sprite(
+        SpriteTexture::Rock,
+        asteroid.position,
+        camera.position,
+        sector,
+        width,
+        height,
+        asteroid_sprite_size(asteroid),
+        asteroid.rotation_radians
+      );
+      tint_sprite(asteroid_sprite, tint.r * heat_r, tint.g * heat_g, tint.b * heat_b);
+      frame.sprites.push_back(asteroid_sprite);
+    }
   }
 
   if (has_locked_target(target_lock) && account.registry().valid(target_lock.target)) {

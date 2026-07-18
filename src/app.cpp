@@ -1,5 +1,6 @@
 #include "hyperverse/app.hpp"
 
+#include "hyperverse/asteroid_geometry.hpp"
 #include "hyperverse/camera.hpp"
 #include "hyperverse/cargo_box.hpp"
 #include "hyperverse/cargo_escort.hpp"
@@ -160,6 +161,10 @@ private:
       (void)detach_linked_cargo(account_.registry(), ship_.velocity);
     }
     update_asteroid_motion(account_, sector_, timestep_.tick_seconds());
+    for (auto [entity, geometry] : account_.registry().view<AsteroidGeometry>().each()) {
+      (void)entity;
+      update_asteroid_tumble(geometry, timestep_.tick_seconds());
+    }
 
     CameraState& camera = account_.registry().get<CameraState>(player_);
     TargetLockModel& target_lock = account_.registry().get<TargetLockModel>(player_);

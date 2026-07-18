@@ -90,8 +90,22 @@ struct LineDraw {
   float a{1.0F};
 };
 
+struct TriangleDraw {
+  float ax_ndc{0.0F};
+  float ay_ndc{0.0F};
+  float bx_ndc{0.0F};
+  float by_ndc{0.0F};
+  float cx_ndc{0.0F};
+  float cy_ndc{0.0F};
+  float r{1.0F};
+  float g{1.0F};
+  float b{1.0F};
+  float a{1.0F};
+};
+
 struct SpriteFrame {
   FrameSnapshot state{};
+  std::vector<TriangleDraw> triangles{};
   std::vector<SpriteDraw> sprites{};
   std::vector<LineDraw> lines{};
 };
