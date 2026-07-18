@@ -9,8 +9,8 @@ struct SectorTuning {
   float height{9000.0F};
 };
 
-inline constexpr float ReferenceScreenWidthPixels = 3840.0F;
-inline constexpr float ReferenceScreenHeightPixels = 2160.0F;
+inline constexpr float ReferenceScreenWidthPixels = 1920.0F;
+inline constexpr float ReferenceScreenHeightPixels = 1080.0F;
 inline constexpr float PixelsPerWorldUnit = 0.35F;
 inline constexpr float SectorScreensPerAxis = 9.0F;
 
