@@ -14,6 +14,14 @@ enum class CargoEscortPhase {
   Complete,
 };
 
+enum class CargoEscortTransition {
+  QuotaAuthorized,
+  QuotaLost,
+  ConfirmExtraction,
+  GateReached,
+  ExtractionComplete,
+};
+
 struct CargoEscortState {
   CargoEscortPhase phase{CargoEscortPhase::Mining};
 };
@@ -26,6 +34,11 @@ struct CargoEscortHudSnapshot {
 };
 
 struct CargoEscortRouteHudSnapshot;
+
+[[nodiscard]] bool transition_cargo_escort(
+  CargoEscortState& escort,
+  CargoEscortTransition transition
+);
 
 [[nodiscard]] CargoEscortHudSnapshot update_cargo_escort_state(
   CargoEscortState& escort,

@@ -98,8 +98,28 @@ TEST_CASE("engine source decays after thrust instead of disappearing between fra
   const hyperverse::EngineTrailUpdate update = hyperverse::update_engine_trail(model, ship, {}, Sector, 0.05F, tuning);
 
   REQUIRE(update.active_sources == 2U);
+  CHECK(model.engines[0].source_phase == hyperverse::EngineSourcePhase::Decaying);
   CHECK(update.sources[0].intensity > 0.0F);
   CHECK(update.sources[0].intensity < 1.0F);
+}
+
+TEST_CASE("engine source transitions through active decay and dormant phases") {
+  hyperverse::EngineTrailModel model;
+  hyperverse::ShipMotion ship{.position = {.x = 1000.0F, .y = 1000.0F}};
+  const hyperverse::EngineTrailTuning tuning{.sample_interval_seconds = 0.01F, .source_decay_seconds = 0.10F};
+
+  (void)hyperverse::update_engine_trail(model, ship, thrust(), Sector, 0.02F, tuning);
+  CHECK(model.engines[0].source_phase == hyperverse::EngineSourcePhase::Active);
+
+  const hyperverse::Vec2 lit_position = model.engines[0].source_position;
+  ship.position.x += 40.0F;
+  (void)hyperverse::update_engine_trail(model, ship, {}, Sector, 0.05F, tuning);
+  CHECK(model.engines[0].source_phase == hyperverse::EngineSourcePhase::Decaying);
+  CHECK(model.engines[0].source_position.x == Catch::Approx(lit_position.x));
+
+  const hyperverse::EngineTrailUpdate dark = hyperverse::update_engine_trail(model, ship, {}, Sector, 0.10F, tuning);
+  CHECK(model.engines[0].source_phase == hyperverse::EngineSourcePhase::Dormant);
+  CHECK(dark.active_sources == 0U);
 }
 
 TEST_CASE("player engine trail stays alive during sustained long thrust") {

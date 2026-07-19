@@ -194,6 +194,7 @@ add_library(
   src/pressure.cpp
   src/projectile.cpp
   src/raider.cpp
+  src/radar_control.cpp
   src/radar_hud.cpp
   src/render_frame.cpp
   src/sector.cpp

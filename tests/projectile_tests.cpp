@@ -8,11 +8,20 @@ namespace {
   return std::distance(registry.view<hyperverse::ParticleShot>().begin(), registry.view<hyperverse::ParticleShot>().end());
 }
 
+[[nodiscard]] std::ptrdiff_t missile_count(entt::registry& registry) {
+  return std::distance(registry.view<hyperverse::HomingMissile>().begin(), registry.view<hyperverse::HomingMissile>().end());
+}
+
+[[nodiscard]] std::ptrdiff_t explosion_count(entt::registry& registry) {
+  return std::distance(registry.view<hyperverse::ExplosionBurst>().begin(), registry.view<hyperverse::ExplosionBurst>().end());
+}
+
 [[nodiscard]] entt::entity make_player(TestAccountWorld& world, hyperverse::Vec2 position) {
   const entt::entity player = world.registry.create();
   world.registry.emplace<hyperverse::ShipMotion>(player, hyperverse::ShipMotion{.position = position});
   world.registry.emplace<hyperverse::ShipHealth>(player);
   world.registry.emplace<hyperverse::ParticleCannonModel>(player);
+  world.registry.emplace<hyperverse::HomingMissileLauncherModel>(player);
   return player;
 }
 
@@ -384,4 +393,125 @@ TEST_CASE("raider particle cannon leads a moving player") {
   REQUIRE(command.has_value());
   CHECK(command->direction.x > 0.0F);
   CHECK(command->direction.y > 0.0F);
+}
+
+TEST_CASE("player homing missiles fire as left and right locked-target pair") {
+  TestAccountWorld world;
+  hyperverse::AccountCtx account = world.account_context();
+  const entt::entity player = make_player(world, {.x = 100.0F, .y = 100.0F});
+  world.registry.get<hyperverse::ShipMotion>(player).facing_radians = 0.0F;
+  const entt::entity raider = world.registry.create();
+  world.registry.emplace<hyperverse::RaiderShip>(raider, hyperverse::RaiderShip{.position = {.x = 700.0F, .y = 100.0F}});
+  const hyperverse::EnemyTargetLockModel lock{.phase = hyperverse::TargetLockPhase::Locked, .target = raider};
+  int fired_events = 0;
+  account.event_bus().appendListener(hyperverse::DomainEventType::HomingMissileFired, [&](const hyperverse::DomainEvent& event) {
+    CHECK(event.target == raider);
+    ++fired_events;
+  });
+
+  hyperverse::update_player_homing_missile_launcher(
+    hyperverse::WeaponCtx{tick_context(account, 0.0F).entity_context(player)},
+    lock,
+    {.active = true},
+    {.eject_side_offset = 40.0F, .eject_forward_offset = 20.0F}
+  );
+  account.event_bus().process();
+
+  CHECK(missile_count(account.registry()) == 2);
+  CHECK(fired_events == 2);
+  bool saw_left = false;
+  bool saw_right = false;
+  for (auto [entity, missile] : account.registry().view<hyperverse::HomingMissile>().each()) {
+    (void)entity;
+    CHECK(missile.phase == hyperverse::HomingMissilePhase::Ejected);
+    CHECK(missile.target == raider);
+    CHECK(missile.position.x == Catch::Approx(120.0F));
+    saw_left = saw_left || missile.position.y == Catch::Approx(60.0F);
+    saw_right = saw_right || missile.position.y == Catch::Approx(140.0F);
+  }
+  CHECK(saw_left);
+  CHECK(saw_right);
+}
+
+TEST_CASE("homing missile coasts before SML ignition then turns toward locked enemy") {
+  TestAccountWorld world;
+  hyperverse::AccountCtx account = world.account_context();
+  const entt::entity player = make_player(world, {.x = 1000.0F, .y = 1000.0F});
+  const entt::entity raider = world.registry.create();
+  world.registry.emplace<hyperverse::RaiderShip>(raider, hyperverse::RaiderShip{.position = {.x = 500.0F, .y = 500.0F}});
+  const entt::entity missile_entity = world.registry.create();
+  world.registry.emplace<hyperverse::HomingMissile>(
+    missile_entity,
+    hyperverse::HomingMissile{
+      .position = {.x = 100.0F, .y = 100.0F},
+      .velocity = {.x = 300.0F, .y = 0.0F},
+      .target = raider,
+      .ignition_seconds_remaining = 0.50F,
+    }
+  );
+
+  (void)hyperverse::update_homing_missiles(
+    hyperverse::ProjectileSimCtx{tick_context(account, 0.49F), player},
+    {.turn_responsiveness = 10.0F}
+  );
+  hyperverse::HomingMissile& coasting = world.registry.get<hyperverse::HomingMissile>(missile_entity);
+  CHECK(coasting.phase == hyperverse::HomingMissilePhase::Ejected);
+  CHECK(coasting.velocity.y == Catch::Approx(0.0F));
+
+  int ignition_events = 0;
+  account.event_bus().appendListener(hyperverse::DomainEventType::HomingMissileIgnited, [&](const hyperverse::DomainEvent& event) {
+    CHECK(event.subject == missile_entity);
+    ++ignition_events;
+  });
+  (void)hyperverse::update_homing_missiles(
+    hyperverse::ProjectileSimCtx{tick_context(account, 0.01F), player},
+    {.motor_acceleration = 1000.0F, .max_speed = 1000.0F, .turn_responsiveness = 10.0F}
+  );
+  account.event_bus().process();
+
+  const hyperverse::HomingMissile& ignited = world.registry.get<hyperverse::HomingMissile>(missile_entity);
+  CHECK(ignited.phase == hyperverse::HomingMissilePhase::Ignited);
+  CHECK(ignition_events == 1);
+  CHECK(ignited.velocity.y > 0.0F);
+}
+
+TEST_CASE("homing missile damages locked raider on impact") {
+  TestAccountWorld world;
+  hyperverse::AccountCtx account = world.account_context();
+  const entt::entity player = make_player(world, {.x = 1000.0F, .y = 1000.0F});
+  const entt::entity raider = world.registry.create();
+  world.registry.emplace<hyperverse::RaiderShip>(
+    raider,
+    hyperverse::RaiderShip{.position = {.x = 120.0F, .y = 100.0F}, .integrity = 60.0F, .max_integrity = 60.0F}
+  );
+  const entt::entity missile_entity = world.registry.create();
+  world.registry.emplace<hyperverse::HomingMissile>(
+    missile_entity,
+    hyperverse::HomingMissile{
+      .position = {.x = 120.0F, .y = 100.0F},
+      .target = raider,
+      .damage = 35.0F,
+      .phase = hyperverse::HomingMissilePhase::Ignited,
+    }
+  );
+  int impact_events = 0;
+  account.event_bus().appendListener(hyperverse::DomainEventType::HomingMissileImpact, [&](const hyperverse::DomainEvent& event) {
+    CHECK(event.subject == missile_entity);
+    CHECK(event.target == raider);
+    ++impact_events;
+  });
+
+  const hyperverse::HomingMissileHudSnapshot hud = hyperverse::update_homing_missiles(
+    hyperverse::ProjectileSimCtx{tick_context(account, 0.0F), player}
+  );
+  account.event_bus().process();
+
+  CHECK(hud.active_missiles == 0);
+  CHECK(account.registry().get<hyperverse::RaiderShip>(raider).integrity == Catch::Approx(25.0F));
+  CHECK(missile_count(account.registry()) == 0);
+  CHECK(explosion_count(account.registry()) == 1);
+  CHECK(impact_events == 1);
+
+  hyperverse::update_explosion_bursts(account.registry(), 0.46F);
+  CHECK(explosion_count(account.registry()) == 0);
 }

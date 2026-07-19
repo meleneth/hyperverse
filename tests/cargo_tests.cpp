@@ -148,6 +148,44 @@ TEST_CASE("cargo boxes created at a mining site wait for drone pickup and emit e
   }
 }
 
+TEST_CASE("cargo box lifecycle transitions through SML transition owner") {
+  hyperverse::CargoBox box;
+
+  CHECK(hyperverse::transition_cargo_box(box, hyperverse::CargoBoxTransition::QueuePickup));
+  CHECK(box.state == hyperverse::CargoBoxState::PendingPickup);
+  CHECK(hyperverse::transition_cargo_box(box, hyperverse::CargoBoxTransition::StartHaul));
+  CHECK(box.state == hyperverse::CargoBoxState::BeingHauled);
+  CHECK(hyperverse::transition_cargo_box(box, hyperverse::CargoBoxTransition::Link));
+  CHECK(box.state == hyperverse::CargoBoxState::Linked);
+  CHECK(hyperverse::transition_cargo_box(box, hyperverse::CargoBoxTransition::Detach));
+  CHECK(box.state == hyperverse::CargoBoxState::Detached);
+  CHECK(hyperverse::transition_cargo_box(box, hyperverse::CargoBoxTransition::Steal));
+  CHECK(box.state == hyperverse::CargoBoxState::Stolen);
+  CHECK(hyperverse::transition_cargo_box(box, hyperverse::CargoBoxTransition::Lose));
+  CHECK(box.state == hyperverse::CargoBoxState::Lost);
+}
+
+TEST_CASE("cargo box lifecycle emits state change events") {
+  hyperverse::CargoBox box{.position = {.x = 120.0F, .y = 220.0F}, .mass = 10.0F};
+  hyperverse::DomainEventBus event_bus;
+  int state_events = 0;
+  event_bus.appendListener(
+    hyperverse::DomainEventType::CargoBoxStateChanged,
+    [&](const hyperverse::DomainEvent& event) {
+      CHECK(event.type == hyperverse::DomainEventType::CargoBoxStateChanged);
+      CHECK(event.position.x == Catch::Approx(120.0F));
+      CHECK(event.amount == Catch::Approx(10.0F));
+      CHECK(event.count == static_cast<int>(hyperverse::CargoBoxState::Detached));
+      ++state_events;
+    }
+  );
+
+  CHECK(hyperverse::transition_cargo_box(box, hyperverse::CargoBoxTransition::Detach, entt::entity{42}, &event_bus));
+  event_bus.process();
+
+  CHECK(state_events == 1);
+}
+
 TEST_CASE("cargo dispatch assigns queued cargo jobs to the first available unassigned drone") {
   entt::registry registry;
   const entt::entity first_box = registry.create();
@@ -201,6 +239,63 @@ TEST_CASE("cargo dispatch assigns queued cargo jobs to the first available unass
   CHECK(drone.cargo_destination.x == Catch::Approx(844.0F));
   CHECK(drone.cargo_destination.y == Catch::Approx(2000.0F));
   CHECK(assigned_events == 2);
+}
+
+TEST_CASE("cargo dispatch preempts active mining drones for cargo pickup") {
+  entt::registry registry;
+  const entt::entity asteroid = registry.create();
+  registry.emplace<hyperverse::AsteroidBody>(asteroid, hyperverse::AsteroidBody{.position = {.x = 600.0F, .y = 100.0F}});
+  registry.emplace<hyperverse::MiningResource>(asteroid);
+  const entt::entity box = registry.create();
+  registry.emplace<hyperverse::CargoBox>(
+    box,
+    hyperverse::CargoBox{.position = {.x = 140.0F, .y = 100.0F}, .index = 0, .state = hyperverse::CargoBoxState::PendingPickup}
+  );
+  const entt::entity drone_entity = registry.create();
+  registry.emplace<hyperverse::MiningDrone>(
+    drone_entity,
+    hyperverse::MiningDrone{
+      .position = {.x = 100.0F, .y = 100.0F},
+      .target = asteroid,
+      .phase = hyperverse::MiningDronePhase::Mining,
+    }
+  );
+  const std::vector<entt::entity> drones{drone_entity};
+  hyperverse::CargoDispatchModel dispatch;
+  hyperverse::DomainEventBus event_bus;
+  int release_events = 0;
+  int assigned_events = 0;
+  event_bus.appendListener(
+    hyperverse::DomainEventType::DroneTargetReleased,
+    [&](const hyperverse::DomainEvent& event) {
+      CHECK(event.subject == drone_entity);
+      CHECK(event.target == asteroid);
+      ++release_events;
+    }
+  );
+  event_bus.appendListener(hyperverse::DomainEventType::CargoDroneJobAssigned, [&](const hyperverse::DomainEvent&) { ++assigned_events; });
+  install_cargo_dispatch_event_handlers(
+    dispatch,
+    registry,
+    drones,
+    {.position = {.x = 1000.0F, .y = 2000.0F}},
+    {.box_spacing = 156.0F},
+    {.width = 9000.0F, .height = 9000.0F},
+    event_bus
+  );
+
+  event_bus.enqueue(hyperverse::DomainEventType::CargoBoxCreated, hyperverse::DomainEvent{.type = hyperverse::DomainEventType::CargoBoxCreated, .subject = box});
+  event_bus.process();
+  event_bus.process();
+
+  const hyperverse::MiningDrone& drone = registry.get<hyperverse::MiningDrone>(drone_entity);
+  REQUIRE(dispatch.jobs.size() == 1U);
+  CHECK(dispatch.jobs.front().assigned_drone == drone_entity);
+  CHECK((drone.target == entt::null));
+  CHECK(drone.cargo_target == box);
+  CHECK(drone.cargo_destination.x == Catch::Approx(688.0F));
+  CHECK(release_events == 1);
+  CHECK(assigned_events == 1);
 }
 
 TEST_CASE("linked cargo boxes maneuver into spaced gathering slots") {
@@ -418,8 +513,10 @@ TEST_CASE("cargo extraction processes boxes one at a time at the gate") {
   event_bus.appendListener(hyperverse::DomainEventType::CargoExtractionComplete, [&](const hyperverse::DomainEvent&) { ++complete_events; });
 
   const hyperverse::CargoEscortRoute route{.gate_position = {.x = 1000.0F, .y = 1000.0F}};
+  hyperverse::CargoExtractionModel extraction;
 
   hyperverse::CargoExtractionHudSnapshot first_tick = hyperverse::update_cargo_extraction(
+    extraction,
     registry,
     escort,
     route,
@@ -437,6 +534,7 @@ TEST_CASE("cargo extraction processes boxes one at a time at the gate") {
 
   for (int tick = 0; tick < 16 && escort.phase != hyperverse::CargoEscortPhase::Complete; ++tick) {
     (void)hyperverse::update_cargo_extraction(
+      extraction,
       registry,
       escort,
       route,
@@ -467,8 +565,10 @@ TEST_CASE("cargo extraction accepts the train and forms a compact queue") {
   );
   hyperverse::CargoEscortState escort{.phase = hyperverse::CargoEscortPhase::Extracting};
   const hyperverse::CargoEscortRoute route{.gate_position = {.x = 1000.0F, .y = 1000.0F}};
+  hyperverse::CargoExtractionModel extraction;
 
   const hyperverse::CargoExtractionHudSnapshot hud = hyperverse::update_cargo_extraction(
+    extraction,
     registry,
     escort,
     route,
@@ -499,8 +599,10 @@ TEST_CASE("cargo extraction compacts queued containers after each accepted box")
   hyperverse::CargoEscortState escort{.phase = hyperverse::CargoEscortPhase::Extracting};
   const hyperverse::CargoEscortRoute route{.gate_position = {.x = 1000.0F, .y = 1000.0F}};
   const hyperverse::CargoExtractionTuning tuning{.seconds_per_box = 1.0F, .staging_spacing = 156.0F, .max_speed = 520.0F};
+  hyperverse::CargoExtractionModel extraction;
 
   (void)hyperverse::update_cargo_extraction(
+    extraction,
     registry,
     escort,
     route,
@@ -510,6 +612,7 @@ TEST_CASE("cargo extraction compacts queued containers after each accepted box")
     tuning
   );
   const hyperverse::CargoExtractionHudSnapshot shifted = hyperverse::update_cargo_extraction(
+    extraction,
     registry,
     escort,
     route,

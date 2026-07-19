@@ -10,6 +10,28 @@
 
 namespace hyperverse {
 
+enum class CargoExtractionPhase {
+  Idle,
+  Queueing,
+  MovingActiveToGate,
+  ExtractingActive,
+  Complete,
+};
+
+enum class CargoExtractionTransition {
+  BeginQueue,
+  ActiveNeedsGate,
+  ActiveAtGate,
+  ActiveExtracted,
+  QueueEmpty,
+  Reset,
+};
+
+struct CargoExtractionModel {
+  CargoExtractionPhase phase{CargoExtractionPhase::Idle};
+  entt::entity active_box{entt::null};
+};
+
 struct CargoExtractionTuning {
   float seconds_per_box{5.0F};
   float gate_radius{96.0F};
@@ -30,6 +52,7 @@ struct CargoExtractionHudSnapshot {
 };
 
 [[nodiscard]] CargoExtractionHudSnapshot update_cargo_extraction(
+  CargoExtractionModel& model,
   entt::registry& registry,
   CargoEscortState& escort,
   const CargoEscortRoute& route,

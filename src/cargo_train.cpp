@@ -52,14 +52,14 @@ CargoTrainHudSnapshot update_cargo_train(
   return hud;
 }
 
-int detach_linked_cargo(entt::registry& registry, Vec2 inherited_velocity) {
+int detach_linked_cargo(entt::registry& registry, Vec2 inherited_velocity, DomainEventBus* event_bus) {
   int detached = 0;
   for (auto [entity, box] : registry.view<CargoBox>().each()) {
     (void)entity;
     if (box.state != CargoBoxState::Linked) {
       continue;
     }
-    box.state = CargoBoxState::Detached;
+    (void)transition_cargo_box(box, CargoBoxTransition::Detach, entity, event_bus);
     box.velocity = inherited_velocity;
     ++detached;
   }

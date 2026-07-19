@@ -10,6 +10,9 @@ namespace hyperverse {
 enum class DomainEventType {
   ParticleFired,
   ParticleImpact,
+  HomingMissileFired,
+  HomingMissileIgnited,
+  HomingMissileImpact,
   AsteroidDamaged,
   AsteroidFragmented,
   AsteroidConsumed,
@@ -18,6 +21,7 @@ enum class DomainEventType {
   CargoEscortStarted,
   CargoArrivedAtGate,
   CargoBoxCreated,
+  CargoBoxStateChanged,
   CargoDroneJobQueued,
   CargoDroneJobAssigned,
   CargoBoxPickupStarted,
@@ -25,6 +29,12 @@ enum class DomainEventType {
   CargoBoxExtracted,
   CargoExtractionComplete,
   ContractRoundCompleted,
+  MiningTargetCycleRequested,
+  EnemyTargetCycleRequested,
+  RadarTargetsCleared,
+  RaiderPhaseChanged,
+  RaiderTaskChanged,
+  GravitySlingPhaseChanged,
 };
 
 struct DomainEvent {

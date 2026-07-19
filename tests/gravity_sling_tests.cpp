@@ -119,6 +119,60 @@ TEST_CASE("gravity sling transitions from engagement to active") {
   CHECK(model.phase == hyperverse::GravitySlingPhase::Active);
 }
 
+TEST_CASE("gravity sling locks the exact acquired asteroid distance") {
+  entt::registry registry;
+  asteroid(registry, {.x = 500.0F, .y = 0.0F}, {}, 100.0F);
+  hyperverse::GravitySlingModel model{};
+  hyperverse::ShipMotion ship{.position = {.x = 280.0F, .y = 0.0F}};
+
+  (void)hyperverse::update_gravity_sling(
+    model,
+    registry,
+    ship,
+    {.primary_aim = {.x = 1.0F}, .gravity_sling_requested = true},
+    Sector,
+    0.0F,
+    {.min_radius_padding = 260.0F, .max_radius_padding = 920.0F}
+  );
+
+  CHECK(model.radius == Catch::Approx(220.0F));
+}
+
+TEST_CASE("gravity sling phase FSM emits transition events") {
+  entt::registry registry;
+  asteroid(registry, {.x = 500.0F, .y = 0.0F});
+  hyperverse::GravitySlingModel model{};
+  hyperverse::ShipMotion ship{.position = {.x = 250.0F, .y = 0.0F}};
+  hyperverse::DomainEventBus event_bus;
+  std::vector<hyperverse::DomainEvent> events;
+  event_bus.appendListener(
+    hyperverse::DomainEventType::GravitySlingPhaseChanged,
+    [&](const hyperverse::DomainEvent& event) { events.push_back(event); }
+  );
+
+  (void)hyperverse::update_gravity_sling(
+    model,
+    registry,
+    ship,
+    {.primary_aim = {.x = 1.0F}, .gravity_sling_requested = true},
+    Sector,
+    0.0F,
+    {.engagement_seconds = 0.1F},
+    entt::entity{11},
+    &event_bus
+  );
+  (void)hyperverse::update_gravity_sling(model, registry, ship, {}, Sector, 0.1F, {.engagement_seconds = 0.1F}, entt::entity{11}, &event_bus);
+  (void)hyperverse::update_gravity_sling(model, registry, ship, {.gravity_sling_requested = true}, Sector, 0.1F, {}, entt::entity{11}, &event_bus);
+  event_bus.process();
+
+  REQUIRE(events.size() == 3);
+  CHECK(events[0].subject == entt::entity{11});
+  CHECK(events[0].count == static_cast<int>(hyperverse::GravitySlingPhase::Engaging));
+  CHECK(events[1].count == static_cast<int>(hyperverse::GravitySlingPhase::Active));
+  CHECK(events[2].count == static_cast<int>(hyperverse::GravitySlingPhase::FreeFlight));
+  CHECK(events[2].amount == Catch::Approx(static_cast<float>(hyperverse::GravitySlingDisengageReason::PlayerReleased)));
+}
+
 TEST_CASE("gravity sling preserves stable relative position under target translation") {
   entt::registry registry;
   const entt::entity target = asteroid(registry, {.x = 500.0F, .y = 0.0F});
@@ -166,6 +220,31 @@ TEST_CASE("gravity sling radial input cannot change constrained radius") {
   CHECK(model.radius == Catch::Approx(250.0F));
   (void)hyperverse::update_gravity_sling(model, registry, ship, {.desired_movement = {.x = 1.0F}}, Sector, 1.0F, tuning);
   CHECK(model.radius == Catch::Approx(250.0F));
+}
+
+TEST_CASE("gravity sling keeps radius locked while thrusting against asteroid travel") {
+  entt::registry registry;
+  const entt::entity target = asteroid(registry, {.x = 500.0F, .y = 0.0F}, {.x = 120.0F, .y = 0.0F}, 100.0F);
+  hyperverse::GravitySlingModel model{};
+  hyperverse::ShipMotion ship{.position = {.x = 250.0F, .y = 0.0F}, .facing_radians = 0.0F};
+  activate(model, registry, ship);
+  const float locked_radius = model.radius;
+  const float speed_before = registry.get<hyperverse::AsteroidBody>(target).velocity.x;
+
+  (void)hyperverse::update_gravity_sling(
+    model,
+    registry,
+    ship,
+    {.desired_movement = {.x = -1.0F, .y = 0.0F}},
+    Sector,
+    0.25F,
+    {.thrust_turn_rate = 100.0F, .asteroid_thrust_acceleration = 160.0F}
+  );
+
+  CHECK(model.radius == Catch::Approx(locked_radius));
+  CHECK(hyperverse::wrapped_distance(registry.get<hyperverse::AsteroidBody>(target).position, ship.position, Sector) == Catch::Approx(locked_radius).margin(0.01F));
+  CHECK(registry.get<hyperverse::AsteroidBody>(target).velocity.x < speed_before);
+  CHECK(std::abs(std::abs(ship.facing_radians) - 3.14159265F) < 0.01F);
 }
 
 TEST_CASE("gravity sling angular adjustment changes local bearing") {

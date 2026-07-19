@@ -16,6 +16,14 @@ struct ShipMotion {
   float boost_seconds_remaining{0.0F};
 };
 
+struct ThrusterCommand {
+  Vec2 linear_thrust{};
+  float desired_facing_radians{0.0F};
+  bool has_desired_facing{false};
+  bool boost{false};
+  bool enforce_speed_envelope{true};
+};
+
 struct FlightTuning {
   float max_speed{920.0F};
   float acceleration{2400.0F};
@@ -23,6 +31,7 @@ struct FlightTuning {
   float turn_rate{11.0F};
   float boost_speed_multiplier{2.0F};
   float boost_duration_seconds{0.33F};
+  bool auto_brake{true};
 };
 
 struct FlightHudTuning {
@@ -32,6 +41,7 @@ struct FlightHudTuning {
 struct FlightHudSnapshot {
   Vec2 position{};
   Vec2 velocity{};
+  Vec2 thrust_vector{};
   float speed{0.0F};
   float speed_fraction{0.0F};
   float facing_radians{0.0F};
@@ -39,7 +49,22 @@ struct FlightHudSnapshot {
   float nearest_wrap_edge_distance{0.0F};
   bool wrap_warning{false};
   ControlMapping control_mapping{ControlMapping::Keyboard};
+  bool braking_assist{false};
 };
+
+[[nodiscard]] ThrusterCommand flight_computer_assist(
+  const ShipMotion& ship,
+  const SemanticInputFrame& input,
+  const FlightTuning& flight
+);
+
+void apply_thruster_physics(
+  ShipMotion& ship,
+  const ThrusterCommand& command,
+  const FlightTuning& flight,
+  const SectorTuning& sector,
+  float dt_seconds
+);
 
 void simulate_assisted_flight(
   AccountCtx& ctx,

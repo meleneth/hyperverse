@@ -49,6 +49,12 @@ struct EngineSourceDraw {
   float intensity{0.0F};
 };
 
+enum class EngineSourcePhase {
+  Dormant,
+  Active,
+  Decaying,
+};
+
 struct EngineTrailNozzle {
   Vec2 world_position{};
   Vec2 exhaust_direction{};
@@ -64,6 +70,7 @@ struct EngineTrailEngine {
   float previous_intensity{0.0F};
   Vec2 previous_position{};
   Vec2 previous_direction{.x = -1.0F, .y = 0.0F};
+  EngineSourcePhase source_phase{EngineSourcePhase::Dormant};
   float source_intensity{0.0F};
   Vec2 source_position{};
   Vec2 source_direction{.x = -1.0F, .y = 0.0F};

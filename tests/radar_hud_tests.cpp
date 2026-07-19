@@ -111,3 +111,60 @@ TEST_CASE("radar reveal timers persist for retained targets and reset for new ta
   CHECK(original_entry->reveal_seconds == Catch::Approx(0.5F));
   CHECK(radar.tracked_targets[0].reveal_seconds == Catch::Approx(0.0F));
 }
+
+TEST_CASE("combat radar tracks only active enemy ships") {
+  entt::registry registry;
+  const entt::entity asteroid = registry.create();
+  registry.emplace<hyperverse::AsteroidBody>(asteroid, hyperverse::AsteroidBody{.position = {.x = 120.0F, .y = 100.0F}});
+  const entt::entity dormant_thief = registry.create();
+  registry.emplace<hyperverse::RaiderShip>(
+    dormant_thief,
+    hyperverse::RaiderShip{.position = {.x = 130.0F, .y = 100.0F}, .phase = hyperverse::RaiderPhase::Idle, .role = hyperverse::RaiderRole::CargoThief}
+  );
+  const entt::entity combat = registry.create();
+  registry.emplace<hyperverse::RaiderShip>(
+    combat,
+    hyperverse::RaiderShip{.position = {.x = 160.0F, .y = 100.0F}, .role = hyperverse::RaiderRole::Combat}
+  );
+
+  hyperverse::CombatRadarHudModel radar;
+  hyperverse::update_combat_radar_hud(
+    radar,
+    registry,
+    {.position = {.x = 100.0F, .y = 100.0F}},
+    {.width = 9000.0F, .height = 9000.0F},
+    0.25F,
+    {.max_targets = 4, .range_world = 500.0F}
+  );
+
+  REQUIRE(radar.tracked_targets.size() == 1U);
+  CHECK(radar.tracked_targets.front().target == combat);
+  REQUIRE(radar.target_order.size() == 1U);
+  CHECK(radar.target_order.front() == combat);
+}
+
+TEST_CASE("asteroid and combat radar maintain separate target order lists") {
+  entt::registry registry;
+  const entt::entity asteroid = registry.create();
+  registry.emplace<hyperverse::AsteroidBody>(asteroid, hyperverse::AsteroidBody{.position = {.x = 120.0F, .y = 100.0F}});
+  const entt::entity combat = registry.create();
+  registry.emplace<hyperverse::RaiderShip>(
+    combat,
+    hyperverse::RaiderShip{.position = {.x = 160.0F, .y = 100.0F}, .role = hyperverse::RaiderRole::Combat}
+  );
+
+  hyperverse::RadarHudModel asteroid_radar;
+  hyperverse::CombatRadarHudModel combat_radar;
+  const hyperverse::ShipMotion ship{.position = {.x = 100.0F, .y = 100.0F}};
+  const hyperverse::SectorTuning sector{.width = 9000.0F, .height = 9000.0F};
+  const hyperverse::RadarHudTuning tuning{.max_targets = 4, .range_world = 500.0F};
+
+  hyperverse::update_radar_hud(asteroid_radar, registry, ship, sector, 0.25F, tuning);
+  hyperverse::update_combat_radar_hud(combat_radar, registry, ship, sector, 0.25F, tuning);
+
+  REQUIRE(asteroid_radar.target_order.size() == 1U);
+  REQUIRE(combat_radar.target_order.size() == 1U);
+  CHECK(asteroid_radar.target_order.front() == asteroid);
+  CHECK(combat_radar.target_order.front() == combat);
+  CHECK(asteroid_radar.target_order.front() != combat_radar.target_order.front());
+}

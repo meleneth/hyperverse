@@ -4,18 +4,26 @@ Hyperverse uses a deliberately small composition spine:
 
 ```mermaid
 flowchart TD
+  GC[GrandCentral] --> Registry[EnTT registry]
+  GC --> Physics[PhysicsWorld]
+  GC --> Events[DomainEventBus]
+  GC --> Log[ScopedLog]
+  GC --> Account[AccountState]
+  GC --> AccountCtx
   App[AppRuntime] --> AccountCtx
-  AccountCtx --> Registry[EnTT registry]
-  AccountCtx --> Physics[PhysicsWorld]
-  AccountCtx --> Events[DomainEventBus]
-  AccountCtx --> Log[ScopedLog]
-  AccountCtx --> Account[AccountState]
   AccountCtx --> Tick[SectorTickCtx]
   Tick --> Entity[EntityCtx]
   Entity --> Systems[Gameplay systems]
 ```
 
-`AppRuntime` is the current composition root. It owns startup wiring, installs event handlers, pumps SDL input, advances the fixed timestep, and hands renderer-neutral snapshots to the renderer.
+`GrandCentral` is the composition root. It owns account-wide runtime state and derives the first
+typed context, `AccountCtx`. Startup code may know about `GrandCentral`; gameplay systems should
+receive only the narrow context that describes their authority.
+
+`AppRuntime` is an internal application loop built from `AccountCtx`. It installs event handlers,
+pumps SDL input, advances the fixed timestep, and hands renderer-neutral snapshots to the renderer.
+It should continue shrinking toward platform loop responsibilities as lifecycle behavior moves
+behind typed contexts and event responders.
 
 Persistent gameplay state lives in three places:
 
@@ -33,7 +41,7 @@ helpers keeping movement and targeting deterministic across sector edges.
 
 ## Fixed Simulation
 
-`AppRuntime` accumulates real elapsed time into `FixedTimestep` and runs gameplay ticks at `UniverseClock::FixedTickSeconds`. Rendering may observe interpolation-oriented state, but gameplay logic should stay deterministic under representative timestep splits.
+`AppRuntime` accumulates real elapsed time into `FixedTimestep` and runs gameplay ticks at `UniverseClock::FixedTickSeconds`. The canonical simulation tick is 60 Hz. Rendering may observe interpolation-oriented state, but gameplay logic should stay deterministic under representative timestep splits.
 
 ## Renderer Boundary
 

@@ -21,6 +21,9 @@ struct ready_phase {};
 struct cooling_phase {};
 struct trigger_held {};
 struct cooldown_elapsed {};
+struct ejected_phase {};
+struct ignited_phase {};
+struct ignition_elapsed {};
 
 struct ParticleCannonMachine {
   auto operator()() const {
@@ -29,6 +32,23 @@ struct ParticleCannonMachine {
       *state<ready_phase> + event<trigger_held> = state<cooling_phase>,
       state<cooling_phase> + event<cooldown_elapsed> = state<ready_phase>
     );
+  }
+};
+
+struct HomingMissileLauncherMachine {
+  auto operator()() const {
+    using namespace sml;
+    return make_transition_table(
+      *state<ready_phase> + event<trigger_held> = state<cooling_phase>,
+      state<cooling_phase> + event<cooldown_elapsed> = state<ready_phase>
+    );
+  }
+};
+
+struct HomingMissileFlightMachine {
+  auto operator()() const {
+    using namespace sml;
+    return make_transition_table(*state<ejected_phase> + event<ignition_elapsed> = state<ignited_phase>);
   }
 };
 
@@ -44,6 +64,26 @@ void replay_phase(sml::sm<ParticleCannonMachine>& machine, ParticleCannonPhase p
 
 [[nodiscard]] ParticleCannonPhase read_phase(const sml::sm<ParticleCannonMachine>& machine) {
   return machine.is(sml::state<cooling_phase>) ? ParticleCannonPhase::Cooling : ParticleCannonPhase::Ready;
+}
+
+void replay_phase(sml::sm<HomingMissileLauncherMachine>& machine, HomingMissileLauncherPhase phase) {
+  if (phase == HomingMissileLauncherPhase::Cooling) {
+    machine.process_event(trigger_held{});
+  }
+}
+
+[[nodiscard]] HomingMissileLauncherPhase read_phase(const sml::sm<HomingMissileLauncherMachine>& machine) {
+  return machine.is(sml::state<cooling_phase>) ? HomingMissileLauncherPhase::Cooling : HomingMissileLauncherPhase::Ready;
+}
+
+void replay_phase(sml::sm<HomingMissileFlightMachine>& machine, HomingMissilePhase phase) {
+  if (phase == HomingMissilePhase::Ignited) {
+    machine.process_event(ignition_elapsed{});
+  }
+}
+
+[[nodiscard]] HomingMissilePhase read_phase(const sml::sm<HomingMissileFlightMachine>& machine) {
+  return machine.is(sml::state<ignited_phase>) ? HomingMissilePhase::Ignited : HomingMissilePhase::Ejected;
 }
 
 [[nodiscard]] bool advance_particle_cannon_fsm(ParticleCannonModel& model, bool trigger_active, float dt_seconds, const ParticleCannonTuning& tuning) {
@@ -64,6 +104,49 @@ void replay_phase(sml::sm<ParticleCannonMachine>& machine, ParticleCannonPhase p
   }
 
   model.phase = read_phase(machine);
+  return false;
+}
+
+[[nodiscard]] bool advance_homing_missile_launcher_fsm(
+  HomingMissileLauncherModel& model,
+  bool trigger_active,
+  float dt_seconds,
+  const HomingMissileTuning& tuning
+) {
+  sml::sm<HomingMissileLauncherMachine> machine;
+  replay_phase(machine, model.phase);
+
+  model.cooldown_seconds = std::max(0.0F, model.cooldown_seconds - std::max(0.0F, dt_seconds));
+  if (model.phase == HomingMissileLauncherPhase::Cooling && model.cooldown_seconds <= 0.0F) {
+    machine.process_event(cooldown_elapsed{});
+    model.phase = read_phase(machine);
+  }
+
+  if (model.phase == HomingMissileLauncherPhase::Ready && trigger_active) {
+    machine.process_event(trigger_held{});
+    model.phase = read_phase(machine);
+    model.cooldown_seconds = std::max(0.0F, tuning.cooldown_seconds);
+    return true;
+  }
+
+  model.phase = read_phase(machine);
+  return false;
+}
+
+[[nodiscard]] bool advance_homing_missile_flight_fsm(HomingMissile& missile, float dt_seconds) {
+  sml::sm<HomingMissileFlightMachine> machine;
+  replay_phase(machine, missile.phase);
+
+  if (missile.phase == HomingMissilePhase::Ejected) {
+    missile.ignition_seconds_remaining = std::max(0.0F, missile.ignition_seconds_remaining - std::max(0.0F, dt_seconds));
+    if (missile.ignition_seconds_remaining <= 0.0F) {
+      machine.process_event(ignition_elapsed{});
+      missile.phase = read_phase(machine);
+      return true;
+    }
+  }
+
+  missile.phase = read_phase(machine);
   return false;
 }
 
@@ -230,6 +313,51 @@ void spawn_particle_pair(
   }
 }
 
+void spawn_homing_missile_pair(
+  entt::registry& registry,
+  DomainEventBus& event_bus,
+  const ShipMotion& ship,
+  entt::entity target,
+  const HomingMissileTuning& tuning
+) {
+  const Vec2 forward = facing_direction(ship.facing_radians);
+  const Vec2 right = perpendicular(forward);
+  for (const float side : {-1.0F, 1.0F}) {
+    const entt::entity missile_entity = registry.create();
+    const Vec2 origin = ship.position + (forward * tuning.eject_forward_offset) + (right * tuning.eject_side_offset * side);
+    registry.emplace<HomingMissile>(
+      missile_entity,
+      HomingMissile{
+        .position = origin,
+        .velocity = ship.velocity + (forward * tuning.eject_forward_speed) + (right * tuning.eject_side_speed * side),
+        .target = target,
+        .ttl_seconds = tuning.ttl_seconds,
+        .ignition_seconds_remaining = tuning.ignition_delay_seconds,
+        .damage = tuning.damage,
+        .radius = tuning.radius,
+      }
+    );
+    event_bus.enqueue(
+      DomainEventType::HomingMissileFired,
+      DomainEvent{.type = DomainEventType::HomingMissileFired, .subject = missile_entity, .target = target, .position = origin}
+    );
+  }
+}
+
+void steer_homing_missile(HomingMissile& missile, const RaiderShip& target, const SectorTuning& sector, float dt_seconds, const HomingMissileTuning& tuning) {
+  const Vec2 to_target = wrapped_delta(missile.position, target.position, sector);
+  const Vec2 desired_direction = normalize_or_zero(to_target);
+  if (length(desired_direction) <= 0.0001F) {
+    return;
+  }
+
+  const Vec2 current_direction = normalize_or_zero(missile.velocity);
+  const float blend = std::clamp(tuning.turn_responsiveness * std::max(0.0F, dt_seconds), 0.0F, 1.0F);
+  const Vec2 steered_direction = normalize_or_zero((current_direction * (1.0F - blend)) + (desired_direction * blend));
+  missile.velocity += steered_direction * tuning.motor_acceleration * std::max(0.0F, dt_seconds);
+  missile.velocity = clamp_length(missile.velocity, tuning.max_speed);
+}
+
 }  // namespace
 
 WeaponCtx::WeaponCtx(EntityCtx entity) : entity_{entity} {}
@@ -260,6 +388,10 @@ float WeaponCtx::dt() const {
 
 ParticleCannonModel& WeaponCtx::cannon() const {
   return entity_.get<ParticleCannonModel>();
+}
+
+HomingMissileLauncherModel& WeaponCtx::missile_launcher() const {
+  return entity_.get<HomingMissileLauncherModel>();
 }
 
 std::optional<ParticleCannonFireCommand> request_player_particle_fire(
@@ -339,6 +471,25 @@ void spawn_requested_particle_fire(
   const ParticleCannonTuning& tuning
 ) {
   spawn_particle_pair(ctx.registry(), ctx.event_bus(), command, tuning);
+}
+
+void update_player_homing_missile_launcher(
+  WeaponCtx ctx,
+  const EnemyTargetLockModel& enemy_lock,
+  WeaponTrigger trigger,
+  const HomingMissileTuning& tuning
+) {
+  if (!has_locked_enemy(enemy_lock) || !ctx.registry().valid(enemy_lock.target) || !ctx.registry().all_of<RaiderShip>(enemy_lock.target)) {
+    (void)advance_homing_missile_launcher_fsm(ctx.missile_launcher(), false, ctx.dt(), tuning);
+    return;
+  }
+  const RaiderShip& target = ctx.registry().get<RaiderShip>(enemy_lock.target);
+  const bool trigger_active = trigger.active && target.integrity > 0.0F && target.phase != RaiderPhase::Escaped;
+  if (!advance_homing_missile_launcher_fsm(ctx.missile_launcher(), trigger_active, ctx.dt(), tuning)) {
+    return;
+  }
+
+  spawn_homing_missile_pair(ctx.registry(), ctx.event_bus(), ctx.entity_context().get<ShipMotion>(), enemy_lock.target, tuning);
 }
 
 ProjectileSimCtx::ProjectileSimCtx(SectorTickCtx tick, entt::entity player) : tick_{tick}, player_{player} {}
@@ -522,6 +673,96 @@ ParticleCannonHudSnapshot update_particle_projectiles(
   }
 
   return hud;
+}
+
+HomingMissileHudSnapshot update_homing_missiles(
+  ProjectileSimCtx ctx,
+  const HomingMissileTuning& tuning
+) {
+  entt::registry& registry = ctx.registry();
+  HomingMissileHudSnapshot hud{};
+  std::vector<entt::entity> expired;
+
+  for (auto [missile_entity, missile] : registry.view<HomingMissile>().each()) {
+    missile.ttl_seconds -= std::max(0.0F, ctx.dt());
+    const bool ignited_now = advance_homing_missile_flight_fsm(missile, ctx.dt());
+    if (ignited_now) {
+      ctx.event_bus().enqueue(
+        DomainEventType::HomingMissileIgnited,
+        DomainEvent{.type = DomainEventType::HomingMissileIgnited, .subject = missile_entity, .target = missile.target, .position = missile.position}
+      );
+    }
+
+    if (missile.phase == HomingMissilePhase::Ignited && registry.valid(missile.target) && registry.all_of<RaiderShip>(missile.target)) {
+      RaiderShip& target = registry.get<RaiderShip>(missile.target);
+      if (target.integrity > 0.0F && target.phase != RaiderPhase::Escaped) {
+        steer_homing_missile(missile, target, ctx.sector(), ctx.dt(), tuning);
+      }
+    }
+
+    missile.position = wrap_position(missile.position + (missile.velocity * std::max(0.0F, ctx.dt())), ctx.sector());
+    bool hit = false;
+
+    if (registry.valid(missile.target) && registry.all_of<RaiderShip>(missile.target)) {
+      RaiderShip& target = registry.get<RaiderShip>(missile.target);
+      if (target.integrity > 0.0F && target.phase != RaiderPhase::Escaped) {
+        const Vec2 relative_position = wrapped_delta(missile.position, target.position, ctx.sector());
+        if (jolt_shapes_overlap(
+              SpriteCollisionShape::Particle,
+              missile.radius,
+              SpriteCollisionShape::Ship,
+              RaiderCollisionRadius,
+              relative_position
+            )) {
+          target.integrity = std::max(0.0F, target.integrity - missile.damage);
+          ctx.event_bus().enqueue(
+            DomainEventType::HomingMissileImpact,
+            DomainEvent{
+              .type = DomainEventType::HomingMissileImpact,
+              .subject = missile_entity,
+              .target = missile.target,
+              .position = missile.position,
+              .amount = missile.damage,
+            }
+          );
+          const entt::entity explosion = registry.create();
+          registry.emplace<ExplosionBurst>(
+            explosion,
+            ExplosionBurst{.position = missile.position, .ttl_seconds = tuning.explosion_ttl_seconds, .radius = tuning.explosion_radius}
+          );
+          (void)explosion;
+          ++hud.impacts;
+          hit = true;
+        }
+      }
+    }
+
+    if (hit || missile.ttl_seconds <= 0.0F) {
+      expired.push_back(missile_entity);
+    } else {
+      ++hud.active_missiles;
+    }
+  }
+
+  for (entt::entity missile : expired) {
+    registry.destroy(missile);
+  }
+
+  return hud;
+}
+
+void update_explosion_bursts(entt::registry& registry, float dt_seconds) {
+  std::vector<entt::entity> expired;
+  for (auto [entity, burst] : registry.view<ExplosionBurst>().each()) {
+    burst.age_seconds += std::max(0.0F, dt_seconds);
+    if (burst.age_seconds >= burst.ttl_seconds) {
+      expired.push_back(entity);
+    }
+  }
+
+  for (entt::entity entity : expired) {
+    registry.destroy(entity);
+  }
 }
 
 }  // namespace hyperverse

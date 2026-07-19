@@ -2,9 +2,11 @@
 
 ## Flight
 
-The ship uses strong flight assistance.
+The ship uses strict thrust physics with strong flight-computer assistance layered on top.
 
-The control fantasy is desired motion rather than raw thruster micromanagement.
+The control fantasy is desired motion rather than raw thruster micromanagement, but the physical
+model remains thrust and controlled micro-rotation. Velocity changes only through applied thrust,
+braking is counterthrust, and boost increases thrust authority instead of setting velocity directly.
 
 The flight model should preserve inertia and mass while allowing the player to feel precise and competent.
 
@@ -15,12 +17,22 @@ Primary tuning dimensions:
 - acceleration
 - braking
 - rotational response
+- speed envelope assist
 - assisted facing
 - lateral correction
 - camera position lag
 - camera rotation lag
 - target-relative assistance
 - transition smoothing between operational modes
+
+`flight_computer_assist` converts semantic movement and aim intent into a `ThrusterCommand`.
+`apply_thruster_physics` consumes that command and owns physical integration: thrust, rotation
+rate limiting, speed envelope assist, and sector wrapping. This keeps the eventual flight computer
+replaceable without loosening the underlying spacecraft model.
+
+Raiders follow the same physical rule: their steering code chooses thrust direction and facing, then
+acceleration changes velocity over time. Raider movement should not assign velocity directly except
+for deliberate spawn/setup initialization.
 
 ## Operational Modes
 
@@ -51,6 +63,27 @@ Example:
 - movement: handled by assistance, target-relative behavior, or another context-specific control channel
 
 Exact mappings remain subject to playtesting.
+
+## Radar Control
+
+Radar target control is owned by `RadarControlModel`, a small SML-backed state machine. Raw input
+only reports shoulder/button state. The radar-control FSM consumes that state and emits target
+commands/events:
+
+- right shoulder: cycle asteroid mining targets and enter mining focus
+- left shoulder: cycle enemy ship targets
+- left shoulder + right shoulder: clear all targets
+
+After a clear chord, the FSM remains blocked while either shoulder is still held. This prevents a
+sloppy release from being interpreted as a left-only or right-only cycle. Single-shoulder target
+cycling becomes live again only after both shoulders have fully released.
+
+The FSM also records `RadarFocus`: none, mining, or combat. Target locks consume the command frame
+produced by the FSM; events notify the rest of the game that the radar-control fact occurred.
+
+Asteroid radar and combat radar are separate persisted models. `RadarHudModel` owns asteroid
+contacts and asteroid target order; `CombatRadarHudModel` owns hostile ship contacts and enemy
+target order. The lock systems consume those owned order lists instead of sharing one mixed list.
 
 ## Asteroid Lock
 
@@ -84,6 +117,11 @@ Lifecycle:
 Kinetic particle impacts apply projectile velocity into the asteroid mass, so firing from ahead of a moving rock can slow it down. Laser, kinetic, and explosive breakup patterns remain separate tuning/behavior paths.
 
 Mining drones are not allowed to mine the largest asteroid tier. The player must first break large rocks into the two smaller size ranges before drones can work them.
+
+Each mining drone working an asteroid increases the rate at which asteroid mass becomes cargo
+container mass. When a cargo container is created, it queues a transport job to the gathering site.
+Cargo transport has priority over continued mining: a drone that is not already hauling cargo may
+drop its current mining target and pick up a pending container.
 
 Ore value is tiered and color-coded. The intended mining decision is not "extract every kilogram"; it is "identify and extract the premium material before spending time on cheap bulk."
 
@@ -155,6 +193,14 @@ While active:
 
 The intended use is to acquire a moving rock, orbit into a useful firing or escape position, then release into a legible slingshot trajectory. The target temporarily becomes moving terrain rather than a body being slowed by the ship.
 
+The sling radius is locked to the wrapped distance at acquisition, not adjusted to a preferred band
+after capture. While active, the constraint keeps the ship on that radius, but the player can turn
+and thrust independently. Engine thrust transfers acceleration into the asteroid through the sling,
+so pointing opposite the asteroid's travel slows it for follow-up mining.
+
+The phase and disengage reason are owned by a small SML-backed transition owner. It emits
+`GravitySlingPhaseChanged` for engagement, activation, and disengage transitions.
+
 ## Threat Pressure
 
 Mining destabilizes local space.
@@ -176,7 +222,8 @@ If the player stays indefinitely, local space eventually tears open and consumes
 
 ## Raiders
 
-Raiders have a role and a current task.
+Raiders have a role, a current phase, and a current task. Phase and task changes are owned by
+small SML-backed transition owners so changes are event-visible.
 
 Current tasks:
 
@@ -189,11 +236,19 @@ Cargo thieves prioritize cargo pod theft. Combat raiders harass the player by de
 
 ## Weapons
 
-Weapon firing should be event-driven.
+Weapon firing is event-visible and should keep moving toward event responders at gameplay
+lifecycle boundaries.
 
-The particle beam is intended as a dual-fire weapon: two side-by-side shots from separate muzzle offsets. Each shot must be an independent projectile with its own collision query and impact event.
+The particle beam is a dual-fire weapon: two side-by-side shots from separate muzzle offsets. Each shot is an independent projectile with its own collision query and impact event.
 
-The firing mechanism should be modeled as a small FSM driven by semantic fire intent and simulation-clock events. Cooldown, burst timing, dual-barrel synchronization, and projectile spawn events belong in that machine rather than in direct input polling.
+The firing mechanism is modeled as a small ready/cooldown FSM driven by semantic fire intent and simulation-clock time. Cooldown, owner-specific cadence, dual-shot spawning, and projectile spawn events live in the weapon path rather than raw input polling.
+
+Homing missiles are a separate locked-target weapon. The launcher consumes semantic missile-fire
+intent and the current enemy target lock; without a locked hostile target it does not spawn
+missiles. A valid launch ejects two missiles from the left and right side of the player ship. Each
+missile coasts for half a second, then its SML-owned flight phase transitions from ejected to
+ignited and the motor begins steering toward the locked hostile. Missile impacts emit
+`HomingMissileImpact`, damage the raider, and spawn a short-lived explosion burst for the HUD.
 
 ## Time
 
@@ -215,6 +270,13 @@ The HUD is not assumed to be perfectly effective forever. Ship computer upgrades
 Sprite collision shapes are generated from alpha masks rather than hand-authored boxes.
 
 `scripts/generate-sprite-collision-shapes.py` reads transparent areas from sprite PNGs and emits checked-in C++ data. Runtime Jolt queries build compound shapes from that generated data. This keeps collision reviewable and avoids decoding image files during collision setup.
+
+High-thrust flight can cross collision volumes between fixed ticks, so collision prediction uses a
+swept path instead of relying only on per-tick overlap. The predictor first builds a
+distance-ranked candidate set around the ship. The number of swept checks scales from ship speed
+and zoom/view tuning, then each candidate gets a cheap swept-radius line test before the precise
+Jolt shape cast. HUD snapshots expose candidate and swept-check counts so prediction cost and
+warning quality can be tuned instead of guessed.
 
 ## Drones
 
@@ -239,14 +301,27 @@ Endgame may support approximately 8 drones, but this is a tuning target rather t
 
 Drone movement speed, acceleration/formation response, mining efficiency, extraction efficiency, and travel-to-work behavior should become upgradeable equipment axes. Current builds start with strong values so the slice shows the intended high-end feel first.
 
-Initial implementation should begin with 2 drones:
+The current playable build starts with 8 strong mining drones. That is a development fixture for
+making high-end drone behavior visible before progression, loadouts, and role counts are designed.
 
-- one mining drone
-- one combat drone
+Cargo delivery preempts mining work. Once a cargo box exists, assigning a drone to transport it is
+more important than keeping that drone on an asteroid to create additional cargo.
+
+Drone mode is split across small SML-backed owners. The cargo FSM owns pickup and escorting cargo;
+the work FSM owns normal idle formation, travelling to work, and mining. Cargo preemption crosses
+between those machines through explicit transition calls instead of a single large drone FSM.
 
 ## Cargo Train
 
 Cargo consists of connected boxes held together by relatively weak electromagnetic couplings.
+
+Cargo box lifecycle state is owned by the SML-backed cargo box transition owner. Train, drone,
+extraction, raider, and recovery code should request named transitions rather than writing
+`CargoBox::state` directly.
+
+Cargo extraction queue mode is owned by `CargoExtractionModel`, another small SML-backed model. It
+tracks queueing, active-box gate movement, active extraction, and completion while individual cargo
+container lifecycle still stays in the cargo box FSM.
 
 The rear propulsion module is cheap, rugged propulsion hardware.
 

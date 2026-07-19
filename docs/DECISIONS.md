@@ -2,7 +2,7 @@
 
 ## D001: Sector Size
 
-Sectors are fixed at 9 by 9 3840x2160 reference screens, independent of the current window or browser resolution.
+Sectors are fixed at 9 by 9 1920x1080 reference screens, independent of the current window or browser resolution.
 
 ## D002: Sector Boundaries
 
@@ -169,14 +169,31 @@ Initial tasks are cargo theft, player harassment, cover for an active thief, and
 
 ## D026: Weapon Firing Architecture
 
-Particle beam firing should be event-driven and modeled as a small FSM.
+Weapon firing is event-visible and modeled with small SML-backed FSMs.
 
 The particle beam is a dual-fire weapon with two side-by-side shots. Each shot has independent collision and impact handling.
 
-The FSM should consume semantic fire intent and simulation-clock events, then emit projectile spawn events.
+The particle cannon FSM consumes semantic fire intent and simulation-clock time. Firing emits projectile spawn events.
+
+Homing missiles use a separate launcher cooldown FSM and per-missile flight FSM. The launcher
+requires a locked hostile target, ejects two missiles from the player ship, and each missile
+transitions from ejected coast to ignited homing flight after its arming delay. Missile impacts emit
+impact events and create short-lived explosion bursts for presentation.
 
 ## D027: Universe Clock
 
 The canonical simulation clock is 60 Hz.
 
 `UniverseClock::FixedTickSeconds` is the shared base tick for fixed simulation, weapon FSMs, cooldowns, AI, escalation, and HUD animation. Rendering may interpolate between fixed simulation ticks.
+
+## D028: Strict Thrust Flight
+
+Ship and raider motion use thrust plus rate-limited rotation as the physical model. Flight
+assistance may choose thrust vectors, braking counterthrust, desired facing, boost authority, and
+speed envelope limits, but it should not directly set moment-to-moment velocity as a control
+shortcut.
+
+Because high thrust can cross collision geometry between fixed ticks, collision prediction uses
+swept-radius path checks before precise shape casts. The query budget scales from speed and
+zoom/view tuning so faster and wider-view situations inspect more candidates without making every
+tick a full-sector collision sweep.

@@ -30,6 +30,21 @@ enum class RaiderTask {
   FullAggression,
 };
 
+enum class RaiderTransition {
+  Deactivate,
+  Approach,
+  BeginDisruption,
+  BeginTow,
+  Escape,
+};
+
+enum class RaiderTaskTransition {
+  AssignCargoTheft,
+  HarassPlayer,
+  CoverThief,
+  EscalateToFullAggression,
+};
+
 struct RaiderShip {
   Vec2 position{};
   Vec2 velocity{};
@@ -45,6 +60,20 @@ struct RaiderShip {
   float cloak_fade_seconds{0.0F};
 };
 
+[[nodiscard]] bool transition_raider_phase(
+  RaiderShip& raider,
+  RaiderTransition transition,
+  entt::entity raider_entity = entt::null,
+  DomainEventBus* event_bus = nullptr
+);
+
+[[nodiscard]] bool transition_raider_task(
+  RaiderShip& raider,
+  RaiderTaskTransition transition,
+  entt::entity raider_entity = entt::null,
+  DomainEventBus* event_bus = nullptr
+);
+
 struct RaiderTuning {
   float max_speed{460.0F};
   float disruption_range{70.0F};
@@ -56,7 +85,7 @@ struct RaiderTuning {
   float combat_orbit_radians_per_second{0.72F};
   float combat_orbit_arrival_tolerance{90.0F};
   float combat_acceleration{720.0F};
-  float combat_damping{0.92F};
+  float turn_rate{8.0F};
   float cloak_fade_seconds{1.15F};
 };
 
@@ -103,7 +132,9 @@ struct CargoRecoveryHudSnapshot {
   const ShipMotion& ship,
   const SectorTuning& sector,
   float dt_seconds,
-  const RaiderTuning& tuning = {}
+  const RaiderTuning& tuning = {},
+  entt::entity raider_entity = entt::null,
+  DomainEventBus* event_bus = nullptr
 );
 
 [[nodiscard]] CargoRecoveryHudSnapshot recover_stolen_cargo(
@@ -112,7 +143,9 @@ struct CargoRecoveryHudSnapshot {
   const ShipMotion& ship,
   const SemanticInputFrame& input,
   const SectorTuning& sector,
-  const CargoRecoveryTuning& tuning = {}
+  const CargoRecoveryTuning& tuning = {},
+  entt::entity raider_entity = entt::null,
+  DomainEventBus* event_bus = nullptr
 );
 
 }  // namespace hyperverse

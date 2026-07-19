@@ -1,11 +1,113 @@
 #include "hyperverse/cargo_extraction.hpp"
 
+#include <boost/sml.hpp>
+
 #include <algorithm>
 #include <limits>
 #include <vector>
 
 namespace hyperverse {
 namespace {
+
+namespace sml = boost::sml;
+
+struct idle_phase {};
+struct queueing_phase {};
+struct moving_active_to_gate_phase {};
+struct extracting_active_phase {};
+struct complete_phase {};
+struct begin_queue {};
+struct active_needs_gate {};
+struct active_at_gate {};
+struct active_extracted {};
+struct queue_empty {};
+struct reset_extraction {};
+
+struct CargoExtractionMachine {
+  auto operator()() const {
+    using namespace sml;
+    return make_transition_table(
+      *state<idle_phase> + event<begin_queue> = state<queueing_phase>,
+      state<queueing_phase> + event<active_needs_gate> = state<moving_active_to_gate_phase>,
+      state<queueing_phase> + event<active_at_gate> = state<extracting_active_phase>,
+      state<queueing_phase> + event<queue_empty> = state<complete_phase>,
+      state<moving_active_to_gate_phase> + event<active_at_gate> = state<extracting_active_phase>,
+      state<moving_active_to_gate_phase> + event<queue_empty> = state<complete_phase>,
+      state<extracting_active_phase> + event<active_extracted> = state<queueing_phase>,
+      state<extracting_active_phase> + event<queue_empty> = state<complete_phase>,
+      state<complete_phase> + event<reset_extraction> = state<idle_phase>
+    );
+  }
+};
+
+void replay_phase(sml::sm<CargoExtractionMachine>& machine, CargoExtractionPhase phase) {
+  switch (phase) {
+    case CargoExtractionPhase::Idle:
+      return;
+    case CargoExtractionPhase::Queueing:
+      machine.process_event(begin_queue{});
+      return;
+    case CargoExtractionPhase::MovingActiveToGate:
+      machine.process_event(begin_queue{});
+      machine.process_event(active_needs_gate{});
+      return;
+    case CargoExtractionPhase::ExtractingActive:
+      machine.process_event(begin_queue{});
+      machine.process_event(active_at_gate{});
+      return;
+    case CargoExtractionPhase::Complete:
+      machine.process_event(begin_queue{});
+      machine.process_event(queue_empty{});
+      return;
+  }
+}
+
+[[nodiscard]] CargoExtractionPhase read_phase(const sml::sm<CargoExtractionMachine>& machine) {
+  if (machine.is(sml::state<complete_phase>)) {
+    return CargoExtractionPhase::Complete;
+  }
+  if (machine.is(sml::state<extracting_active_phase>)) {
+    return CargoExtractionPhase::ExtractingActive;
+  }
+  if (machine.is(sml::state<moving_active_to_gate_phase>)) {
+    return CargoExtractionPhase::MovingActiveToGate;
+  }
+  if (machine.is(sml::state<queueing_phase>)) {
+    return CargoExtractionPhase::Queueing;
+  }
+  return CargoExtractionPhase::Idle;
+}
+
+[[nodiscard]] bool transition_extraction(CargoExtractionModel& model, CargoExtractionTransition transition) {
+  sml::sm<CargoExtractionMachine> machine;
+  replay_phase(machine, model.phase);
+  const CargoExtractionPhase previous = model.phase;
+  switch (transition) {
+    case CargoExtractionTransition::BeginQueue:
+      machine.process_event(begin_queue{});
+      break;
+    case CargoExtractionTransition::ActiveNeedsGate:
+      machine.process_event(active_needs_gate{});
+      break;
+    case CargoExtractionTransition::ActiveAtGate:
+      machine.process_event(active_at_gate{});
+      break;
+    case CargoExtractionTransition::ActiveExtracted:
+      machine.process_event(active_extracted{});
+      break;
+    case CargoExtractionTransition::QueueEmpty:
+      machine.process_event(queue_empty{});
+      break;
+    case CargoExtractionTransition::Reset:
+      machine.process_event(reset_extraction{});
+      break;
+  }
+  model.phase = read_phase(machine);
+  if (model.phase == CargoExtractionPhase::Complete || model.phase == CargoExtractionPhase::Idle) {
+    model.active_box = entt::null;
+  }
+  return model.phase != previous;
+}
 
 void emit_box_extracted(DomainEventBus* event_bus, entt::entity box, const CargoBox& cargo_box, Vec2 gate_position) {
   if (event_bus == nullptr) {
@@ -82,6 +184,7 @@ void move_box_toward(CargoBox& box, Vec2 target, const SectorTuning& sector, flo
 }  // namespace
 
 CargoExtractionHudSnapshot update_cargo_extraction(
+  CargoExtractionModel& model,
   entt::registry& registry,
   CargoEscortState& escort,
   const CargoEscortRoute& route,
@@ -112,14 +215,21 @@ CargoExtractionHudSnapshot update_cargo_extraction(
   }
 
   if (escort.phase != CargoEscortPhase::Extracting) {
+    if (model.phase != CargoExtractionPhase::Idle && escort.phase != CargoEscortPhase::Complete) {
+      (void)transition_extraction(model, CargoExtractionTransition::Reset);
+    }
     hud.complete = escort.phase == CargoEscortPhase::Complete;
     return hud;
+  }
+
+  if (model.phase == CargoExtractionPhase::Idle) {
+    (void)transition_extraction(model, CargoExtractionTransition::BeginQueue);
   }
 
   for (entt::entity entity : boxes) {
     CargoBox& box = registry.get<CargoBox>(entity);
     if (box.state == CargoBoxState::Linked || box.state == CargoBoxState::BeingHauled || box.state == CargoBoxState::PendingPickup) {
-      box.state = CargoBoxState::GateBound;
+      (void)transition_cargo_box(box, CargoBoxTransition::SendToGate, entity, event_bus);
       box.velocity = {};
     }
   }
@@ -133,7 +243,8 @@ CargoExtractionHudSnapshot update_cargo_extraction(
   }
 
   if (queued_boxes.empty()) {
-    escort.phase = CargoEscortPhase::Complete;
+    (void)transition_extraction(model, CargoExtractionTransition::QueueEmpty);
+    (void)transition_cargo_escort(escort, CargoEscortTransition::ExtractionComplete);
     hud.active = false;
     hud.complete = true;
     emit_extraction_complete(event_bus, route.gate_position, hud.total_boxes);
@@ -141,23 +252,27 @@ CargoExtractionHudSnapshot update_cargo_extraction(
   }
 
   const entt::entity active_box = queued_boxes.front();
+  model.active_box = active_box;
   for (std::size_t queue_index = 1; queue_index < queued_boxes.size(); ++queue_index) {
     CargoBox& queued = registry.get<CargoBox>(queued_boxes[queue_index]);
-    queued.state = CargoBoxState::GateBound;
+    (void)transition_cargo_box(queued, CargoBoxTransition::SendToGate, queued_boxes[queue_index], event_bus);
     move_box_toward(queued, queue_position(route, tuning, sector, static_cast<int>(queue_index - 1U)), sector, dt_seconds, tuning);
   }
 
   CargoBox& box = registry.get<CargoBox>(active_box);
   hud.active_box_index = box.index;
   if (length(wrapped_delta(box.position, route.gate_position, sector)) > tuning.gate_radius) {
-    box.state = CargoBoxState::GateBound;
+    (void)transition_extraction(model, CargoExtractionTransition::ActiveNeedsGate);
+    (void)transition_cargo_box(box, CargoBoxTransition::SendToGate, active_box, event_bus);
     move_box_toward(box, route.gate_position, sector, dt_seconds, tuning);
   } else {
-    box.state = CargoBoxState::Extracting;
+    (void)transition_extraction(model, CargoExtractionTransition::ActiveAtGate);
+    (void)transition_cargo_box(box, CargoBoxTransition::StartExtraction, active_box, event_bus);
     box.velocity = {};
     box.extraction_seconds = std::min(tuning.seconds_per_box, box.extraction_seconds + std::max(0.0F, dt_seconds));
     if (box.extraction_seconds >= tuning.seconds_per_box) {
-      box.state = CargoBoxState::Extracted;
+      (void)transition_cargo_box(box, CargoBoxTransition::FinishExtraction, active_box, event_bus);
+      (void)transition_extraction(model, CargoExtractionTransition::ActiveExtracted);
       ++hud.extracted_boxes;
       emit_box_extracted(event_bus, active_box, box, route.gate_position);
     }

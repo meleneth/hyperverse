@@ -19,6 +19,13 @@ struct RadarTrackedTarget {
 
 struct RadarHudModel {
   std::vector<RadarTrackedTarget> tracked_targets{};
+  std::vector<entt::entity> target_order{};
+  float update_seconds_remaining{0.0F};
+};
+
+struct CombatRadarHudModel {
+  std::vector<RadarTrackedTarget> tracked_targets{};
+  std::vector<entt::entity> target_order{};
   float update_seconds_remaining{0.0F};
 };
 
@@ -31,6 +38,15 @@ struct RadarHudTuning {
 
 void update_radar_hud(
   RadarHudModel& radar,
+  entt::registry& registry,
+  const ShipMotion& ship,
+  const SectorTuning& sector,
+  float dt_seconds,
+  const RadarHudTuning& tuning
+);
+
+void update_combat_radar_hud(
+  CombatRadarHudModel& radar,
   entt::registry& registry,
   const ShipMotion& ship,
   const SectorTuning& sector,

@@ -22,6 +22,12 @@ struct drone_escorting_cargo {};
 struct cargo_assigned {};
 struct cargo_picked_up {};
 struct cargo_delivered {};
+struct drone_idle {};
+struct drone_travelling {};
+struct drone_mining {};
+struct return_to_formation {};
+struct travel_to_work {};
+struct begin_mining {};
 
 struct DroneCargoMachine {
   auto operator()() const {
@@ -34,13 +40,59 @@ struct DroneCargoMachine {
   }
 };
 
-void replay_cargo_phase(sml::sm<DroneCargoMachine>& machine, MiningDronePhase phase, entt::entity cargo_target) {
-  if (cargo_target == entt::null) {
-    return;
+struct DroneWorkMachine {
+  auto operator()() const {
+    using namespace sml;
+    return make_transition_table(
+      *state<drone_idle> + event<travel_to_work> = state<drone_travelling>,
+      state<drone_idle> + event<begin_mining> = state<drone_mining>,
+      state<drone_travelling> + event<return_to_formation> = state<drone_idle>,
+      state<drone_travelling> + event<begin_mining> = state<drone_mining>,
+      state<drone_mining> + event<return_to_formation> = state<drone_idle>,
+      state<drone_mining> + event<travel_to_work> = state<drone_travelling>
+    );
   }
-  machine.process_event(cargo_assigned{});
-  if (phase == MiningDronePhase::EscortingCargo) {
-    machine.process_event(cargo_picked_up{});
+};
+
+void replay_work_phase(sml::sm<DroneWorkMachine>& machine, MiningDronePhase phase) {
+  switch (phase) {
+    case MiningDronePhase::Idle:
+    case MiningDronePhase::CargoPickup:
+    case MiningDronePhase::EscortingCargo:
+      return;
+    case MiningDronePhase::Travelling:
+      machine.process_event(travel_to_work{});
+      return;
+    case MiningDronePhase::Mining:
+      machine.process_event(begin_mining{});
+      return;
+  }
+}
+
+[[nodiscard]] MiningDronePhase read_work_phase(const sml::sm<DroneWorkMachine>& machine) {
+  if (machine.is(sml::state<drone_mining>)) {
+    return MiningDronePhase::Mining;
+  }
+  if (machine.is(sml::state<drone_travelling>)) {
+    return MiningDronePhase::Travelling;
+  }
+  return MiningDronePhase::Idle;
+}
+
+void replay_cargo_phase(sml::sm<DroneCargoMachine>& machine, MiningDronePhase phase, entt::entity cargo_target) {
+  (void)cargo_target;
+  switch (phase) {
+    case MiningDronePhase::Idle:
+    case MiningDronePhase::Travelling:
+    case MiningDronePhase::Mining:
+      return;
+    case MiningDronePhase::CargoPickup:
+      machine.process_event(cargo_assigned{});
+      return;
+    case MiningDronePhase::EscortingCargo:
+      machine.process_event(cargo_assigned{});
+      machine.process_event(cargo_picked_up{});
+      return;
   }
 }
 
@@ -157,26 +209,24 @@ void move_drone_toward(MiningDrone& drone, Vec2 target, const SectorTuning& sect
   MiningDroneHudSnapshot& hud
 ) {
   if (!valid_cargo_target(registry, drone.cargo_target)) {
+    (void)transition_mining_drone_cargo(drone, MiningDroneCargoTransition::CargoDelivered);
     drone.cargo_target = entt::null;
     return false;
   }
 
-  sml::sm<DroneCargoMachine> machine;
-  replay_cargo_phase(machine, drone.phase, drone.cargo_target);
   CargoBox& box = registry.get<CargoBox>(drone.cargo_target);
   if (box.state == CargoBoxState::PendingPickup) {
     const Vec2 to_box = wrapped_delta(drone.position, box.position, sector);
     const float distance = length(to_box);
-    drone.phase = MiningDronePhase::CargoPickup;
+    (void)transition_mining_drone_cargo(drone, MiningDroneCargoTransition::AssignCargo);
     hud.phase = drone.phase;
     hud.target = drone.cargo_target;
     hud.target_distance = distance;
     if (distance > tuning.cargo_pickup_tolerance) {
       move_drone_toward(drone, box.position, sector, dt_seconds, tuning);
     } else {
-      box.state = CargoBoxState::BeingHauled;
-      machine.process_event(cargo_picked_up{});
-      drone.phase = read_cargo_phase(machine);
+      (void)transition_cargo_box(box, CargoBoxTransition::StartHaul, drone.cargo_target, event_bus);
+      (void)transition_mining_drone_cargo(drone, MiningDroneCargoTransition::CargoPickedUp);
       emit_cargo_pickup_started(event_bus, entt::null, drone.cargo_target, box.position);
     }
     return true;
@@ -185,7 +235,7 @@ void move_drone_toward(MiningDrone& drone, Vec2 target, const SectorTuning& sect
   const Vec2 delivery_position = drone.cargo_destination;
   const Vec2 to_delivery = wrapped_delta(drone.position, delivery_position, sector);
   const float distance = length(to_delivery);
-  drone.phase = MiningDronePhase::EscortingCargo;
+  (void)transition_mining_drone_cargo(drone, MiningDroneCargoTransition::CargoPickedUp);
   hud.phase = drone.phase;
   hud.target = drone.cargo_target;
   hud.target_distance = distance;
@@ -194,18 +244,63 @@ void move_drone_toward(MiningDrone& drone, Vec2 target, const SectorTuning& sect
     box.position = drone.position;
     box.velocity = drone.velocity;
   } else {
-    box.state = CargoBoxState::Linked;
+    (void)transition_cargo_box(box, CargoBoxTransition::Link, drone.cargo_target, event_bus);
     box.velocity = {};
     emit_cargo_delivered(event_bus, entt::null, drone.cargo_target, delivery_position);
-    machine.process_event(cargo_delivered{});
+    (void)transition_mining_drone_cargo(drone, MiningDroneCargoTransition::CargoDelivered);
     drone.cargo_target = entt::null;
     drone.cargo_destination = {};
-    drone.phase = read_cargo_phase(machine);
   }
   return true;
 }
 
 }  // namespace
+
+bool transition_mining_drone_cargo(MiningDrone& drone, MiningDroneCargoTransition transition) {
+  sml::sm<DroneCargoMachine> machine;
+  replay_cargo_phase(machine, drone.phase, drone.cargo_target);
+  const MiningDronePhase previous = drone.phase;
+  bool accepted = false;
+  switch (transition) {
+    case MiningDroneCargoTransition::AssignCargo:
+      accepted = machine.process_event(cargo_assigned{});
+      break;
+    case MiningDroneCargoTransition::CargoPickedUp:
+      accepted = machine.process_event(cargo_picked_up{});
+      break;
+    case MiningDroneCargoTransition::CargoDelivered:
+      accepted = machine.process_event(cargo_delivered{});
+      break;
+  }
+  if (!accepted) {
+    return false;
+  }
+  drone.phase = read_cargo_phase(machine);
+  return drone.phase != previous;
+}
+
+bool transition_mining_drone_work(MiningDrone& drone, MiningDroneWorkTransition transition) {
+  sml::sm<DroneWorkMachine> machine;
+  replay_work_phase(machine, drone.phase);
+  const MiningDronePhase previous = drone.phase;
+  bool accepted = false;
+  switch (transition) {
+    case MiningDroneWorkTransition::ReturnToFormation:
+      accepted = machine.process_event(return_to_formation{});
+      break;
+    case MiningDroneWorkTransition::TravelToWork:
+      accepted = machine.process_event(travel_to_work{});
+      break;
+    case MiningDroneWorkTransition::BeginMining:
+      accepted = machine.process_event(begin_mining{});
+      break;
+  }
+  if (!accepted) {
+    return false;
+  }
+  drone.phase = read_work_phase(machine);
+  return drone.phase != previous;
+}
 
 MiningDroneHudSnapshot update_mining_drone(
   MiningDrone& drone,
@@ -246,7 +341,7 @@ MiningDroneHudSnapshot update_mining_drone(
   if (drone.target == entt::null) {
     const Vec2 formation_position = idle_formation_position(drone, ship, sector, tuning);
     const Vec2 to_formation = wrapped_delta(drone.position, formation_position, sector);
-    drone.phase = MiningDronePhase::Idle;
+    (void)transition_mining_drone_work(drone, MiningDroneWorkTransition::ReturnToFormation);
     hud.target_distance = length(to_formation);
     if (hud.target_distance > tuning.arrival_tolerance) {
       drone.velocity = normalize_or_zero(to_formation) * tuning.max_speed;
@@ -270,12 +365,12 @@ MiningDroneHudSnapshot update_mining_drone(
   hud.target_distance = length(to_target);
 
   if (length(to_work_position) > tuning.arrival_tolerance) {
-    drone.phase = MiningDronePhase::Travelling;
+    (void)transition_mining_drone_work(drone, MiningDroneWorkTransition::TravelToWork);
     drone.velocity = normalize_or_zero(to_work_position) * tuning.max_speed;
     update_facing_from_velocity(drone, tuning.facing_dead_stick_speed);
     drone.position = wrap_position(drone.position + (drone.velocity * dt_seconds), sector);
   } else {
-    drone.phase = MiningDronePhase::Mining;
+    (void)transition_mining_drone_work(drone, MiningDroneWorkTransition::BeginMining);
     drone.velocity = {};
     resource.integrity = std::max(0.0F, resource.integrity - (tuning.integrity_damage_per_second * scaled_dt));
     const float extracted_mass = extract_asteroid_mass(registry, drone.target, tuning.extraction_per_second * scaled_dt);

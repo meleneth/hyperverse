@@ -14,7 +14,7 @@ Narrower contexts add only what their scope needs.
 
 ## AccountCtx
 
-`AccountCtx` is created by application startup and wraps the account-level services:
+`AccountCtx` is derived from `GrandCentral` by application startup and wraps the account-level services:
 
 - `entt::registry&`
 - `std::mt19937&`
@@ -52,7 +52,7 @@ Use it for systems where the acting entity matters, such as weapons.
 
 Some systems wrap these contexts to make authority even more explicit:
 
-- `WeaponCtx` wraps `EntityCtx` and exposes the weapon owner, registry, event bus, sector, timestep, and particle cannon component.
+- `WeaponCtx` wraps `EntityCtx` and exposes the weapon owner, registry, event bus, sector, timestep, particle cannon component, and homing missile launcher component.
 - `ProjectileSimCtx` wraps `SectorTickCtx` plus the player entity for projectile simulation that may damage the player.
 
 These wrappers are preferred over passing several loose references when the grouped authority has a clear domain meaning.
@@ -61,6 +61,6 @@ These wrappers are preferred over passing several loose references when the grou
 
 - Contexts do not own the objects they reference.
 - Context lifetimes must remain shorter than the owning runtime state.
-- Do not pass `AppRuntime` or any future `GrandCentral` equivalent into gameplay systems.
+- Do not pass `GrandCentral` or `AppRuntime` into gameplay systems.
 - Do not use context objects as generic service locators.
 - Tests should construct the narrowest context or model needed for the behavior under test.

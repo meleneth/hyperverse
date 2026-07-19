@@ -20,6 +20,16 @@ enum class ParticleCannonPhase {
   Cooling,
 };
 
+enum class HomingMissileLauncherPhase {
+  Ready,
+  Cooling,
+};
+
+enum class HomingMissilePhase {
+  Ejected,
+  Ignited,
+};
+
 enum class ProjectileOwner {
   Player,
   Raider,
@@ -30,6 +40,11 @@ struct ParticleCannonModel {
   float cooldown_seconds{0.0F};
 };
 
+struct HomingMissileLauncherModel {
+  HomingMissileLauncherPhase phase{HomingMissileLauncherPhase::Ready};
+  float cooldown_seconds{0.0F};
+};
+
 struct ParticleShot {
   Vec2 position{};
   Vec2 velocity{};
@@ -37,6 +52,24 @@ struct ParticleShot {
   float damage{22.0F};
   float radius{10.0F};
   ProjectileOwner owner{ProjectileOwner::Player};
+};
+
+struct HomingMissile {
+  Vec2 position{};
+  Vec2 velocity{};
+  entt::entity target{entt::null};
+  float ttl_seconds{5.0F};
+  float ignition_seconds_remaining{0.50F};
+  float damage{48.0F};
+  float radius{16.0F};
+  HomingMissilePhase phase{HomingMissilePhase::Ejected};
+};
+
+struct ExplosionBurst {
+  Vec2 position{};
+  float age_seconds{0.0F};
+  float ttl_seconds{0.45F};
+  float radius{180.0F};
 };
 
 struct ParticleCannonTuning {
@@ -55,8 +88,30 @@ struct ParticleCannonTuning {
   AsteroidImpactKind impact_kind{AsteroidImpactKind::Kinetic};
 };
 
+struct HomingMissileTuning {
+  float cooldown_seconds{0.85F};
+  float ignition_delay_seconds{0.50F};
+  float eject_side_offset{36.0F};
+  float eject_forward_offset{18.0F};
+  float eject_side_speed{220.0F};
+  float eject_forward_speed{80.0F};
+  float motor_acceleration{2400.0F};
+  float max_speed{920.0F};
+  float turn_responsiveness{7.5F};
+  float ttl_seconds{5.0F};
+  float damage{48.0F};
+  float radius{16.0F};
+  float explosion_ttl_seconds{0.45F};
+  float explosion_radius{180.0F};
+};
+
 struct ParticleCannonHudSnapshot {
   int active_particles{0};
+  int impacts{0};
+};
+
+struct HomingMissileHudSnapshot {
+  int active_missiles{0};
   int impacts{0};
 };
 
@@ -83,6 +138,7 @@ public:
   [[nodiscard]] const SectorTuning& sector() const;
   [[nodiscard]] float dt() const;
   [[nodiscard]] ParticleCannonModel& cannon() const;
+  [[nodiscard]] HomingMissileLauncherModel& missile_launcher() const;
 
 private:
   EntityCtx entity_;
@@ -112,6 +168,13 @@ void spawn_requested_particle_fire(
   WeaponCtx ctx,
   const ParticleCannonFireCommand& command,
   const ParticleCannonTuning& tuning = {}
+);
+
+void update_player_homing_missile_launcher(
+  WeaponCtx ctx,
+  const EnemyTargetLockModel& enemy_lock,
+  WeaponTrigger trigger,
+  const HomingMissileTuning& tuning = {}
 );
 
 class ProjectileSimCtx {
@@ -154,6 +217,16 @@ void update_drone_particle_cannon(
 [[nodiscard]] ParticleCannonHudSnapshot update_particle_projectiles(
   ProjectileSimCtx ctx,
   const ParticleCannonTuning& tuning = {}
+);
+
+[[nodiscard]] HomingMissileHudSnapshot update_homing_missiles(
+  ProjectileSimCtx ctx,
+  const HomingMissileTuning& tuning = {}
+);
+
+void update_explosion_bursts(
+  entt::registry& registry,
+  float dt_seconds
 );
 
 }  // namespace hyperverse

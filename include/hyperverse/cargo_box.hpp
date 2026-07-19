@@ -25,6 +25,18 @@ enum class CargoBoxState {
   Lost,
 };
 
+enum class CargoBoxTransition {
+  QueuePickup,
+  StartHaul,
+  Link,
+  SendToGate,
+  StartExtraction,
+  FinishExtraction,
+  Detach,
+  Steal,
+  Lose,
+};
+
 struct CargoBox {
   Vec2 position{};
   Vec2 velocity{};
@@ -34,6 +46,13 @@ struct CargoBox {
   CargoBoxState state{CargoBoxState::Linked};
   float extraction_seconds{0.0F};
 };
+
+[[nodiscard]] bool transition_cargo_box(
+  CargoBox& box,
+  CargoBoxTransition transition,
+  entt::entity box_entity = entt::null,
+  DomainEventBus* event_bus = nullptr
+);
 
 struct CargoBoxTuning {
   float box_mass{10.0F};

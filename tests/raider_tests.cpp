@@ -136,6 +136,52 @@ TEST_CASE("confirm near stolen cargo relinks it and drops the raider target") {
   CHECK(raider.disruption_seconds == Catch::Approx(0.0F));
 }
 
+TEST_CASE("confirm near stolen cargo emits cargo and raider FSM events") {
+  entt::registry registry;
+  const entt::entity raider_entity = registry.create();
+  const entt::entity box_entity = registry.create();
+  registry.emplace<hyperverse::CargoBox>(
+    box_entity,
+    hyperverse::CargoBox{.position = {.x = 140.0F, .y = 100.0F}, .index = 0, .state = hyperverse::CargoBoxState::Stolen}
+  );
+  hyperverse::RaiderShip raider{.target_box = box_entity, .phase = hyperverse::RaiderPhase::Towing};
+  hyperverse::DomainEventBus event_bus;
+  int box_state_events = 0;
+  int raider_phase_events = 0;
+  event_bus.appendListener(
+    hyperverse::DomainEventType::CargoBoxStateChanged,
+    [&](const hyperverse::DomainEvent& event) {
+      CHECK(event.subject == box_entity);
+      CHECK(event.count == static_cast<int>(hyperverse::CargoBoxState::Linked));
+      ++box_state_events;
+    }
+  );
+  event_bus.appendListener(
+    hyperverse::DomainEventType::RaiderPhaseChanged,
+    [&](const hyperverse::DomainEvent& event) {
+      CHECK(event.subject == raider_entity);
+      CHECK(event.count == static_cast<int>(hyperverse::RaiderPhase::Idle));
+      ++raider_phase_events;
+    }
+  );
+
+  const hyperverse::CargoRecoveryHudSnapshot hud = hyperverse::recover_stolen_cargo(
+    registry,
+    raider,
+    {.position = {.x = 100.0F, .y = 100.0F}},
+    {.confirm_requested = true},
+    {.width = 9000.0F, .height = 9000.0F},
+    {.recovery_range = 80.0F},
+    raider_entity,
+    &event_bus
+  );
+  event_bus.process();
+
+  CHECK(hud.recovered);
+  CHECK(box_state_events == 1);
+  CHECK(raider_phase_events == 1);
+}
+
 TEST_CASE("raider escape marks stolen cargo as lost") {
   entt::registry registry;
   const entt::entity box_entity = registry.create();
@@ -163,6 +209,51 @@ TEST_CASE("raider escape marks stolen cargo as lost") {
   CHECK(hud.escape_distance == Catch::Approx(200.0F));
   CHECK(registry.get<hyperverse::CargoBox>(box_entity).state == hyperverse::CargoBoxState::Lost);
   CHECK((raider.target_box == entt::null));
+}
+
+TEST_CASE("raider phase FSM rejects invalid transitions and emits phase changes") {
+  hyperverse::RaiderShip raider{.position = {.x = 10.0F, .y = 20.0F}};
+  hyperverse::DomainEventBus event_bus;
+  int phase_events = 0;
+  event_bus.appendListener(
+    hyperverse::DomainEventType::RaiderPhaseChanged,
+    [&](const hyperverse::DomainEvent& event) {
+      CHECK(event.subject == entt::entity{99});
+      CHECK(event.position.x == Catch::Approx(10.0F));
+      ++phase_events;
+    }
+  );
+
+  CHECK_FALSE(hyperverse::transition_raider_phase(raider, hyperverse::RaiderTransition::Escape, entt::entity{99}, &event_bus));
+  CHECK(raider.phase == hyperverse::RaiderPhase::Idle);
+  CHECK(hyperverse::transition_raider_phase(raider, hyperverse::RaiderTransition::Approach, entt::entity{99}, &event_bus));
+  CHECK(raider.phase == hyperverse::RaiderPhase::Approaching);
+  CHECK(hyperverse::transition_raider_phase(raider, hyperverse::RaiderTransition::BeginDisruption, entt::entity{99}, &event_bus));
+  CHECK(raider.phase == hyperverse::RaiderPhase::Disrupting);
+  event_bus.process();
+
+  CHECK(phase_events == 2);
+}
+
+TEST_CASE("raider task FSM emits only real task changes") {
+  hyperverse::RaiderShip raider{.task = hyperverse::RaiderTask::HarassPlayer};
+  hyperverse::DomainEventBus event_bus;
+  int task_events = 0;
+  event_bus.appendListener(
+    hyperverse::DomainEventType::RaiderTaskChanged,
+    [&](const hyperverse::DomainEvent& event) {
+      CHECK(event.subject == entt::entity{7});
+      CHECK(event.count == static_cast<int>(hyperverse::RaiderTask::CoverThief));
+      ++task_events;
+    }
+  );
+
+  CHECK_FALSE(hyperverse::transition_raider_task(raider, hyperverse::RaiderTaskTransition::HarassPlayer, entt::entity{7}, &event_bus));
+  CHECK(hyperverse::transition_raider_task(raider, hyperverse::RaiderTaskTransition::CoverThief, entt::entity{7}, &event_bus));
+  event_bus.process();
+
+  CHECK(raider.task == hyperverse::RaiderTask::CoverThief);
+  CHECK(task_events == 1);
 }
 
 TEST_CASE("gate combat raiders spawn as player attackers with particle cannons") {
@@ -266,7 +357,7 @@ TEST_CASE("combat raider movement is acceleration constrained") {
     {.position = {.x = 1000.0F, .y = 1000.0F}, .facing_radians = 0.0F},
     {.width = 9000.0F, .height = 9000.0F},
     0.1F,
-    {.max_speed = 500.0F, .combat_acceleration = 100.0F, .combat_damping = 1.0F}
+    {.max_speed = 500.0F, .combat_acceleration = 100.0F}
   );
 
   CHECK(hyperverse::length(combat.velocity) == Catch::Approx(10.0F));

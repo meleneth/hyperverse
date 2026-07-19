@@ -180,6 +180,131 @@ TEST_CASE("sprite frame fades active raiders in from cloak") {
   CHECK(visible_raider->tint_a == Catch::Approx(0.5F));
 }
 
+TEST_CASE("sprite frame does not reveal idle cargo thief when combat raiders are active") {
+  TestAccountWorld world;
+  hyperverse::AccountCtx account = world.account_context();
+  const hyperverse::VerticalSliceEntities entities = hyperverse::seed_vertical_slice(account);
+  hyperverse::ShipMotion& ship = account.registry().get<hyperverse::ShipMotion>(entities.player);
+  account.registry().get<hyperverse::RaiderHudSnapshot>(entities.player).active = true;
+  const hyperverse::SectorTuning sector = hyperverse::default_sector();
+  const hyperverse::SemanticInputFrame input{};
+
+  const entt::entity combat = account.registry().create();
+  account.registry().emplace<hyperverse::RaiderShip>(
+    combat,
+    hyperverse::RaiderShip{
+      .position = {.x = ship.position.x + 300.0F, .y = ship.position.y},
+      .role = hyperverse::RaiderRole::Combat,
+      .cloak_fade_seconds = 1.15F,
+    }
+  );
+
+  const hyperverse::SpriteFrame frame = hyperverse::build_sprite_frame(
+    account,
+    entities.player,
+    entities.mining_drones,
+    entities.raider,
+    hyperverse::make_flight_hud_snapshot(ship, input, {}, sector),
+    input,
+    sector,
+    1280,
+    720
+  );
+
+  const auto idle_thief = std::ranges::find_if(frame.sprites, [](const hyperverse::SpriteDraw& sprite) {
+    return sprite.texture == hyperverse::SpriteTexture::Drone && sprite.tint_r == Catch::Approx(0.55F) &&
+           sprite.tint_g == Catch::Approx(0.34F) && sprite.tint_b == Catch::Approx(0.16F);
+  });
+
+  CHECK(idle_thief == frame.sprites.end());
+}
+
+TEST_CASE("sprite frame draws a red box around locked hostile targets") {
+  TestAccountWorld world;
+  hyperverse::AccountCtx account = world.account_context();
+  const hyperverse::VerticalSliceEntities entities = hyperverse::seed_vertical_slice(account);
+  hyperverse::ShipMotion& ship = account.registry().get<hyperverse::ShipMotion>(entities.player);
+  hyperverse::EnemyTargetLockModel& enemy_lock = account.registry().get<hyperverse::EnemyTargetLockModel>(entities.player);
+  const hyperverse::SectorTuning sector = hyperverse::default_sector();
+  const hyperverse::SemanticInputFrame input{};
+
+  const entt::entity combat = account.registry().create();
+  account.registry().emplace<hyperverse::RaiderShip>(
+    combat,
+    hyperverse::RaiderShip{
+      .position = {.x = ship.position.x + 260.0F, .y = ship.position.y},
+      .role = hyperverse::RaiderRole::Combat,
+      .cloak_fade_seconds = 1.15F,
+    }
+  );
+  enemy_lock.phase = hyperverse::TargetLockPhase::Locked;
+  enemy_lock.target = combat;
+
+  const hyperverse::SpriteFrame frame = hyperverse::build_sprite_frame(
+    account,
+    entities.player,
+    entities.mining_drones,
+    entities.raider,
+    hyperverse::make_flight_hud_snapshot(ship, input, {}, sector),
+    input,
+    sector,
+    1280,
+    720
+  );
+
+  int red_box_lines = 0;
+  for (const hyperverse::LineDraw& line : frame.lines) {
+    if (
+      line.r == Catch::Approx(1.0F) && line.g == Catch::Approx(0.18F) && line.b == Catch::Approx(0.14F) &&
+      line.a == Catch::Approx(0.68F)
+    ) {
+      ++red_box_lines;
+    }
+  }
+
+  CHECK(red_box_lines == 4);
+}
+
+TEST_CASE("sprite frame draws homing missile explosion bursts") {
+  TestAccountWorld world;
+  hyperverse::AccountCtx account = world.account_context();
+  const hyperverse::VerticalSliceEntities entities = hyperverse::seed_vertical_slice(account);
+  hyperverse::ShipMotion& ship = account.registry().get<hyperverse::ShipMotion>(entities.player);
+  const hyperverse::SectorTuning sector = hyperverse::default_sector();
+  const hyperverse::SemanticInputFrame input{};
+  const entt::entity explosion = account.registry().create();
+  account.registry().emplace<hyperverse::ExplosionBurst>(
+    explosion,
+    hyperverse::ExplosionBurst{.position = {.x = ship.position.x + 120.0F, .y = ship.position.y}, .age_seconds = 0.08F, .ttl_seconds = 0.45F, .radius = 180.0F}
+  );
+
+  const hyperverse::SpriteFrame frame = hyperverse::build_sprite_frame(
+    account,
+    entities.player,
+    entities.mining_drones,
+    entities.raider,
+    hyperverse::make_flight_hud_snapshot(ship, input, {}, sector),
+    input,
+    sector,
+    1280,
+    720
+  );
+
+  const auto flash_sprite = std::ranges::find_if(frame.sprites, [](const hyperverse::SpriteDraw& sprite) {
+    return sprite.texture == hyperverse::SpriteTexture::Particle && sprite.tint_r == Catch::Approx(1.0F) &&
+           sprite.tint_g == Catch::Approx(0.92F) && sprite.tint_b == Catch::Approx(0.36F);
+  });
+  int radial_lines = 0;
+  for (const hyperverse::LineDraw& line : frame.lines) {
+    if (line.r == Catch::Approx(1.0F) && line.g == Catch::Approx(0.68F) && line.b == Catch::Approx(0.16F)) {
+      ++radial_lines;
+    }
+  }
+
+  CHECK(flash_sprite != frame.sprites.end());
+  CHECK(radial_lines >= 12);
+}
+
 TEST_CASE("sprite frame renders all large asteroids in right side radar panel") {
   TestAccountWorld world;
   hyperverse::AccountCtx account = world.account_context();

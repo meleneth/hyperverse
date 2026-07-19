@@ -120,8 +120,11 @@ RawInputFrame GamepadSlot::sample() const {
     raw.confirm = key_down(SDL_SCANCODE_SPACE);
     raw.cancel = key_down(SDL_SCANCODE_ESCAPE);
     raw.target_cycle = key_down(SDL_SCANCODE_TAB);
+    raw.enemy_target_cycle = key_down(SDL_SCANCODE_BACKSLASH);
+    raw.clear_targets = raw.target_cycle && raw.enemy_target_cycle;
     raw.gravity_sling = key_down(SDL_SCANCODE_Q);
     raw.particle_fire = key_down(SDL_SCANCODE_E);
+    raw.missile_fire = key_down(SDL_SCANCODE_R);
     raw.tool_intensity = key_down(SDL_SCANCODE_F) ? 1.0F : 0.0F;
   }
 
@@ -138,9 +141,12 @@ RawInputFrame GamepadSlot::sample() const {
     raw.confirm = raw.confirm || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_SOUTH);
     raw.boost = raw.boost || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_EAST);
     raw.gravity_sling = raw.gravity_sling || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_NORTH);
-    raw.target_cycle = raw.target_cycle || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER) ||
-                       SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
+    raw.enemy_target_cycle = raw.enemy_target_cycle || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
+    raw.target_cycle = raw.target_cycle || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
+    raw.clear_targets = raw.clear_targets || (SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER) &&
+                                              SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER));
     raw.particle_fire = raw.particle_fire || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_WEST);
+    raw.missile_fire = raw.missile_fire || trigger(SDL_GAMEPAD_AXIS_LEFT_TRIGGER) > 0.55F;
     raw.tool_intensity = std::max(raw.tool_intensity, trigger(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER));
   }
 

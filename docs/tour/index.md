@@ -13,7 +13,7 @@ through GitHub Pages at `https://meleneth.github.io/hyperverse/`.
 - [Event Flow](./event-flow.md) explains how domain facts move through EventPP.
 - [Event Reference](./event-reference.md) documents every `DomainEventType`.
 - [Context Objects](./context-objects.md) documents `AccountCtx`, `SectorTickCtx`, `EntityCtx`, and narrow wrapper contexts.
-- [State Machines](./state-machines.md) documents the SML-backed phase models and the enum-driven state models that still need explicit transition ownership.
+- [State Machines](./state-machines.md) documents the SML-backed phase models and the enum-driven state models that still use direct transition logic.
 
 ## Design Rule
 

@@ -1,5 +1,11 @@
 # Initial Vertical Slice
 
+This document records the original playable baseline target. The current prototype has moved past
+this plan: it now includes a larger seeded asteroid field, eight development-strength drones,
+dual particle shots, Gravity Sling, cargo hauling and extraction, raider task behavior, combat
+pressure escalation, and broader HUD/read-model coverage. Use this file as historical acceptance
+context; use `README.md`, `TODO.md`, and `docs/SYSTEMS.md` for current state and next work.
+
 ## Goal
 
 Produce a playable Linux and Steam Deck-oriented prototype that proves:

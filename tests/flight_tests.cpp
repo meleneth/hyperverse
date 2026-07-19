@@ -25,6 +25,16 @@ TEST_CASE("assisted flight accelerates, brakes, and wraps through the sector") {
   CHECK(hyperverse::length(ship.velocity) == Catch::Approx(0.0F));
 }
 
+TEST_CASE("strict thruster physics does not accelerate without thrust") {
+  hyperverse::ShipMotion ship{.position = {.x = 100.0F, .y = 100.0F}, .velocity = {.x = 40.0F, .y = 0.0F}};
+  const hyperverse::SectorTuning sector{.width = 9000.0F, .height = 9000.0F};
+
+  hyperverse::apply_thruster_physics(ship, {}, {.max_speed = 1000.0F}, sector, 1.0F);
+
+  CHECK(ship.velocity.x == Catch::Approx(40.0F));
+  CHECK(ship.position.x == Catch::Approx(140.0F));
+}
+
 TEST_CASE("assisted flight turns the ship toward thrust direction") {
   TestAccountWorld world;
   hyperverse::AccountCtx account = world.account_context();
@@ -44,14 +54,14 @@ TEST_CASE("assisted flight turns the ship toward thrust direction") {
   CHECK(ship.facing_radians == Catch::Approx(1.5707964F));
 }
 
-TEST_CASE("burst speed can exceed max speed and decays back toward top speed") {
+TEST_CASE("boost increases thrust authority instead of setting speed directly") {
   TestAccountWorld world;
   hyperverse::AccountCtx account = world.account_context();
   hyperverse::ShipMotion ship{};
   const hyperverse::SectorTuning sector{.width = 9000.0F, .height = 9000.0F};
   const hyperverse::FlightTuning flight{
     .max_speed = 100.0F,
-    .acceleration = 0.0F,
+    .acceleration = 100.0F,
     .braking = 0.0F,
     .turn_rate = 20.0F,
     .boost_speed_multiplier = 2.0F,
@@ -64,21 +74,16 @@ TEST_CASE("burst speed can exceed max speed and decays back toward top speed") {
     {.desired_movement = {.x = 1.0F, .y = 0.0F}, .boost_requested = true},
     flight,
     sector,
-    0.0F
+    0.165F
   );
 
-  CHECK(hyperverse::length(ship.velocity) == Catch::Approx(flight.max_speed * 2.0F));
-  CHECK(ship.boost_speed == Catch::Approx(100.0F));
-
-  hyperverse::simulate_assisted_flight(account, ship, {}, flight, sector, 0.165F);
-
+  CHECK(hyperverse::length(ship.velocity) == Catch::Approx(33.0F));
   CHECK(ship.boost_speed == Catch::Approx(87.5F));
-  CHECK(hyperverse::length(ship.velocity) > flight.max_speed);
 
   hyperverse::simulate_assisted_flight(account, ship, {}, flight, sector, 0.165F);
 
   CHECK(ship.boost_speed == Catch::Approx(0.0F));
-  CHECK(hyperverse::length(ship.velocity) == Catch::Approx(flight.max_speed));
+  CHECK(hyperverse::length(ship.velocity) == Catch::Approx(33.0F));
 }
 
 TEST_CASE("assisted flight prefers thrust facing over aim facing while moving") {
@@ -123,6 +128,12 @@ TEST_CASE("flight HUD exposes speed load, wrap warning, and control mapping") {
   CHECK(snapshot.nearest_wrap_edge_distance == Catch::Approx(250.0F));
   CHECK(snapshot.wrap_warning);
   CHECK(snapshot.control_mapping == hyperverse::ControlMapping::Gamepad);
+  CHECK(snapshot.thrust_vector.x == Catch::Approx(1.0F));
+  CHECK_FALSE(snapshot.braking_assist);
+
+  const hyperverse::FlightHudSnapshot braking_snapshot = hyperverse::make_flight_hud_snapshot(ship, {}, flight, sector, hud);
+  CHECK(braking_snapshot.thrust_vector.x == Catch::Approx(-1.0F));
+  CHECK(braking_snapshot.braking_assist);
 }
 
 TEST_CASE("camera anchor lags across wrapped sector edges") {

@@ -1167,7 +1167,10 @@ SpriteFrame build_sprite_frame(
   const SectorPressureHudSnapshot& pressure_hud = account.registry().get<SectorPressureHudSnapshot>(player);
   const MiningDroneHudSnapshot& drone_hud = account.registry().get<MiningDroneHudSnapshot>(player);
   const RadarHudModel& radar_model = account.registry().get<RadarHudModel>(player);
+  const CombatRadarHudModel& combat_radar_model = account.registry().get<CombatRadarHudModel>(player);
+  const EnemyTargetLockModel& enemy_target_lock = account.registry().get<EnemyTargetLockModel>(player);
   const ParticleCannonHudSnapshot& particle_hud = account.registry().get<ParticleCannonHudSnapshot>(player);
+  const HomingMissileHudSnapshot& missile_hud = account.registry().get<HomingMissileHudSnapshot>(player);
   const RaiderHudSnapshot& raider_hud = account.registry().get<RaiderHudSnapshot>(player);
   const CargoRecoveryHudSnapshot& recovery_hud = account.registry().get<CargoRecoveryHudSnapshot>(player);
   const CollisionHudSnapshot& collision_hud = account.registry().get<CollisionHudSnapshot>(player);
@@ -1246,6 +1249,44 @@ SpriteFrame build_sprite_frame(
     }
     frame.sprites.push_back(particle_sprite);
   }
+  for (auto [entity, missile] : account.registry().view<HomingMissile>().each()) {
+    (void)entity;
+    const float missile_size = missile.phase == HomingMissilePhase::Ignited ? 22.0F : 18.0F;
+    SpriteDraw missile_sprite = make_world_sprite(
+      SpriteTexture::Particle,
+      missile.position,
+      camera.position,
+      sector,
+      width,
+      height,
+      missile_size,
+      std::atan2(missile.velocity.y, missile.velocity.x)
+    );
+    if (missile.phase == HomingMissilePhase::Ignited) {
+      tint_sprite(missile_sprite, 1.0F, 0.82F, 0.18F);
+    } else {
+      tint_sprite(missile_sprite, 0.78F, 0.78F, 0.72F);
+    }
+    frame.sprites.push_back(missile_sprite);
+  }
+  for (auto [entity, burst] : account.registry().view<ExplosionBurst>().each()) {
+    (void)entity;
+    const float life = burst.ttl_seconds > 0.0F ? std::clamp(burst.age_seconds / burst.ttl_seconds, 0.0F, 1.0F) : 1.0F;
+    const float alpha = 1.0F - life;
+    const float radius = burst.radius * (0.25F + (0.90F * life));
+    SpriteDraw core = make_world_sprite(SpriteTexture::Particle, burst.position, camera.position, sector, width, height, 36.0F + (50.0F * life));
+    tint_sprite(core, 1.0F, 0.92F, 0.36F, alpha);
+    frame.sprites.push_back(core);
+    SpriteDraw ring = make_world_sprite(SpriteTexture::Reticle, burst.position, camera.position, sector, width, height, radius);
+    tint_sprite(ring, 1.0F, 0.42F, 0.12F, alpha * 0.85F);
+    frame.sprites.push_back(ring);
+    for (int index = 0; index < 12; ++index) {
+      const float angle = (static_cast<float>(index) / 12.0F) * std::numbers::pi_v<float> * 2.0F;
+      const Vec2 inner{.x = std::cos(angle) * radius * 0.18F, .y = std::sin(angle) * radius * 0.18F};
+      const Vec2 outer{.x = std::cos(angle) * radius, .y = std::sin(angle) * radius};
+      add_world_line(frame.lines, burst.position, inner, outer, camera.position, sector, width, height, 1.0F, 0.68F, 0.16F, alpha * 0.75F);
+    }
+  }
   const EngineTrailTuning engine_trail_tuning{};
   for (auto [entity, engine_trail] : account.registry().view<EngineTrailModel>().each()) {
     (void)entity;
@@ -1268,7 +1309,10 @@ SpriteFrame build_sprite_frame(
   (void)raider_entity;
   for (auto [entity, raider] : account.registry().view<RaiderShip>().each()) {
     (void)entity;
-    if (raider.integrity <= 0.0F || (raider.role == RaiderRole::CargoThief && !raider_hud.active)) {
+    if (
+      raider.integrity <= 0.0F ||
+      (raider.role == RaiderRole::CargoThief && (raider.phase == RaiderPhase::Idle || raider.phase == RaiderPhase::Escaped))
+    ) {
       continue;
     }
     SpriteDraw raider_sprite = make_world_sprite(
@@ -1377,6 +1421,10 @@ SpriteFrame build_sprite_frame(
     add_hud_text(frame.sprites, "TGT " + std::to_string(static_cast<int>(target_lock.wrapped_distance)), 0.56F, 0.92F, 0.045F);
     add_hud_text(frame.sprites, "SCN " + std::to_string(static_cast<int>(target_lock.scan_confidence * 100.0F)), 0.56F, 0.81F, 0.035F);
   }
+  if (has_locked_enemy(enemy_target_lock)) {
+    add_hud_text(frame.sprites, "ENM " + std::to_string(static_cast<int>(enemy_target_lock.wrapped_distance)), 0.56F, 0.86F, 0.045F, 1.0F, 0.24F, 0.18F);
+    add_hud_text(frame.sprites, "HUL " + std::to_string(static_cast<int>(enemy_target_lock.integrity_fraction * 100.0F)), 0.56F, 0.81F, 0.035F, 1.0F, 0.42F, 0.28F);
+  }
   if (mining_hud.beam_active) {
     add_hud_text(frame.sprites, "ZAP", 0.56F, 0.86F, 0.045F, 1.0F, 0.72F, 0.24F);
     add_hud_text(frame.sprites, "INT " + std::to_string(static_cast<int>(mining_hud.target_integrity)), 0.56F, 0.76F, 0.035F, 1.0F, 0.72F, 0.24F);
@@ -1387,6 +1435,9 @@ SpriteFrame build_sprite_frame(
   }
   if (particle_hud.active_particles > 0 || particle_hud.impacts > 0) {
     add_hud_text(frame.sprites, "PCN " + std::to_string(particle_hud.active_particles), 0.56F, 0.68F, 0.045F, 0.72F, 0.92F, 1.0F);
+  }
+  if (missile_hud.active_missiles > 0 || missile_hud.impacts > 0) {
+    add_hud_text(frame.sprites, "MSL " + std::to_string(missile_hud.active_missiles), 0.56F, 0.64F, 0.045F, 1.0F, 0.82F, 0.18F);
   }
   if (gravity_sling_hud.phase != GravitySlingPhase::FreeFlight) {
     add_hud_text(frame.sprites, "SLG " + std::to_string(static_cast<int>(hyperverse::length(gravity_sling_hud.release_velocity))), 0.56F, 0.63F, 0.04F, 0.95F, 0.82F, 1.0F);
@@ -1437,6 +1488,20 @@ SpriteFrame build_sprite_frame(
     const float eased = reveal_fraction * reveal_fraction * (3.0F - (2.0F * reveal_fraction));
     add_box_lines(frame.lines, scaled_bounds(radar_bounds, std::max(0.02F, eased)), 0.22F, 0.86F, 1.0F, 0.42F);
   }
+  for (const RadarTrackedTarget& tracked : combat_radar_model.tracked_targets) {
+    if (!account.registry().valid(tracked.target) || !account.registry().all_of<RaiderShip>(tracked.target)) {
+      continue;
+    }
+    const RaiderShip& raider = account.registry().get<RaiderShip>(tracked.target);
+    const SpriteDraw radar_bounds =
+      make_world_sprite(SpriteTexture::Reticle, raider.position, camera.position, sector, width, height, 54.0F);
+    if (!sprite_overlaps_screen(radar_bounds)) {
+      continue;
+    }
+    const float reveal_fraction = std::clamp(tracked.reveal_seconds / 0.5F, 0.0F, 1.0F);
+    const float eased = reveal_fraction * reveal_fraction * (3.0F - (2.0F * reveal_fraction));
+    add_box_lines(frame.lines, scaled_bounds(radar_bounds, std::max(0.02F, eased)), 1.0F, 0.18F, 0.14F, 0.52F);
+  }
   if (has_locked_target(target_lock) && account.registry().valid(target_lock.target)) {
     const AsteroidBody& target = account.registry().get<AsteroidBody>(target_lock.target);
     add_target_inspection_panel(
@@ -1455,6 +1520,12 @@ SpriteFrame build_sprite_frame(
     } else {
       add_target_bracket_lines(frame.lines, reticle_bounds, 0.45F, 0.9F, 1.0F);
     }
+  }
+  if (has_locked_enemy(enemy_target_lock) && account.registry().valid(enemy_target_lock.target) && account.registry().all_of<RaiderShip>(enemy_target_lock.target)) {
+    const RaiderShip& raider = account.registry().get<RaiderShip>(enemy_target_lock.target);
+    const SpriteDraw reticle_bounds = make_world_sprite(SpriteTexture::Reticle, raider.position, camera.position, sector, width, height, 64.0F);
+    add_box_lines(frame.lines, reticle_bounds, 1.0F, 0.18F, 0.14F, 0.68F);
+    add_target_bracket_lines(frame.lines, reticle_bounds, 1.0F, 0.18F, 0.14F);
   }
   if (route_hud.active) {
     add_jump_gate_lines(frame.lines, route_hud.gate_position, round_timer.elapsed_seconds, camera.position, sector, width, height);

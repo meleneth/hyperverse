@@ -34,7 +34,7 @@ These may emphasize:
 
 ## Sector Structure
 
-A sector is fixed at 9 by 9 3840x2160 reference screens, independent of the current window or browser resolution.
+A sector is fixed at 9 by 9 1920x1080 reference screens, independent of the current window or browser resolution.
 
 The sector wraps at all boundaries.
 

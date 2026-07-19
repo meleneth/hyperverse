@@ -19,6 +19,18 @@ enum class MiningDronePhase {
   EscortingCargo,
 };
 
+enum class MiningDroneWorkTransition {
+  ReturnToFormation,
+  TravelToWork,
+  BeginMining,
+};
+
+enum class MiningDroneCargoTransition {
+  AssignCargo,
+  CargoPickedUp,
+  CargoDelivered,
+};
+
 struct MiningDrone {
   Vec2 position{};
   Vec2 velocity{};
@@ -30,6 +42,16 @@ struct MiningDrone {
   float work_angle_radians{0.0F};
   float extracted_mass{0.0F};
 };
+
+[[nodiscard]] bool transition_mining_drone_work(
+  MiningDrone& drone,
+  MiningDroneWorkTransition transition
+);
+
+[[nodiscard]] bool transition_mining_drone_cargo(
+  MiningDrone& drone,
+  MiningDroneCargoTransition transition
+);
 
 struct MiningDroneTuning {
   float max_speed{760.0F};

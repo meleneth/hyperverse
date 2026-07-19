@@ -65,6 +65,17 @@ Architecture docs should be updated with gameplay changes, especially [events](d
 [state machines](docs/tour/state-machines.md). Local generated API docs can be built with
 `./make_docs.sh` when Doxygen is installed; output is written to `docs/html`.
 
+## Architecture Snapshot
+
+`GrandCentral` is the composition root and owns account-wide runtime state: the EnTT registry,
+random-number generator, scoped logger, account state, physics world, and EventPP domain bus.
+Startup code derives an `AccountCtx` from it, and gameplay code receives only narrower typed
+contexts such as `SectorTickCtx`, `EntityCtx`, `WeaponCtx`, and `ProjectileSimCtx`.
+
+`AppRuntime` is an internal application-loop object built from `AccountCtx`. It handles SDL input,
+fixed-timestep advancement, event processing, and renderer-neutral frame submission. It is not a
+service locator and should not be passed into gameplay systems.
+
 ## Visual Bootstrap
 
 Initial placeholder art should reuse sprites from:
@@ -82,9 +93,12 @@ These assets are temporary implementation scaffolding, not a permanent visual co
 
 - Move: `WASD` or left stick
 - Aim/facing assist: arrow keys or right stick
-- Cycle/lock asteroid target: `Tab` or right shoulder
+- Cycle/lock asteroid mining target: `Tab` or right shoulder
+- Cycle/lock enemy target: `\` or left shoulder
+- Clear mining and enemy targets: left shoulder + right shoulder
 - Fire mining laser at locked asteroid: `F` or right trigger
 - Fire particle cannon: `E` or west face button
+- Fire homing missiles: `R` or left trigger, while an enemy target is locked
 - Burst of speed: east face button
 - Engage/release Gravity Sling: `Q` or north face button
 - Activate cargo escort after quota authorization: `Space` or south face button
@@ -96,9 +110,9 @@ The current Dawn prototype draws Sector7-derived sprites, hardware-uploaded text
 brackets, text glyph HUD, mining beams, dual particle cannon shots, cargo boxes, active cargo train
 links, Gravity Sling constraint feedback, an escort gate route, drones, and raiders.
 
-The ship uses assisted desired-motion flight, a short burst-speed mode, shields, armor, and a
-fixed-step simulation loop. Boost doubles top speed briefly and falls off on a short hockey-stick
-curve. Boost detaches cargo tow links.
+The ship uses assisted desired-motion flight, a short burst-speed mode, shields, armor, semantic
+input mapping, and a fixed-step simulation loop. Boost doubles top speed briefly and falls off on a
+short hockey-stick curve. Boost detaches cargo tow links.
 
 Asteroids are large moving bodies with explicit mass, structural break progress, two break levels,
 composition, ore rarity, velocity, and spin. Kinetic particle shots apply linear impulse, and
@@ -111,9 +125,15 @@ around that body. While active, normal thrust is redirected into relative orbita
 player can bleed speed, build a launch angle, and release into free flight from the resulting
 world-space velocity.
 
+Ship and raider movement now use a stricter spacecraft model: thrust changes velocity, micro
+rotation changes facing, braking is counterthrust, and boost increases thrust authority rather than
+setting speed directly. Collision prediction accounts for high-speed tunneling with swept-radius
+checks whose candidate budget scales from speed and zoom/view tuning.
+
 Mining drones operate autonomously against valid target sizes, spread around work targets, return
-to formation, and break off when their target is invalid. The current prototype still starts with
-eight strong drones so high-end behavior is visible before progression is designed.
+to formation, haul pending cargo from the mining site, and break off when their target is invalid.
+The current prototype still starts with eight strong drones so high-end behavior is visible before
+progression is designed.
 
 Cargo is generated from extracted mass and ore value, inherits ore color, follows the ship as a
 train during escort, stages as a group near the jump gate, and extracts sequentially. Raiders can
@@ -122,7 +142,7 @@ tasks including cargo theft, player harassment, covering an active thief, and fu
 Threat escalation now spawns additional combat raider contacts around the player; high pressure
 contacts enter full aggression.
 
-The HUD reports position, speed, ship health, round timer, threat level, target state, target mass,
+The HUD reports position, speed, ship health, round timer, threat level, mining target state, enemy target state, target mass,
 ore rarity value, mineral composition, extracted ore, cargo quota, sector pressure, drone state,
 collision warnings, escort state, raider disruption, stolen cargo escape, recovery state, and
 Gravity Sling state. The upper-right HUD face-button legend shows current face-button meanings and
@@ -143,19 +163,19 @@ current threat level, next threat countdown, and progress toward the next escala
 - Burst of speed doubles the ship's normal top speed, then falls off on a short hockey-stick curve over roughly a third of a second. Bursting while towing cargo breaks the cargo train coupling.
 - Gate extraction processes cargo boxes sequentially at roughly five seconds per box. A round is not complete until extraction finishes.
 - Reaching the extraction gate spawns combat raiders that prioritize killing the player over stealing cargo.
-- Asteroid damage, fragmentation, consumption, particle impacts, and drone target release are event-visible gameplay facts. New behavior should prefer event responders over hidden direct call chains.
+- Asteroid damage, fragmentation, consumption, particle fire/impact, cargo lifecycle events, and drone target release are event-visible gameplay facts. New behavior should prefer event responders over hidden direct call chains.
 - GrandCentral owns the EventPP bus and context objects expose it. App still contains too much orchestration and should keep shrinking toward platform setup plus GrandCentral startup.
 
 ## Known Future Directions
 
 - Replace temporary eight-drone development start with progression-aware drone counts, roles, and upgrades.
-- Build explicit modal control FSMs for flight, mining posture, mobile weapons, Gravity Sling, HUD command, and cargo escort.
+- Build more explicit modal control FSMs for flight, mining posture, mobile weapons, Gravity Sling, HUD command, and cargo escort.
 - Make ship computer quality drive HUD effectiveness: radar count/range/update cadence, scan confidence, prediction quality, warning clarity, and target detail.
 - Expand asteroid scanning into real pre-breakup decision making with chemical makeup, fracture maps, volatile hazards, and tool recommendations.
 - Add more asteroid families and hazards: heat, gas, radiation, brittle fracture, controlled detonation, debris, and material-specific reactions.
 - Add additional projectile/tool behavior: laser-coherent breakup, kinetic velocity transfer, explosive radial fragmentation, and richer Gravity Sling interactions with larger moving structures.
 - Expand threat level effects beyond current raider spawns: richer combat intensity, contract modifiers, gate danger, and pre-tear warning behaviors.
-- Improve cargo escort state machines: detached cargo recovery, tow stress, extraction sequencing, and loss/payment consequences.
+- Improve cargo escort state machines and outcomes: detached cargo recovery, tow stress, extraction sequencing, and loss/payment consequences.
 - Move more lifecycle behavior behind EventPP responders and typed contexts; keep shrinking `App` toward platform setup plus `GrandCentral` startup.
 - Replace placeholder art and temporary tuning with reviewed production assets, data-driven tuning, and richer feedback.
 

@@ -14,6 +14,8 @@ The HUD must communicate:
 
 - current ship operational mode
 - current control mapping
+- mining target focus
+- enemy target focus
 - movement intent
 - aim directions
 - camera relationship

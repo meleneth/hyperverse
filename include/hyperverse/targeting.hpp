@@ -44,7 +44,17 @@ struct TargetLockModel {
   float scan_confidence{0.0F};
 };
 
+struct EnemyTargetLockModel {
+  TargetLockPhase phase{TargetLockPhase::Unlocked};
+  entt::entity target{entt::null};
+  Vec2 relative_position{};
+  Vec2 relative_velocity{};
+  float wrapped_distance{0.0F};
+  float integrity_fraction{0.0F};
+};
+
 [[nodiscard]] bool has_locked_target(const TargetLockModel& lock);
+[[nodiscard]] bool has_locked_enemy(const EnemyTargetLockModel& lock);
 
 void update_target_lock(
   TargetLockModel& lock,
@@ -58,5 +68,16 @@ void update_target_lock(
 );
 
 void update_asteroid_motion(AccountCtx& ctx, const SectorTuning& sector, float dt_seconds);
+
+void update_enemy_target_lock(
+  EnemyTargetLockModel& lock,
+  entt::registry& registry,
+  Vec2 observer_position,
+  Vec2 observer_velocity,
+  const SemanticInputFrame& input,
+  const SectorTuning& sector,
+  const TargetingTuning& tuning = {},
+  std::span<const entt::entity> tracked_targets = {}
+);
 
 }  // namespace hyperverse

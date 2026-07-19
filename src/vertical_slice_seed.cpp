@@ -71,6 +71,7 @@ VerticalSliceEntities seed_vertical_slice(AccountCtx& account) {
   account.registry().emplace<RoundTimer>(entities.player);
   account.registry().emplace<HudNotice>(entities.player);
   account.registry().emplace<TargetLockModel>(entities.player);
+  account.registry().emplace<EnemyTargetLockModel>(entities.player);
   account.registry().emplace<GravitySlingModel>(entities.player);
   account.registry().emplace<GravitySlingHudSnapshot>(entities.player);
   account.registry().emplace<MiningHudSnapshot>(entities.player);
@@ -84,10 +85,16 @@ VerticalSliceEntities seed_vertical_slice(AccountCtx& account) {
   account.registry().emplace<SectorPressureHudSnapshot>(entities.player);
   account.registry().emplace<MiningDroneHudSnapshot>(entities.player);
   account.registry().emplace<RadarHudModel>(entities.player);
+  account.registry().emplace<CombatRadarHudModel>(entities.player);
   account.registry().emplace<ParticleCannonModel>(entities.player);
   account.registry().emplace<ParticleCannonHudSnapshot>(entities.player);
+  account.registry().emplace<HomingMissileLauncherModel>(entities.player);
+  account.registry().emplace<HomingMissileHudSnapshot>(entities.player);
   account.event_bus().appendListener(DomainEventType::ParticleImpact, [&account, player = entities.player](const DomainEvent&) {
     account.registry().get<ParticleCannonHudSnapshot>(player).impacts += 1;
+  });
+  account.event_bus().appendListener(DomainEventType::HomingMissileImpact, [&account, player = entities.player](const DomainEvent&) {
+    account.registry().get<HomingMissileHudSnapshot>(player).impacts += 1;
   });
   account.registry().emplace<RaiderHudSnapshot>(entities.player);
   account.registry().emplace<CargoRecoveryHudSnapshot>(entities.player);

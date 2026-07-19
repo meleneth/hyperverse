@@ -97,6 +97,35 @@ void emit_arrived_at_gate(DomainEventBus* event_bus, const CargoEscortRouteHudSn
 
 }  // namespace
 
+bool transition_cargo_escort(CargoEscortState& escort, CargoEscortTransition transition) {
+  sml::sm<CargoEscortMachine> machine;
+  replay_phase(machine, escort.phase);
+  const CargoEscortPhase previous = escort.phase;
+  bool accepted = false;
+  switch (transition) {
+    case CargoEscortTransition::QuotaAuthorized:
+      accepted = machine.process_event(quota_authorized{});
+      break;
+    case CargoEscortTransition::QuotaLost:
+      accepted = machine.process_event(quota_lost{});
+      break;
+    case CargoEscortTransition::ConfirmExtraction:
+      accepted = machine.process_event(confirm_extraction{});
+      break;
+    case CargoEscortTransition::GateReached:
+      accepted = machine.process_event(gate_reached{});
+      break;
+    case CargoEscortTransition::ExtractionComplete:
+      accepted = machine.process_event(extraction_complete{});
+      break;
+  }
+  if (!accepted) {
+    return false;
+  }
+  escort.phase = read_phase(machine);
+  return escort.phase != previous;
+}
+
 CargoEscortHudSnapshot update_cargo_escort_state(
   CargoEscortState& escort,
   const CargoHudSnapshot& cargo,

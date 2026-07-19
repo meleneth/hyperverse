@@ -25,6 +25,16 @@ void emit_job_assigned(DomainEventBus* event_bus, entt::entity drone, entt::enti
   );
 }
 
+void emit_target_released(DomainEventBus* event_bus, entt::entity drone_entity, entt::entity target, Vec2 position) {
+  if (event_bus == nullptr || target == entt::null) {
+    return;
+  }
+  event_bus->enqueue(
+    DomainEventType::DroneTargetReleased,
+    DomainEvent{.type = DomainEventType::DroneTargetReleased, .subject = drone_entity, .target = target, .position = position}
+  );
+}
+
 [[nodiscard]] bool valid_job_box(entt::registry& registry, entt::entity box_entity) {
   if (box_entity == entt::null || !registry.valid(box_entity) || !registry.all_of<CargoBox>(box_entity)) {
     return false;
@@ -38,8 +48,7 @@ void emit_job_assigned(DomainEventBus* event_bus, entt::entity drone, entt::enti
     return false;
   }
   const MiningDrone& drone = registry.get<MiningDrone>(drone_entity);
-  return drone.cargo_target == entt::null && drone.target == entt::null &&
-         (drone.phase == MiningDronePhase::Idle || drone.phase == MiningDronePhase::Travelling);
+  return drone.cargo_target == entt::null;
 }
 
 void complete_delivered_job(CargoDispatchModel& dispatch, entt::entity box) {
@@ -115,6 +124,7 @@ int dispatch_cargo_drone_jobs(
     }
 
     MiningDrone& assigned_drone = registry.get<MiningDrone>(*drone);
+    emit_target_released(event_bus, *drone, assigned_drone.target, assigned_drone.position);
     assigned_drone.target = entt::null;
     assigned_drone.cargo_target = job.box;
     assigned_drone.cargo_destination = job.destination;

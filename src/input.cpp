@@ -58,11 +58,18 @@ SemanticInputFrame map_flight_intent(const RawInputFrame& raw, const InputTuning
     .primary_aim = clamp_length(apply_deadzone(raw.aim_axis, tuning.deadzone), 1.0F),
     .confirm_requested = raw.confirm,
     .cancel_requested = raw.cancel,
+    .target_cycle_active = raw.target_cycle,
     .target_cycle_requested = raw.target_cycle,
+    .enemy_target_cycle_active = raw.enemy_target_cycle,
+    .enemy_target_cycle_requested = raw.enemy_target_cycle,
+    .clear_targets_active = raw.clear_targets || (raw.target_cycle && raw.enemy_target_cycle),
+    .clear_targets_requested = raw.clear_targets || (raw.target_cycle && raw.enemy_target_cycle),
     .boost_requested = raw.boost,
     .gravity_sling_requested = raw.gravity_sling,
     .particle_fire_requested = raw.particle_fire,
     .particle_fire_active = raw.particle_fire,
+    .missile_fire_requested = raw.missile_fire,
+    .missile_fire_active = raw.missile_fire,
     .tool_intensity = std::clamp(raw.tool_intensity, 0.0F, 1.0F),
     .control_mapping = raw.control_mapping,
   };
@@ -76,9 +83,12 @@ SemanticInputFrame FlightInputMapper::map(const RawInputFrame& raw, const InputT
     intent.confirm_requested = raw.confirm && !previous_.confirm;
     intent.cancel_requested = raw.cancel && !previous_.cancel;
     intent.target_cycle_requested = raw.target_cycle && !previous_.target_cycle;
+    intent.enemy_target_cycle_requested = raw.enemy_target_cycle && !previous_.enemy_target_cycle;
+    intent.clear_targets_requested = intent.clear_targets_active && !(previous_.clear_targets || (previous_.target_cycle && previous_.enemy_target_cycle));
     intent.boost_requested = raw.boost && !previous_.boost;
     intent.gravity_sling_requested = raw.gravity_sling && !previous_.gravity_sling;
     intent.particle_fire_requested = raw.particle_fire && !previous_.particle_fire;
+    intent.missile_fire_requested = raw.missile_fire && !previous_.missile_fire;
   }
 
   previous_ = raw;

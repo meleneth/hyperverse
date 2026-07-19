@@ -1,5 +1,6 @@
 #pragma once
 
+#include "hyperverse/domain_events.hpp"
 #include "hyperverse/flight.hpp"
 #include "hyperverse/input.hpp"
 #include "hyperverse/sector.hpp"
@@ -25,6 +26,15 @@ enum class GravitySlingDisengageReason {
   IncompatibleState,
 };
 
+enum class GravitySlingTransition {
+  BeginEngage,
+  CompleteEngage,
+  PlayerRelease,
+  TargetLost,
+  RadiusBreak,
+  ForceFreeFlight,
+};
+
 struct GravitySlingModel {
   GravitySlingPhase phase{GravitySlingPhase::FreeFlight};
   entt::entity target{entt::null};
@@ -42,6 +52,13 @@ struct GravitySlingModel {
   GravitySlingDisengageReason disengage_reason{GravitySlingDisengageReason::None};
 };
 
+[[nodiscard]] bool transition_gravity_sling(
+  GravitySlingModel& model,
+  GravitySlingTransition transition,
+  entt::entity subject = entt::null,
+  DomainEventBus* event_bus = nullptr
+);
+
 struct GravitySlingTuning {
   float acquisition_range{1600.0F};
   float engagement_seconds{0.22F};
@@ -49,6 +66,8 @@ struct GravitySlingTuning {
   float max_radius_padding{920.0F};
   float radial_adjust_speed{280.0F};
   float angular_adjust_speed{1.7F};
+  float thrust_turn_rate{11.0F};
+  float asteroid_thrust_acceleration{420.0F};
   float relative_angular_damping{0.0F};
   float release_entry_velocity_fraction{0.0F};
   float radius_break_tolerance{180.0F};
@@ -102,7 +121,9 @@ struct GravitySlingHudSnapshot {
   const SemanticInputFrame& input,
   const SectorTuning& sector,
   float dt_seconds,
-  const GravitySlingTuning& tuning = {}
+  const GravitySlingTuning& tuning = {},
+  entt::entity subject = entt::null,
+  DomainEventBus* event_bus = nullptr
 );
 
 }  // namespace hyperverse

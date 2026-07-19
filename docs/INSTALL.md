@@ -1,8 +1,9 @@
 # Installation and Bootstrap
 
-Hyperverse is currently a C++23/CMake prototype bootstrap. Milestone 0 builds a `hyperverse`
+Hyperverse is a C++23/CMake playable prototype. The native build produces a `hyperverse`
 executable that opens an SDL3 window, initializes gamepad support, renders through Dawn/WebGPU,
-and provides a Catch2 test binary.
+loads checked-in sprite assets, and runs the current mining/escort slice. The test build also
+produces a Catch2 binary discovered by CTest.
 
 ## Linux
 
@@ -57,9 +58,8 @@ cmake --install build --prefix "$PWD/install"
 ## Steam Deck
 
 Use the Linux instructions in a SteamOS development environment. The primary runtime
-requirements are a Vulkan-capable driver for Dawn's Linux backend and SDL3 gamepad support. The first bootstrap logs
-detected gamepads to stdout so controller detection can be verified before gameplay input
-mapping exists.
+requirements are a Vulkan-capable driver for Dawn's Linux backend and SDL3 gamepad support.
+The current input layer maps keyboard and gamepad input into semantic gameplay intent.
 
 ## MSYS2
 

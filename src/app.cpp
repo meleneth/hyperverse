@@ -23,6 +23,7 @@
 #include "hyperverse/pressure.hpp"
 #include "hyperverse/projectile.hpp"
 #include "hyperverse/raider.hpp"
+#include "hyperverse/radar_control.hpp"
 #include "hyperverse/radar_hud.hpp"
 #include "hyperverse/sdl_platform.hpp"
 #include "hyperverse/ship_status.hpp"
@@ -237,7 +238,7 @@ private:
     gamepad_.open_first_available();
     latest_intent_ = input_mapper_.map(gamepad_.sample());
     if (latest_intent_.boost_requested && account_.registry().get<CargoEscortState>(player_).phase == CargoEscortPhase::EscortActive) {
-      (void)detach_linked_cargo(account_.registry(), ship_.velocity);
+      (void)detach_linked_cargo(account_.registry(), ship_.velocity, &account_.event_bus());
     }
     update_asteroid_motion(account_, sector_, timestep_.tick_seconds());
     for (auto [entity, geometry] : account_.registry().view<AsteroidGeometry>().each()) {
@@ -247,6 +248,7 @@ private:
 
     CameraState& camera = account_.registry().get<CameraState>(player_);
     TargetLockModel& target_lock = account_.registry().get<TargetLockModel>(player_);
+    EnemyTargetLockModel& enemy_target_lock = account_.registry().get<EnemyTargetLockModel>(player_);
     GravitySlingModel& gravity_sling = account_.registry().get<GravitySlingModel>(player_);
     GravitySlingHudSnapshot& gravity_sling_hud = account_.registry().get<GravitySlingHudSnapshot>(player_);
     HudNotice& hud_notice = account_.registry().get<HudNotice>(player_);
@@ -264,7 +266,9 @@ private:
     SectorPressureHudSnapshot& pressure_hud = account_.registry().get<SectorPressureHudSnapshot>(player_);
     MiningDroneHudSnapshot& drone_hud = account_.registry().get<MiningDroneHudSnapshot>(player_);
     RadarHudModel& radar_model = account_.registry().get<RadarHudModel>(player_);
+    CombatRadarHudModel& combat_radar_model = account_.registry().get<CombatRadarHudModel>(player_);
     ParticleCannonHudSnapshot& particle_hud = account_.registry().get<ParticleCannonHudSnapshot>(player_);
+    HomingMissileHudSnapshot& missile_hud = account_.registry().get<HomingMissileHudSnapshot>(player_);
     RaiderHudSnapshot& raider_hud = account_.registry().get<RaiderHudSnapshot>(player_);
     CargoRecoveryHudSnapshot& recovery_hud = account_.registry().get<CargoRecoveryHudSnapshot>(player_);
     CollisionHudSnapshot& collision_hud = account_.registry().get<CollisionHudSnapshot>(player_);
@@ -273,7 +277,17 @@ private:
     if (sling_input.gravity_sling_requested && length(sling_input.primary_aim) <= 0.0001F && has_locked_target(target_lock)) {
       sling_input.primary_aim = normalize_or_zero(target_lock.relative_position);
     }
-    gravity_sling_hud = update_gravity_sling(gravity_sling, account_.registry(), ship_, sling_input, sector_, timestep_.tick_seconds(), gravity_sling_tuning_);
+    gravity_sling_hud = update_gravity_sling(
+      gravity_sling,
+      account_.registry(),
+      ship_,
+      sling_input,
+      sector_,
+      timestep_.tick_seconds(),
+      gravity_sling_tuning_,
+      player_,
+      &account_.event_bus()
+    );
     if (gravity_sling.phase == GravitySlingPhase::FreeFlight) {
       simulate_assisted_flight(account_, ship_, latest_intent_, flight_, sector_, timestep_.tick_seconds());
     }
@@ -284,14 +298,18 @@ private:
     }
     update_camera_anchor(camera, ship_, sector_, camera_tuning_, timestep_.tick_seconds());
     update_radar_hud(radar_model, account_.registry(), ship_, sector_, timestep_.tick_seconds(), radar_tuning_);
-    std::vector<entt::entity> tracked_targets;
-    tracked_targets.reserve(radar_model.tracked_targets.size());
-    for (const RadarTrackedTarget& tracked : radar_model.tracked_targets) {
-      tracked_targets.push_back(tracked.target);
+    const RadarControlFrame radar_control = update_radar_control(radar_control_, latest_intent_, &account_.event_bus());
+    if (radar_control.mining_target_cycle_requested || radar_control.clear_targets_requested) {
+      radar_model.update_seconds_remaining = 0.0F;
+      update_radar_hud(radar_model, account_.registry(), ship_, sector_, 0.0F, radar_tuning_);
     }
     update_ship_status(ship_health, round_timer, timestep_.tick_seconds());
     update_hud_notice(hud_notice, timestep_.tick_seconds());
-    update_target_lock(target_lock, account_.registry(), ship_.position, ship_.velocity, latest_intent_, sector_, {}, tracked_targets);
+    SemanticInputFrame target_intent = latest_intent_;
+    target_intent.target_cycle_requested = radar_control.mining_target_cycle_requested;
+    target_intent.enemy_target_cycle_requested = radar_control.enemy_target_cycle_requested;
+    target_intent.clear_targets_requested = radar_control.clear_targets_requested;
+    update_target_lock(target_lock, account_.registry(), ship_.position, ship_.velocity, target_intent, sector_, {}, radar_model.target_order);
     mining_hud = update_mining_laser(account_.registry(), target_lock, ship_, latest_intent_, sector_, mining_laser_, timestep_.tick_seconds());
 
     drone_hud = {};
@@ -349,6 +367,7 @@ private:
     escort_hud = update_cargo_escort_arrival(cargo_escort, cargo_hud, route_hud, &account_.event_bus());
     train_hud = update_cargo_train(account_.registry(), cargo_escort, ship_, sector_, timestep_.tick_seconds());
     const CargoExtractionHudSnapshot extraction_hud = update_cargo_extraction(
+      cargo_extraction_,
       account_.registry(),
       cargo_escort,
       escort_route_,
@@ -362,7 +381,17 @@ private:
     std::vector<std::pair<entt::entity, RaiderHudSnapshot>> active_raiders;
     for (auto [raider_entity, raider] : account_.registry().view<RaiderShip>().each()) {
       RaiderHudSnapshot current_raider =
-        update_raider_threat(raider, account_.registry(), cargo_escort, ship_, sector_, timestep_.tick_seconds(), raider_tuning_);
+        update_raider_threat(
+          raider,
+          account_.registry(),
+          cargo_escort,
+          ship_,
+          sector_,
+          timestep_.tick_seconds(),
+          raider_tuning_,
+          raider_entity,
+          &account_.event_bus()
+        );
       if (EngineTrailModel* trail = account_.registry().try_get<EngineTrailModel>(raider_entity); trail != nullptr) {
         if (current_raider.active) {
           update_raider_engine_trail(*trail, raider, sector_, timestep_.tick_seconds(), raider_tuning_, engine_trail_tuning_);
@@ -380,11 +409,24 @@ private:
     if (raider_hud.active && hud_notice.message != "CONVOY UNDER ATTACK") {
       push_hud_notice(hud_notice, "CONVOY UNDER ATTACK");
     }
-    recovery_hud =
-      recover_stolen_cargo(account_.registry(), account_.registry().get<RaiderShip>(entities_.raider), ship_, latest_intent_, sector_);
+    recovery_hud = recover_stolen_cargo(
+      account_.registry(),
+      account_.registry().get<RaiderShip>(entities_.raider),
+      ship_,
+      latest_intent_,
+      sector_,
+      {},
+      entities_.raider,
+      &account_.event_bus()
+    );
     if (recovery_hud.recovered) {
       raider_hud = {};
     }
+    if (radar_control.enemy_target_cycle_requested || radar_control.clear_targets_requested) {
+      combat_radar_model.update_seconds_remaining = 0.0F;
+    }
+    update_combat_radar_hud(combat_radar_model, account_.registry(), ship_, sector_, timestep_.tick_seconds(), radar_tuning_);
+    update_enemy_target_lock(enemy_target_lock, account_.registry(), ship_.position, ship_.velocity, target_intent, sector_, {}, combat_radar_model.target_order);
     WeaponCtx player_weapon{tick_ctx.entity_context(player_)};
     if (const std::optional<ParticleCannonFireCommand> player_fire = request_player_particle_fire(
           player_weapon,
@@ -393,6 +435,7 @@ private:
         )) {
       spawn_requested_particle_fire(player_weapon, *player_fire, particle_cannon_tuning_);
     }
+    update_player_homing_missile_launcher(player_weapon, enemy_target_lock, WeaponTrigger{.active = latest_intent_.missile_fire_active}, homing_missile_tuning_);
     for (entt::entity drone_entity : entities_.mining_drones) {
       WeaponCtx drone_weapon{tick_ctx.entity_context(drone_entity)};
       if (const std::optional<ParticleCannonFireCommand> drone_fire = request_drone_particle_fire(
@@ -416,6 +459,8 @@ private:
       }
     }
     particle_hud = update_particle_projectiles(ProjectileSimCtx{tick_ctx, player_}, particle_cannon_tuning_);
+    missile_hud = update_homing_missiles(ProjectileSimCtx{tick_ctx, player_}, homing_missile_tuning_);
+    update_explosion_bursts(account_.registry(), timestep_.tick_seconds());
     account_.event_bus().process();
     const int previous_pressure_level = pressure.escalation_level;
     pressure_hud = update_sector_pressure(pressure, timestep_.tick_seconds(), pressure_tuning_);
@@ -449,14 +494,17 @@ private:
   CargoBoxTuning cargo_box_tuning_;
   CargoDispatchModel cargo_dispatch_{};
   CargoEscortRoute escort_route_;
+  CargoExtractionModel cargo_extraction_{};
   CargoExtractionTuning cargo_extraction_tuning_{};
   SectorPressureTuning pressure_tuning_{.escalation_interval_seconds = 60.0F};
   MiningDroneTuning mining_drone_tuning_{};
   EngineTrailTuning engine_trail_tuning_{};
   GravitySlingTuning gravity_sling_tuning_{};
   ParticleCannonTuning particle_cannon_tuning_{};
+  HomingMissileTuning homing_missile_tuning_{};
   RaiderTuning raider_tuning_{};
   RadarHudTuning radar_tuning_;
+  RadarControlModel radar_control_{};
   FlightInputMapper input_mapper_;
   SemanticInputFrame latest_intent_{};
   GameSessionModel game_session_{};

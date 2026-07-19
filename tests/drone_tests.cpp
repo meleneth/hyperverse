@@ -2,6 +2,28 @@
 
 using hyperverse::test::TestAccountWorld;
 
+TEST_CASE("mining drone work phase transitions through SML owner") {
+  hyperverse::MiningDrone drone{};
+
+  CHECK(hyperverse::transition_mining_drone_work(drone, hyperverse::MiningDroneWorkTransition::TravelToWork));
+  CHECK(drone.phase == hyperverse::MiningDronePhase::Travelling);
+  CHECK(hyperverse::transition_mining_drone_work(drone, hyperverse::MiningDroneWorkTransition::BeginMining));
+  CHECK(drone.phase == hyperverse::MiningDronePhase::Mining);
+  CHECK(hyperverse::transition_mining_drone_work(drone, hyperverse::MiningDroneWorkTransition::ReturnToFormation));
+  CHECK(drone.phase == hyperverse::MiningDronePhase::Idle);
+}
+
+TEST_CASE("mining drone cargo phase transitions through SML owner") {
+  hyperverse::MiningDrone drone{.cargo_target = entt::entity{7}};
+
+  CHECK(hyperverse::transition_mining_drone_cargo(drone, hyperverse::MiningDroneCargoTransition::AssignCargo));
+  CHECK(drone.phase == hyperverse::MiningDronePhase::CargoPickup);
+  CHECK(hyperverse::transition_mining_drone_cargo(drone, hyperverse::MiningDroneCargoTransition::CargoPickedUp));
+  CHECK(drone.phase == hyperverse::MiningDronePhase::EscortingCargo);
+  CHECK(hyperverse::transition_mining_drone_cargo(drone, hyperverse::MiningDroneCargoTransition::CargoDelivered));
+  CHECK(drone.phase == hyperverse::MiningDronePhase::Idle);
+}
+
 TEST_CASE("mining drone acquires the locked asteroid as its priority") {
   entt::registry registry;
   const entt::entity asteroid = registry.create();
