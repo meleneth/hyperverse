@@ -10,6 +10,7 @@ project(
 option(HYPERVERSE_BUILD_TESTS "Build Hyperverse tests" ON)
 option(HYPERVERSE_ENABLE_X11 "Build Dawn X11 surface support on Linux" ON)
 option(HYPERVERSE_EMSCRIPTEN_DEBUG "Enable Emscripten runtime assertions, safe heap checks, and source maps" OFF)
+set(HYPERVERSE_EMSCRIPTEN_STACK_SIZE "4194304" CACHE STRING "Emscripten stack size in bytes for browser builds")
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -249,6 +250,7 @@ if(EMSCRIPTEN)
       "SHELL:-sASYNCIFY=1"
       "SHELL:-sALLOW_MEMORY_GROWTH=1"
       "SHELL:-sEXIT_RUNTIME=0"
+      "SHELL:-sSTACK_SIZE=${HYPERVERSE_EMSCRIPTEN_STACK_SIZE}"
       "SHELL:--preload-file ${PROJECT_SOURCE_DIR}/assets@/assets"
   )
   if(HYPERVERSE_EMSCRIPTEN_DEBUG)

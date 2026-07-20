@@ -7,6 +7,7 @@ BUILD_TYPE=${BUILD_TYPE:-Release}
 EMSCRIPTEN_DEBUG=${EMSCRIPTEN_DEBUG:-OFF}
 GENERATOR=${GENERATOR:-Unix Makefiles}
 TARGET=${TARGET:-hyperverse}
+EMSCRIPTEN_STACK_SIZE=${EMSCRIPTEN_STACK_SIZE:-4194304}
 PORT=${PORT:-8000}
 SERVE=0
 
@@ -20,6 +21,8 @@ Environment overrides:
   BUILD_TYPE   CMake build type. Default: Release
   EMSCRIPTEN_DEBUG
                Enable Emscripten assertions, safe heap checks, and source maps. Default: OFF
+  EMSCRIPTEN_STACK_SIZE
+               Browser build stack size in bytes. Default: 4194304
   GENERATOR    CMake generator. Default: Unix Makefiles
   TARGET       CMake target. Default: hyperverse
   JOBS         Parallel build jobs passed to cmake --build.
@@ -68,6 +71,7 @@ if [ "$SERVE" -eq 1 ]; then
       -e "BUILD_DIR=${BUILD_DIR}" \
       -e "BUILD_TYPE=${BUILD_TYPE}" \
       -e "EMSCRIPTEN_DEBUG=${EMSCRIPTEN_DEBUG}" \
+      -e "EMSCRIPTEN_STACK_SIZE=${EMSCRIPTEN_STACK_SIZE}" \
       -e "GENERATOR=${GENERATOR}" \
       -e "TARGET=${TARGET}" \
       -e "PORT=${PORT}" \
@@ -85,6 +89,7 @@ if [ "$SERVE" -eq 1 ]; then
     -e "BUILD_DIR=${BUILD_DIR}" \
     -e "BUILD_TYPE=${BUILD_TYPE}" \
     -e "EMSCRIPTEN_DEBUG=${EMSCRIPTEN_DEBUG}" \
+    -e "EMSCRIPTEN_STACK_SIZE=${EMSCRIPTEN_STACK_SIZE}" \
     -e "GENERATOR=${GENERATOR}" \
     -e "TARGET=${TARGET}" \
     -e "PORT=${PORT}" \
@@ -102,6 +107,7 @@ if [ -n "${JOBS:-}" ]; then
     -e "BUILD_DIR=${BUILD_DIR}" \
     -e "BUILD_TYPE=${BUILD_TYPE}" \
     -e "EMSCRIPTEN_DEBUG=${EMSCRIPTEN_DEBUG}" \
+    -e "EMSCRIPTEN_STACK_SIZE=${EMSCRIPTEN_STACK_SIZE}" \
     -e "GENERATOR=${GENERATOR}" \
     -e "TARGET=${TARGET}" \
     -e "PORT=${PORT}" \
@@ -118,6 +124,7 @@ exec "$CONTAINER" run --rm \
   -e "BUILD_DIR=${BUILD_DIR}" \
   -e "BUILD_TYPE=${BUILD_TYPE}" \
   -e "EMSCRIPTEN_DEBUG=${EMSCRIPTEN_DEBUG}" \
+  -e "EMSCRIPTEN_STACK_SIZE=${EMSCRIPTEN_STACK_SIZE}" \
   -e "GENERATOR=${GENERATOR}" \
   -e "TARGET=${TARGET}" \
   -e "PORT=${PORT}" \

@@ -6,6 +6,7 @@ BUILD_TYPE=${BUILD_TYPE:-Release}
 GENERATOR=${GENERATOR:-Ninja}
 TARGET=${TARGET:-hyperverse}
 EMSCRIPTEN_DEBUG=${EMSCRIPTEN_DEBUG:-OFF}
+EMSCRIPTEN_STACK_SIZE=${EMSCRIPTEN_STACK_SIZE:-4194304}
 SERVE=0
 
 usage() {
@@ -17,6 +18,8 @@ Environment overrides:
   BUILD_TYPE   CMake build type. Default: Release
   EMSCRIPTEN_DEBUG
                Enable Emscripten assertions, safe heap checks, and source maps. Default: OFF
+  EMSCRIPTEN_STACK_SIZE
+               Browser build stack size in bytes. Default: 4194304
   GENERATOR    CMake generator. Default: Ninja
   TARGET       CMake target. Default: hyperverse
   JOBS         Parallel build jobs passed to cmake --build.
@@ -68,6 +71,7 @@ emcmake cmake \
   -G "$GENERATOR" \
   -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
   -DHYPERVERSE_EMSCRIPTEN_DEBUG="$EMSCRIPTEN_DEBUG" \
+  -DHYPERVERSE_EMSCRIPTEN_STACK_SIZE="$EMSCRIPTEN_STACK_SIZE" \
   -DHYPERVERSE_BUILD_TESTS=OFF
 
 if [ -n "${JOBS:-}" ]; then
