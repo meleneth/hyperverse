@@ -5,6 +5,7 @@ BUILD_DIR=${BUILD_DIR:-build-emscripten}
 BUILD_TYPE=${BUILD_TYPE:-Release}
 GENERATOR=${GENERATOR:-Ninja}
 TARGET=${TARGET:-hyperverse}
+EMSCRIPTEN_DEBUG=${EMSCRIPTEN_DEBUG:-OFF}
 SERVE=0
 
 usage() {
@@ -14,6 +15,8 @@ Usage: scripts/build-emscripten.sh [--serve]
 Environment overrides:
   BUILD_DIR    CMake build directory. Default: build-emscripten
   BUILD_TYPE   CMake build type. Default: Release
+  EMSCRIPTEN_DEBUG
+               Enable Emscripten assertions, safe heap checks, and source maps. Default: OFF
   GENERATOR    CMake generator. Default: Ninja
   TARGET       CMake target. Default: hyperverse
   JOBS         Parallel build jobs passed to cmake --build.
@@ -64,6 +67,7 @@ emcmake cmake \
   -B "$BUILD_DIR" \
   -G "$GENERATOR" \
   -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
+  -DHYPERVERSE_EMSCRIPTEN_DEBUG="$EMSCRIPTEN_DEBUG" \
   -DHYPERVERSE_BUILD_TESTS=OFF
 
 if [ -n "${JOBS:-}" ]; then

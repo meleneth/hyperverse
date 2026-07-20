@@ -9,6 +9,7 @@ project(
 
 option(HYPERVERSE_BUILD_TESTS "Build Hyperverse tests" ON)
 option(HYPERVERSE_ENABLE_X11 "Build Dawn X11 surface support on Linux" ON)
+option(HYPERVERSE_EMSCRIPTEN_DEBUG "Enable Emscripten runtime assertions, safe heap checks, and source maps" OFF)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -250,6 +251,29 @@ if(EMSCRIPTEN)
       "SHELL:-sEXIT_RUNTIME=0"
       "SHELL:--preload-file ${PROJECT_SOURCE_DIR}/assets@/assets"
   )
+  if(HYPERVERSE_EMSCRIPTEN_DEBUG)
+    target_compile_options(
+      hyperverse_core
+      PRIVATE
+        "SHELL:-g3"
+        "SHELL:-gsource-map"
+    )
+    target_compile_options(
+      hyperverse
+      PRIVATE
+        "SHELL:-g3"
+        "SHELL:-gsource-map"
+    )
+    target_link_options(
+      hyperverse
+      PRIVATE
+        "SHELL:-g3"
+        "SHELL:-gsource-map"
+        "SHELL:-sASSERTIONS=2"
+        "SHELL:-sSAFE_HEAP=1"
+        "SHELL:-sSTACK_OVERFLOW_CHECK=2"
+    )
+  endif()
 endif()
 
 if(WIN32)

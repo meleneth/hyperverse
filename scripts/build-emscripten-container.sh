@@ -4,6 +4,7 @@ set -eu
 EMSDK_IMAGE=${EMSDK_IMAGE:-emscripten/emsdk:latest}
 BUILD_DIR=${BUILD_DIR:-build-emscripten}
 BUILD_TYPE=${BUILD_TYPE:-Release}
+EMSCRIPTEN_DEBUG=${EMSCRIPTEN_DEBUG:-OFF}
 GENERATOR=${GENERATOR:-Unix Makefiles}
 TARGET=${TARGET:-hyperverse}
 PORT=${PORT:-8000}
@@ -17,6 +18,8 @@ Environment overrides:
   EMSDK_IMAGE  Container image. Default: emscripten/emsdk:latest
   BUILD_DIR    CMake build directory. Default: build-emscripten
   BUILD_TYPE   CMake build type. Default: Release
+  EMSCRIPTEN_DEBUG
+               Enable Emscripten assertions, safe heap checks, and source maps. Default: OFF
   GENERATOR    CMake generator. Default: Unix Makefiles
   TARGET       CMake target. Default: hyperverse
   JOBS         Parallel build jobs passed to cmake --build.
@@ -64,6 +67,7 @@ if [ "$SERVE" -eq 1 ]; then
       -e "EM_CACHE=/work/${BUILD_DIR}/.em-cache" \
       -e "BUILD_DIR=${BUILD_DIR}" \
       -e "BUILD_TYPE=${BUILD_TYPE}" \
+      -e "EMSCRIPTEN_DEBUG=${EMSCRIPTEN_DEBUG}" \
       -e "GENERATOR=${GENERATOR}" \
       -e "TARGET=${TARGET}" \
       -e "PORT=${PORT}" \
@@ -80,6 +84,7 @@ if [ "$SERVE" -eq 1 ]; then
     -e "EM_CACHE=/work/${BUILD_DIR}/.em-cache" \
     -e "BUILD_DIR=${BUILD_DIR}" \
     -e "BUILD_TYPE=${BUILD_TYPE}" \
+    -e "EMSCRIPTEN_DEBUG=${EMSCRIPTEN_DEBUG}" \
     -e "GENERATOR=${GENERATOR}" \
     -e "TARGET=${TARGET}" \
     -e "PORT=${PORT}" \
@@ -96,6 +101,7 @@ if [ -n "${JOBS:-}" ]; then
     -e "EM_CACHE=/work/${BUILD_DIR}/.em-cache" \
     -e "BUILD_DIR=${BUILD_DIR}" \
     -e "BUILD_TYPE=${BUILD_TYPE}" \
+    -e "EMSCRIPTEN_DEBUG=${EMSCRIPTEN_DEBUG}" \
     -e "GENERATOR=${GENERATOR}" \
     -e "TARGET=${TARGET}" \
     -e "PORT=${PORT}" \
@@ -111,6 +117,7 @@ exec "$CONTAINER" run --rm \
   -e "EM_CACHE=/work/${BUILD_DIR}/.em-cache" \
   -e "BUILD_DIR=${BUILD_DIR}" \
   -e "BUILD_TYPE=${BUILD_TYPE}" \
+  -e "EMSCRIPTEN_DEBUG=${EMSCRIPTEN_DEBUG}" \
   -e "GENERATOR=${GENERATOR}" \
   -e "TARGET=${TARGET}" \
   -e "PORT=${PORT}" \
