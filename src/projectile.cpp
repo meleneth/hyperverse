@@ -2,6 +2,7 @@
 
 #include "hyperverse/asteroid_collision.hpp"
 #include "hyperverse/asteroid_mass.hpp"
+#include "hyperverse/collision.hpp"
 #include "jolt_shape_queries.hpp"
 
 #include <boost/sml.hpp>
@@ -226,6 +227,44 @@ void replay_phase(sml::sm<HomingMissileFlightMachine>& machine, HomingMissilePha
     }
   }
   return wrap_position(drone.position + (right * side * (required_clearance - std::abs(lateral))), sector);
+}
+
+[[nodiscard]] bool circle_collision_candidate(Vec2 relative_position, float combined_radius) {
+  return dot(relative_position, relative_position) <= combined_radius * combined_radius;
+}
+
+[[nodiscard]] bool projectile_hit_shape(
+  Vec2 start_position,
+  Vec2 end_position,
+  Vec2 target_position,
+  SpriteCollisionShape projectile_shape,
+  float projectile_radius,
+  SpriteCollisionShape target_shape,
+  float target_radius,
+  const SectorTuning& sector,
+  int& precise_collision_checks
+) {
+  const Vec2 relative_end = wrapped_delta(end_position, target_position, sector);
+  const float combined_radius = projectile_radius + target_radius;
+  if (circle_collision_candidate(relative_end, combined_radius)) {
+    ++precise_collision_checks;
+    return jolt_shapes_overlap(projectile_shape, projectile_radius, target_shape, target_radius, relative_end);
+  }
+
+  const Vec2 motion = wrapped_delta(start_position, end_position, sector);
+  if (dot(motion, motion) <= 0.0001F) {
+    return false;
+  }
+
+  const Vec2 relative_start = wrapped_delta(start_position, target_position, sector);
+  const SweptCircleHit swept_hit = swept_circle_intersection(relative_start, motion, combined_radius);
+  if (!swept_hit.hit) {
+    return false;
+  }
+
+  ++precise_collision_checks;
+  const ShapeQueryHit hit = jolt_cast_shape(projectile_shape, projectile_radius, target_shape, target_radius, relative_start, motion);
+  return hit.hit;
 }
 
 void apply_projectile_damage(
@@ -563,6 +602,7 @@ ParticleCannonHudSnapshot update_particle_projectiles(
   std::vector<entt::entity> expired;
   for (auto [projectile_entity, projectile] : registry.view<ParticleShot>().each()) {
     projectile.ttl_seconds -= std::max(0.0F, ctx.dt());
+    const Vec2 start_position = projectile.position;
     projectile.position = wrap_position(projectile.position + (projectile.velocity * std::max(0.0F, ctx.dt())), ctx.sector());
     bool hit = false;
 
@@ -572,13 +612,16 @@ ParticleCannonHudSnapshot update_particle_projectiles(
           continue;
         }
 
-        const Vec2 relative_position = wrapped_delta(projectile.position, asteroid.position, ctx.sector());
-        if (jolt_shapes_overlap(
+        if (projectile_hit_shape(
+              start_position,
+              projectile.position,
+              asteroid.position,
               SpriteCollisionShape::Particle,
               projectile.radius,
               SpriteCollisionShape::Rock,
               asteroid_solid_radius(asteroid.radius),
-              relative_position
+              ctx.sector(),
+              hud.precise_collision_checks
             )) {
           apply_projectile_damage(registry, asteroid_entity, asteroid, resource, projectile, ctx.sector(), tuning);
           ctx.event_bus().enqueue(
@@ -613,13 +656,16 @@ ParticleCannonHudSnapshot update_particle_projectiles(
             continue;
           }
 
-          const Vec2 relative_position = wrapped_delta(projectile.position, raider.position, ctx.sector());
-          if (jolt_shapes_overlap(
+          if (projectile_hit_shape(
+                start_position,
+                projectile.position,
+                raider.position,
                 SpriteCollisionShape::Particle,
                 projectile.radius,
                 SpriteCollisionShape::Ship,
                 RaiderCollisionRadius,
-                relative_position
+                ctx.sector(),
+                hud.precise_collision_checks
               )) {
             raider.integrity = std::max(0.0F, raider.integrity - projectile.damage);
             ctx.event_bus().enqueue(
@@ -638,13 +684,16 @@ ParticleCannonHudSnapshot update_particle_projectiles(
         }
       }
     } else {
-      const Vec2 relative_position = wrapped_delta(projectile.position, ctx.player_motion().position, ctx.sector());
-      if (jolt_shapes_overlap(
+      if (projectile_hit_shape(
+            start_position,
+            projectile.position,
+            ctx.player_motion().position,
             SpriteCollisionShape::Particle,
             projectile.radius,
             SpriteCollisionShape::Ship,
             RaiderCollisionRadius,
-            relative_position
+            ctx.sector(),
+            hud.precise_collision_checks
           )) {
         apply_ship_damage(ctx.player_health(), projectile.damage);
         ctx.event_bus().enqueue(
@@ -700,19 +749,23 @@ HomingMissileHudSnapshot update_homing_missiles(
       }
     }
 
+    const Vec2 start_position = missile.position;
     missile.position = wrap_position(missile.position + (missile.velocity * std::max(0.0F, ctx.dt())), ctx.sector());
     bool hit = false;
 
     if (registry.valid(missile.target) && registry.all_of<RaiderShip>(missile.target)) {
       RaiderShip& target = registry.get<RaiderShip>(missile.target);
       if (target.integrity > 0.0F && target.phase != RaiderPhase::Escaped) {
-        const Vec2 relative_position = wrapped_delta(missile.position, target.position, ctx.sector());
-        if (jolt_shapes_overlap(
+        if (projectile_hit_shape(
+              start_position,
+              missile.position,
+              target.position,
               SpriteCollisionShape::Particle,
               missile.radius,
               SpriteCollisionShape::Ship,
               RaiderCollisionRadius,
-              relative_position
+              ctx.sector(),
+              hud.precise_collision_checks
             )) {
           target.integrity = std::max(0.0F, target.integrity - missile.damage);
           ctx.event_bus().enqueue(

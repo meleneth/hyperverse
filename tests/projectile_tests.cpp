@@ -135,6 +135,73 @@ TEST_CASE("particle cannon damages asteroid structure without removing mass") {
   CHECK(particle_count(account.registry()) == 0);
 }
 
+TEST_CASE("particle cannon uses swept collision for fast asteroid impacts") {
+  TestAccountWorld world;
+  hyperverse::AccountCtx account = world.account_context();
+  const entt::entity asteroid = account.registry().create();
+  account.registry().emplace<hyperverse::AsteroidBody>(
+    asteroid,
+    hyperverse::AsteroidBody{.position = {.x = 200.0F, .y = 100.0F}, .radius = 40.0F, .base_radius = 40.0F}
+  );
+  account.registry().emplace<hyperverse::MiningResource>(asteroid);
+  account.registry().emplace<hyperverse::AsteroidMass>(asteroid, hyperverse::AsteroidMass{.initial_mass = 40.0F, .remaining_mass = 40.0F});
+  const entt::entity particle = account.registry().create();
+  account.registry().emplace<hyperverse::ParticleShot>(
+    particle,
+    hyperverse::ParticleShot{
+      .position = {.x = 100.0F, .y = 100.0F},
+      .velocity = {.x = 1400.0F, .y = 0.0F},
+      .damage = 25.0F,
+      .radius = 10.0F,
+    }
+  );
+  const entt::entity player = make_player(world, {.x = 1000.0F, .y = 1000.0F});
+
+  const hyperverse::ParticleCannonHudSnapshot hud = hyperverse::update_particle_projectiles(
+    hyperverse::ProjectileSimCtx{tick_context(account, 0.10F), player}
+  );
+
+  CHECK(hud.precise_collision_checks == 1);
+  CHECK(account.registry().get<hyperverse::MiningResource>(asteroid).integrity == Catch::Approx(75.0F));
+  CHECK(particle_count(account.registry()) == 0);
+}
+
+TEST_CASE("particle cannon skips precise collision checks for implausible targets") {
+  TestAccountWorld world;
+  hyperverse::AccountCtx account = world.account_context();
+  for (int index = 0; index < 12; ++index) {
+    const entt::entity asteroid = account.registry().create();
+    account.registry().emplace<hyperverse::AsteroidBody>(
+      asteroid,
+      hyperverse::AsteroidBody{
+        .position = {.x = 2000.0F + (static_cast<float>(index) * 120.0F), .y = 3000.0F},
+        .radius = 40.0F,
+        .base_radius = 40.0F,
+      }
+    );
+    account.registry().emplace<hyperverse::MiningResource>(asteroid);
+  }
+  const entt::entity particle = account.registry().create();
+  account.registry().emplace<hyperverse::ParticleShot>(
+    particle,
+    hyperverse::ParticleShot{
+      .position = {.x = 100.0F, .y = 100.0F},
+      .velocity = {.x = 100.0F, .y = 0.0F},
+      .damage = 25.0F,
+      .radius = 10.0F,
+    }
+  );
+  const entt::entity player = make_player(world, {.x = 1000.0F, .y = 1000.0F});
+
+  const hyperverse::ParticleCannonHudSnapshot hud = hyperverse::update_particle_projectiles(
+    hyperverse::ProjectileSimCtx{tick_context(account, 0.10F), player}
+  );
+
+  CHECK(hud.active_particles == 1);
+  CHECK(hud.precise_collision_checks == 0);
+  CHECK(particle_count(account.registry()) == 1);
+}
+
 TEST_CASE("kinetic particle impacts can slow an asteroid from the front") {
   TestAccountWorld world;
   hyperverse::AccountCtx account = world.account_context();

@@ -108,11 +108,13 @@ struct HomingMissileTuning {
 struct ParticleCannonHudSnapshot {
   int active_particles{0};
   int impacts{0};
+  int precise_collision_checks{0};
 };
 
 struct HomingMissileHudSnapshot {
   int active_missiles{0};
   int impacts{0};
+  int precise_collision_checks{0};
 };
 
 struct WeaponTrigger {

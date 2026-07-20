@@ -278,6 +278,15 @@ and zoom/view tuning, then each candidate gets a cheap swept-radius line test be
 Jolt shape cast. HUD snapshots expose candidate and swept-check counts so prediction cost and
 warning quality can be tuned instead of guessed.
 
+Projectile impacts use the same cheap-first approach. Each projectile records its start and end
+position for the tick. Distant targets are rejected by a combined-radius endpoint check and then a
+swept-radius path check; precise Jolt overlap or shape-cast queries run only for plausible hits.
+
+Asteroid-to-asteroid physics also has an activation gate. Far-apart bodies are integrated directly
+from velocity and spin. Only asteroid pairs whose wrapped distance can plausibly overlap during the
+tick are kept in the Jolt asteroid world, so Jolt narrow phase work scales with nearby moving pairs
+rather than the full asteroid field.
+
 ## Drones
 
 Drones are mostly autonomous.

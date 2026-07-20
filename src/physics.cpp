@@ -167,6 +167,37 @@ struct AsteroidBodyHandle {
   float radius{0.0F};
 };
 
+struct AsteroidPhysicsCandidate {
+  entt::entity entity{entt::null};
+  Vec2 position{};
+  Vec2 velocity{};
+  float radius{0.0F};
+};
+
+[[nodiscard]] bool plausible_asteroid_collision(
+  const AsteroidPhysicsCandidate& lhs,
+  const AsteroidPhysicsCandidate& rhs,
+  const SectorTuning& sector,
+  float dt_seconds
+) {
+  const Vec2 relative_position = wrapped_delta(lhs.position, rhs.position, sector);
+  const Vec2 relative_motion = (lhs.velocity - rhs.velocity) * std::max(0.0F, dt_seconds);
+  const float reach = lhs.radius + rhs.radius + length(relative_motion) + 1.0F;
+  return dot(relative_position, relative_position) <= reach * reach;
+}
+
+void integrate_asteroid_manually(AsteroidBody& asteroid, const SectorTuning& sector, float dt_seconds) {
+  constexpr float full_turn = std::numbers::pi_v<float> * 2.0F;
+  const float dt = std::max(0.0F, dt_seconds);
+  asteroid.position = wrap_position(asteroid.position + (asteroid.velocity * dt), sector);
+  asteroid.rotation_radians = std::fmod(asteroid.rotation_radians + (asteroid.angular_velocity * dt), full_turn);
+}
+
+void integrate_asteroid_rotation(AsteroidBody& asteroid, float dt_seconds) {
+  constexpr float full_turn = std::numbers::pi_v<float> * 2.0F;
+  asteroid.rotation_radians = std::fmod(asteroid.rotation_radians + (asteroid.angular_velocity * std::max(0.0F, dt_seconds)), full_turn);
+}
+
 }  // namespace
 
 struct PhysicsWorld::Runtime {
@@ -230,15 +261,31 @@ void PhysicsWorld::integrate_ship(ShipMotion& ship, const SectorTuning& sector, 
 
 void PhysicsWorld::integrate_asteroids(entt::registry& registry, const SectorTuning& sector, float dt_seconds) {
   std::vector<entt::entity> entities;
+  std::vector<AsteroidPhysicsCandidate> candidates;
   std::unordered_set<entt::entity> live_entities;
   for (auto [entity, asteroid] : registry.view<AsteroidBody>().each()) {
-    (void)asteroid;
     entities.push_back(entity);
     live_entities.insert(entity);
+    candidates.push_back(AsteroidPhysicsCandidate{
+      .entity = entity,
+      .position = asteroid.position,
+      .velocity = asteroid.velocity,
+      .radius = asteroid_solid_radius(asteroid.radius),
+    });
+  }
+
+  std::unordered_set<entt::entity> active_entities;
+  for (std::size_t outer = 0; outer < candidates.size(); ++outer) {
+    for (std::size_t inner = outer + 1U; inner < candidates.size(); ++inner) {
+      if (plausible_asteroid_collision(candidates[outer], candidates[inner], sector, dt_seconds)) {
+        active_entities.insert(candidates[outer].entity);
+        active_entities.insert(candidates[inner].entity);
+      }
+    }
   }
 
   for (auto iterator = runtime_->asteroid_bodies.begin(); iterator != runtime_->asteroid_bodies.end();) {
-    if (live_entities.contains(iterator->first)) {
+    if (live_entities.contains(iterator->first) && active_entities.contains(iterator->first)) {
       ++iterator;
       continue;
     }
@@ -251,10 +298,24 @@ void PhysicsWorld::integrate_asteroids(entt::registry& registry, const SectorTun
     return;
   }
 
+  for (entt::entity entity : entities) {
+    if (!active_entities.contains(entity)) {
+      integrate_asteroid_manually(registry.get<AsteroidBody>(entity), sector, dt_seconds);
+    }
+  }
+
+  if (active_entities.empty()) {
+    return;
+  }
+
   JPH::BodyInterface& body_interface = runtime_->asteroid_system.GetBodyInterface();
   bool broadphase_dirty = false;
 
   for (entt::entity entity : entities) {
+    if (!active_entities.contains(entity)) {
+      continue;
+    }
+
     AsteroidBody& asteroid = registry.get<AsteroidBody>(entity);
     auto [iterator, inserted] = runtime_->asteroid_bodies.try_emplace(entity);
     AsteroidBodyHandle& body = iterator->second;
@@ -294,8 +355,11 @@ void PhysicsWorld::integrate_asteroids(entt::registry& registry, const SectorTun
   }
   runtime_->asteroid_system.Update(dt_seconds, 1, &runtime_->temp_allocator, &runtime_->job_system);
 
-  constexpr float full_turn = std::numbers::pi_v<float> * 2.0F;
   for (entt::entity entity : entities) {
+    if (!active_entities.contains(entity)) {
+      continue;
+    }
+
     AsteroidBody& asteroid = registry.get<AsteroidBody>(entity);
     const JPH::BodyID body_id = runtime_->asteroid_bodies.at(entity).body_id;
     const JPH::RVec3 position = body_interface.GetPosition(body_id);
@@ -304,7 +368,7 @@ void PhysicsWorld::integrate_asteroids(entt::registry& registry, const SectorTun
     asteroid.position = wrap_position({.x = static_cast<float>(position.GetX()), .y = static_cast<float>(position.GetY())}, sector);
     asteroid.velocity = {.x = velocity.GetX(), .y = velocity.GetY()};
     asteroid.angular_velocity = angular_velocity.GetZ();
-    asteroid.rotation_radians = std::fmod(asteroid.rotation_radians + (asteroid.angular_velocity * dt_seconds), full_turn);
+    integrate_asteroid_rotation(asteroid, dt_seconds);
   }
 }
 
