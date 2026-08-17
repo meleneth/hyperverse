@@ -7,7 +7,7 @@ TEST_CASE("assisted flight accelerates, brakes, and wraps through the sector") {
   hyperverse::AccountCtx account = world.account_context();
   hyperverse::ShipMotion ship{.position = {.x = 8995.0F, .y = 4500.0F}};
   const hyperverse::SectorTuning sector{.width = 9000.0F, .height = 9000.0F};
-  const hyperverse::FlightTuning flight{.max_speed = 100.0F, .acceleration = 100.0F, .braking = 200.0F, .turn_rate = 20.0F};
+  const hyperverse::FlightTuning flight{.hud_speed_reference = 100.0F, .acceleration = 100.0F, .braking = 200.0F, .turn_rate = 20.0F};
 
   hyperverse::simulate_assisted_flight(
     account,
@@ -29,10 +29,22 @@ TEST_CASE("strict thruster physics does not accelerate without thrust") {
   hyperverse::ShipMotion ship{.position = {.x = 100.0F, .y = 100.0F}, .velocity = {.x = 40.0F, .y = 0.0F}};
   const hyperverse::SectorTuning sector{.width = 9000.0F, .height = 9000.0F};
 
-  hyperverse::apply_thruster_physics(ship, {}, {.max_speed = 1000.0F}, sector, 1.0F);
+  hyperverse::apply_thruster_physics(ship, {}, {.hud_speed_reference = 1000.0F}, sector, 1.0F);
 
   CHECK(ship.velocity.x == Catch::Approx(40.0F));
   CHECK(ship.position.x == Catch::Approx(140.0F));
+}
+
+TEST_CASE("continued thrust has no artificial top speed") {
+  hyperverse::ShipMotion ship{};
+  const hyperverse::SectorTuning sector{.width = 9000.0F, .height = 9000.0F};
+  const hyperverse::FlightTuning flight{.hud_speed_reference = 100.0F, .acceleration = 100.0F, .braking = 200.0F};
+  const hyperverse::ThrusterCommand thrust{.linear_thrust = {.x = 1.0F, .y = 0.0F}};
+
+  hyperverse::apply_thruster_physics(ship, thrust, flight, sector, 2.0F);
+
+  CHECK(ship.velocity.x == Catch::Approx(200.0F));
+  CHECK(hyperverse::length(ship.velocity) > flight.hud_speed_reference);
 }
 
 TEST_CASE("assisted flight turns the ship toward thrust direction") {
@@ -40,7 +52,7 @@ TEST_CASE("assisted flight turns the ship toward thrust direction") {
   hyperverse::AccountCtx account = world.account_context();
   hyperverse::ShipMotion ship{.facing_radians = 0.0F};
   const hyperverse::SectorTuning sector{.width = 9000.0F, .height = 9000.0F};
-  const hyperverse::FlightTuning flight{.max_speed = 100.0F, .acceleration = 100.0F, .braking = 200.0F, .turn_rate = 20.0F};
+  const hyperverse::FlightTuning flight{.hud_speed_reference = 100.0F, .acceleration = 100.0F, .braking = 200.0F, .turn_rate = 20.0F};
 
   hyperverse::simulate_assisted_flight(
     account,
@@ -60,7 +72,7 @@ TEST_CASE("boost increases thrust authority instead of setting speed directly") 
   hyperverse::ShipMotion ship{};
   const hyperverse::SectorTuning sector{.width = 9000.0F, .height = 9000.0F};
   const hyperverse::FlightTuning flight{
-    .max_speed = 100.0F,
+    .hud_speed_reference = 100.0F,
     .acceleration = 100.0F,
     .braking = 0.0F,
     .turn_rate = 20.0F,
@@ -91,7 +103,7 @@ TEST_CASE("assisted flight prefers thrust facing over aim facing while moving") 
   hyperverse::AccountCtx account = world.account_context();
   hyperverse::ShipMotion ship{.facing_radians = 0.0F};
   const hyperverse::SectorTuning sector{.width = 9000.0F, .height = 9000.0F};
-  const hyperverse::FlightTuning flight{.max_speed = 100.0F, .acceleration = 100.0F, .braking = 200.0F, .turn_rate = 20.0F};
+  const hyperverse::FlightTuning flight{.hud_speed_reference = 100.0F, .acceleration = 100.0F, .braking = 200.0F, .turn_rate = 20.0F};
 
   hyperverse::simulate_assisted_flight(
     account,
@@ -110,7 +122,7 @@ TEST_CASE("assisted flight prefers thrust facing over aim facing while moving") 
 
 TEST_CASE("flight HUD exposes speed load, wrap warning, and control mapping") {
   const hyperverse::SectorTuning sector{.width = 9000.0F, .height = 9000.0F};
-  const hyperverse::FlightTuning flight{.max_speed = 100.0F};
+  const hyperverse::FlightTuning flight{.hud_speed_reference = 100.0F};
   const hyperverse::FlightHudTuning hud{.wrap_warning_distance = 500.0F};
   const hyperverse::ShipMotion ship{
     .position = {.x = 8750.0F, .y = 4400.0F},

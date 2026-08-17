@@ -21,11 +21,10 @@ struct ThrusterCommand {
   float desired_facing_radians{0.0F};
   bool has_desired_facing{false};
   bool boost{false};
-  bool enforce_speed_envelope{true};
 };
 
 struct FlightTuning {
-  float max_speed{920.0F};
+  float hud_speed_reference{920.0F};
   float acceleration{2400.0F};
   float braking{3200.0F};
   float turn_rate{11.0F};

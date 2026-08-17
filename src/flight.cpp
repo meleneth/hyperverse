@@ -31,7 +31,7 @@ namespace {
   const float duration = std::max(flight.boost_duration_seconds, std::numeric_limits<float>::epsilon());
   const float remaining_fraction = std::clamp(seconds_remaining / duration, 0.0F, 1.0F);
   const float slow_then_fast = 1.0F - std::pow(1.0F - remaining_fraction, 3.0F);
-  return flight.max_speed * std::max(0.0F, flight.boost_speed_multiplier - 1.0F) * slow_then_fast;
+  return flight.hud_speed_reference * std::max(0.0F, flight.boost_speed_multiplier - 1.0F) * slow_then_fast;
 }
 
 }  // namespace
@@ -87,9 +87,6 @@ void apply_thruster_physics(
     ship.velocity += thrust * base_acceleration * boost_multiplier * dt;
   }
 
-  if (command.enforce_speed_envelope) {
-    ship.velocity = clamp_length(ship.velocity, flight.max_speed + ship.boost_speed);
-  }
   ship.position = wrap_position(ship.position + (ship.velocity * dt), sector);
 
   if (command.has_desired_facing) {
@@ -120,7 +117,7 @@ FlightHudSnapshot make_flight_hud_snapshot(
   const FlightHudTuning& hud
 ) {
   const float speed = length(ship.velocity);
-  const float max_speed = std::max(flight.max_speed, std::numeric_limits<float>::epsilon());
+  const float speed_reference = std::max(flight.hud_speed_reference, std::numeric_limits<float>::epsilon());
   const float nearest_edge = nearest_wrap_edge_distance(ship.position, sector);
   const ThrusterCommand command = flight_computer_assist(ship, input, flight);
 
@@ -129,7 +126,7 @@ FlightHudSnapshot make_flight_hud_snapshot(
     .velocity = ship.velocity,
     .thrust_vector = command.linear_thrust,
     .speed = speed,
-    .speed_fraction = std::clamp(speed / max_speed, 0.0F, 1.0F),
+    .speed_fraction = std::clamp(speed / speed_reference, 0.0F, 1.0F),
     .facing_radians = ship.facing_radians,
     .desired_movement = input.desired_movement,
     .nearest_wrap_edge_distance = nearest_edge,
