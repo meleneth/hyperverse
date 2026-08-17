@@ -20,6 +20,7 @@
 #include "hyperverse/radar_hud.hpp"
 #include "hyperverse/ship_status.hpp"
 #include "hyperverse/targeting.hpp"
+#include "hyperverse/system_menu.hpp"
 
 #include <algorithm>
 #include <array>
@@ -1176,6 +1177,7 @@ SpriteFrame build_sprite_frame(
   const CollisionHudSnapshot& collision_hud = account.registry().get<CollisionHudSnapshot>(player);
   const HudNotice& hud_notice = account.registry().get<HudNotice>(player);
   const ExtractionSite* gathering_site = account.registry().try_get<ExtractionSite>(player);
+  const SystemMenuModel* system_menu = account.registry().try_get<SystemMenuModel>(player);
 
   SpriteFrame frame{
     .state = {
@@ -1299,8 +1301,11 @@ SpriteFrame build_sprite_frame(
   }
   for (entt::entity drone_entity : mining_drones) {
     const MiningDrone& drone = account.registry().get<MiningDrone>(drone_entity);
+    const DronePresence& presence = account.registry().get<DronePresence>(drone_entity);
+    if (presence.phase == DronePresencePhase::Hidden) continue;
     SpriteDraw drone_sprite =
       make_world_sprite(SpriteTexture::Drone, drone.position, camera.position, sector, width, height, 28.0F, ship_sprite_rotation(drone.facing_radians));
+    drone_sprite.half_height_ndc *= std::max(0.08F, std::abs(std::cos(presence.roll_radians)));
     if (drone.phase == MiningDronePhase::Mining) {
       tint_sprite(drone_sprite, 0.55F, 1.0F, 0.65F);
     }
@@ -1335,7 +1340,9 @@ SpriteFrame build_sprite_frame(
     }
     frame.sprites.push_back(raider_sprite);
   }
-  frame.sprites.push_back(make_world_sprite(SpriteTexture::Ship, ship.position, camera.position, sector, width, height, 56.0F, ship_sprite_rotation(ship.facing_radians)));
+  if (ship_health.armor > 0.0F) {
+    frame.sprites.push_back(make_world_sprite(SpriteTexture::Ship, ship.position, camera.position, sector, width, height, 56.0F, ship_sprite_rotation(ship.facing_radians)));
+  }
   if (!hud_notice.message.empty()) {
     add_hud_text(frame.sprites, hud_notice.message, -0.40F, 0.96F, 0.04F, 1.0F, 0.88F, 0.24F);
   }
@@ -1579,6 +1586,17 @@ SpriteFrame build_sprite_frame(
       add_world_link_line(frame.lines, anchor, box->position, camera.position, sector, width, height, 0.35F, 0.9F, 1.0F);
       anchor = box->position;
     }
+  }
+
+  if (system_menu != nullptr && system_menu->phase == SystemMenuPhase::Open) {
+    add_hud_text(frame.sprites, "PAUSED", -0.12F, 0.22F, 0.07F, 0.75F, 0.92F, 1.0F);
+    const bool restart_selected = system_menu->selection == SystemMenuSelection::Restart;
+    add_hud_text(frame.sprites, restart_selected ? "> RESTART" : "  RESTART", -0.18F, 0.05F, 0.055F,
+                 restart_selected ? 1.0F : 0.55F, restart_selected ? 0.75F : 0.65F, restart_selected ? 0.25F : 0.75F);
+    const bool exit_selected = system_menu->selection == SystemMenuSelection::Exit;
+    add_hud_text(frame.sprites, exit_selected ? "> EXIT" : "  EXIT", -0.18F, -0.08F, 0.055F,
+                 exit_selected ? 1.0F : 0.55F, exit_selected ? 0.45F : 0.65F, exit_selected ? 0.3F : 0.75F);
+    add_hud_text(frame.sprites, "ESC CANCEL   ENTER SELECT", -0.35F, -0.25F, 0.032F, 0.5F, 0.7F, 0.82F);
   }
 
   return frame;

@@ -131,6 +131,7 @@ add_library(
   src/mining.cpp
   src/png_rgba.cpp
   src/physics.cpp
+  src/player_lifecycle.cpp
   src/pressure.cpp
   src/projectile.cpp
   src/raider.cpp
@@ -141,6 +142,7 @@ add_library(
   src/scoped_log.cpp
   src/sdl_platform.cpp
   src/ship_status.cpp
+  src/system_menu.cpp
   src/jolt_shape_queries.cpp
   src/sprite_collision_shape_data.cpp
   src/sprite_collision_shape.cpp
@@ -285,12 +287,14 @@ if(HYPERVERSE_BUILD_TESTS)
     tests/input_tests.cpp
     tests/mining_tests.cpp
     tests/pressure_tests.cpp
+    tests/player_lifecycle_tests.cpp
     tests/projectile_tests.cpp
     tests/raider_tests.cpp
     tests/radar_hud_tests.cpp
     tests/render_frame_tests.cpp
     tests/sector_tests.cpp
     tests/ship_status_tests.cpp
+    tests/system_menu_tests.cpp
     tests/sprite_collision_shape_tests.cpp
     tests/targeting_tests.cpp
   )

@@ -275,3 +275,39 @@ TEST_CASE("mining laser cannot hit targets outside range") {
   CHECK_FALSE(snapshot.target_in_range);
   CHECK(snapshot.target_integrity == Catch::Approx(100.0F));
 }
+
+TEST_CASE("mining operation FSM emits lifecycle and fragmentation events") {
+  entt::registry registry;
+  const entt::entity player = registry.create();
+  const entt::entity asteroid = registry.create();
+  registry.emplace<hyperverse::AsteroidBody>(asteroid, hyperverse::AsteroidBody{.position = {.x = 350.0F, .y = 100.0F}, .radius = 200.0F});
+  registry.emplace<hyperverse::AsteroidFragmentation>(asteroid, hyperverse::AsteroidFragmentation{.remaining_breaks = 1});
+  registry.emplace<hyperverse::AsteroidMass>(asteroid, hyperverse::AsteroidMass{.initial_mass = 40.0F, .remaining_mass = 40.0F});
+  registry.emplace<hyperverse::MiningResource>(asteroid, hyperverse::MiningResource{.integrity = 1.0F});
+  hyperverse::TargetLockModel lock{.phase = hyperverse::TargetLockPhase::Locked, .target = asteroid};
+  hyperverse::MiningOperationModel operation;
+  hyperverse::DomainEventBus events;
+  int started = 0;
+  int depleted = 0;
+  int fragmented = 0;
+  events.appendListener(hyperverse::DomainEventType::MiningOperationStarted, [&](const hyperverse::DomainEvent& event) {
+    ++started;
+    CHECK(event.subject == player);
+    CHECK(event.target == asteroid);
+  });
+  events.appendListener(hyperverse::DomainEventType::MiningOperationDepleted, [&](const hyperverse::DomainEvent&) { ++depleted; });
+  events.appendListener(hyperverse::DomainEventType::AsteroidFragmented, [&](const hyperverse::DomainEvent&) { ++fragmented; });
+
+  (void)hyperverse::update_mining_laser(
+    registry, lock, hyperverse::ShipMotion{.position = {.x = 100.0F, .y = 100.0F}},
+    hyperverse::SemanticInputFrame{.tool_intensity = 1.0F}, {.width = 9000.0F, .height = 9000.0F},
+    hyperverse::MiningLaserTuning{.range = 500.0F, .integrity_damage_per_second = 10.0F}, 1.0F,
+    &operation, &events, player
+  );
+  events.process();
+
+  CHECK(operation.phase == hyperverse::MiningOperationPhase::Depleted);
+  CHECK(started == 1);
+  CHECK(depleted == 1);
+  CHECK(fragmented == 1);
+}

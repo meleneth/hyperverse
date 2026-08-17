@@ -21,6 +21,7 @@
 #include "hyperverse/radar_hud.hpp"
 #include "hyperverse/ship_status.hpp"
 #include "hyperverse/targeting.hpp"
+#include "hyperverse/system_menu.hpp"
 
 #include <cmath>
 #include <numbers>
@@ -75,6 +76,7 @@ VerticalSliceEntities seed_vertical_slice(AccountCtx& account) {
   account.registry().emplace<GravitySlingModel>(entities.player);
   account.registry().emplace<GravitySlingHudSnapshot>(entities.player);
   account.registry().emplace<MiningHudSnapshot>(entities.player);
+  account.registry().emplace<MiningOperationModel>(entities.player);
   account.registry().emplace<CargoManifest>(entities.player);
   account.registry().emplace<CargoHudSnapshot>(entities.player);
   account.registry().emplace<CargoEscortState>(entities.player);
@@ -100,6 +102,7 @@ VerticalSliceEntities seed_vertical_slice(AccountCtx& account) {
   account.registry().emplace<CargoRecoveryHudSnapshot>(entities.player);
   account.registry().emplace<CollisionHudSnapshot>(entities.player);
   account.registry().emplace<EngineTrailModel>(entities.player);
+  account.registry().emplace<SystemMenuModel>(entities.player);
 
   entities.mining_drones.reserve(8);
   for (int index = 0; index < 8; ++index) {
@@ -115,6 +118,7 @@ VerticalSliceEntities seed_vertical_slice(AccountCtx& account) {
     );
     account.registry().emplace<ParticleCannonModel>(drone_entity);
     account.registry().emplace<EngineTrailModel>(drone_entity);
+    account.registry().emplace<DronePresence>(drone_entity, DronePresence{.phase_seconds_remaining = DronePresenceTuning{}.barrel_roll_seconds});
     entities.mining_drones.push_back(drone_entity);
   }
 

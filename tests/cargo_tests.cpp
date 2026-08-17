@@ -214,6 +214,7 @@ TEST_CASE("cargo dispatch assigns queued cargo jobs to the first available unass
   event_bus.enqueue(hyperverse::DomainEventType::CargoBoxCreated, hyperverse::DomainEvent{.type = hyperverse::DomainEventType::CargoBoxCreated, .subject = first_box});
   event_bus.enqueue(hyperverse::DomainEventType::CargoBoxCreated, hyperverse::DomainEvent{.type = hyperverse::DomainEventType::CargoBoxCreated, .subject = second_box});
   event_bus.process();
+  CHECK((registry.get<hyperverse::MiningDrone>(drone_entity).cargo_target == entt::null));
   event_bus.process();
 
   hyperverse::MiningDrone& drone = registry.get<hyperverse::MiningDrone>(drone_entity);

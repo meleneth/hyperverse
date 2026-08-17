@@ -7,11 +7,62 @@
 #include <cmath>
 #include <limits>
 #include <span>
+#include <boost/sml.hpp>
+
+namespace sml = boost::sml;
+
+namespace hyperverse {
+namespace {
+struct unlocked_state {};
+struct locked_state {};
+struct acquire_lock {};
+struct cycle_lock {};
+struct release_lock {};
+struct TargetLockMachine {
+  auto operator()() const {
+    using namespace sml;
+    return make_transition_table(
+      *state<unlocked_state> + event<acquire_lock> = state<locked_state>,
+      state<locked_state> + event<cycle_lock> = state<locked_state>,
+      state<locked_state> + event<release_lock> = state<unlocked_state>
+    );
+  }
+};
+}  // namespace
+
+struct TargetLockFsm::Impl { sml::sm<TargetLockMachine> machine; };
+TargetLockFsm::TargetLockFsm() : impl_{std::make_shared<Impl>()} {}
+void TargetLockFsm::initialize(TargetLockPhase phase) {
+  if (initialized_) return;
+  if (phase == TargetLockPhase::Locked) (void)impl_->machine.process_event(acquire_lock{});
+  initialized_ = true;
+}
+bool TargetLockFsm::acquire() { initialize(TargetLockPhase::Unlocked); return impl_->machine.process_event(acquire_lock{}); }
+bool TargetLockFsm::cycle() { initialize(TargetLockPhase::Unlocked); return impl_->machine.process_event(cycle_lock{}); }
+bool TargetLockFsm::release() { initialize(TargetLockPhase::Unlocked); return impl_->machine.process_event(release_lock{}); }
+TargetLockPhase TargetLockFsm::phase() const { return impl_->machine.is(sml::state<locked_state>) ? TargetLockPhase::Locked : TargetLockPhase::Unlocked; }
+
+void install_target_lock_event_handlers(TargetLockModel& asteroid_lock, EnemyTargetLockModel& enemy_lock, DomainEventBus& event_bus) {
+  event_bus.appendListener(DomainEventType::MiningTargetCycleRequested, [&asteroid_lock](const DomainEvent&) { asteroid_lock.cycle_requested = true; });
+  event_bus.appendListener(DomainEventType::EnemyTargetCycleRequested, [&enemy_lock](const DomainEvent&) { enemy_lock.cycle_requested = true; });
+  event_bus.appendListener(DomainEventType::RadarTargetsCleared, [&asteroid_lock, &enemy_lock](const DomainEvent&) {
+    asteroid_lock.clear_requested = true;
+    enemy_lock.clear_requested = true;
+  });
+}
+
+}  // namespace hyperverse
 
 namespace {
 
-void clear_lock(hyperverse::TargetLockModel& lock) {
-  lock.phase = hyperverse::TargetLockPhase::Unlocked;
+void emit_lock_event(hyperverse::DomainEventBus* bus, hyperverse::DomainEventType type, entt::entity subject, entt::entity target) {
+  if (bus != nullptr) bus->enqueue(type, hyperverse::DomainEvent{.type = type, .subject = subject, .target = target});
+}
+
+void clear_lock(hyperverse::TargetLockModel& lock, hyperverse::DomainEventBus* bus, entt::entity subject) {
+  const entt::entity previous = lock.target;
+  if (!lock.fsm.release()) return;
+  lock.phase = lock.fsm.phase();
   lock.target = entt::null;
   lock.relative_position = {};
   lock.relative_velocity = {};
@@ -19,15 +70,19 @@ void clear_lock(hyperverse::TargetLockModel& lock) {
   lock.closing_speed = 0.0F;
   lock.time_to_contact_seconds = 0.0F;
   lock.scan_confidence = 0.0F;
+  emit_lock_event(bus, hyperverse::DomainEventType::MiningTargetLockReleased, subject, previous);
 }
 
-void clear_enemy_lock(hyperverse::EnemyTargetLockModel& lock) {
-  lock.phase = hyperverse::TargetLockPhase::Unlocked;
+void clear_enemy_lock(hyperverse::EnemyTargetLockModel& lock, hyperverse::DomainEventBus* bus, entt::entity subject) {
+  const entt::entity previous = lock.target;
+  if (!lock.fsm.release()) return;
+  lock.phase = lock.fsm.phase();
   lock.target = entt::null;
   lock.relative_position = {};
   lock.relative_velocity = {};
   lock.wrapped_distance = 0.0F;
   lock.integrity_fraction = 0.0F;
+  emit_lock_event(bus, hyperverse::DomainEventType::EnemyTargetLockReleased, subject, previous);
 }
 
 void refresh_lock(
@@ -200,37 +255,49 @@ void update_target_lock(
   const SemanticInputFrame& input,
   const SectorTuning& sector,
   const TargetingTuning& tuning,
-  std::span<const entt::entity> tracked_targets
+  std::span<const entt::entity> tracked_targets,
+  DomainEventBus* event_bus,
+  entt::entity subject
 ) {
-  if (input.cancel_requested || input.clear_targets_requested) {
-    clear_lock(lock);
+  lock.fsm.initialize(lock.phase);
+  lock.phase = lock.fsm.phase();
+  const bool cycle_requested = input.target_cycle_requested || lock.cycle_requested;
+  const bool clear_requested = input.cancel_requested || input.clear_targets_requested || lock.clear_requested;
+  lock.cycle_requested = false;
+  lock.clear_requested = false;
+  if (clear_requested) {
+    clear_lock(lock, event_bus, subject);
     return;
   }
 
   if (has_locked_target(lock)) {
     if (!registry.valid(lock.target) || !registry.all_of<AsteroidBody>(lock.target)) {
-      clear_lock(lock);
+      clear_lock(lock, event_bus, subject);
       return;
     }
 
-    if (input.target_cycle_requested) {
+    if (cycle_requested) {
       entt::entity next_target = next_tracked_target(registry, tracked_targets, lock.target);
       if (next_target == entt::null) {
         next_target = nearest_asteroid(registry, observer_position, sector, tuning.lock_range, lock.target);
       }
       if (next_target != entt::null) {
+        const entt::entity previous = lock.target;
+        if (!lock.fsm.cycle()) return;
         lock.target = next_target;
+        (void)previous;
+        emit_lock_event(event_bus, DomainEventType::MiningTargetLockCycled, subject, next_target);
       }
     }
 
     refresh_lock(lock, registry.get<AsteroidBody>(lock.target), observer_position, observer_velocity, sector);
     if (lock.wrapped_distance > tuning.release_range) {
-      clear_lock(lock);
+      clear_lock(lock, event_bus, subject);
     }
     return;
   }
 
-  if (!input.target_cycle_requested) {
+  if (!cycle_requested) {
     return;
   }
 
@@ -242,8 +309,10 @@ void update_target_lock(
     return;
   }
 
-  lock.phase = TargetLockPhase::Locked;
+  if (!lock.fsm.acquire()) return;
+  lock.phase = lock.fsm.phase();
   lock.target = target;
+  emit_lock_event(event_bus, DomainEventType::MiningTargetLockAcquired, subject, target);
   refresh_lock(lock, registry.get<AsteroidBody>(target), observer_position, observer_velocity, sector);
 }
 
@@ -259,42 +328,54 @@ void update_enemy_target_lock(
   const SemanticInputFrame& input,
   const SectorTuning& sector,
   const TargetingTuning& tuning,
-  std::span<const entt::entity> tracked_targets
+  std::span<const entt::entity> tracked_targets,
+  DomainEventBus* event_bus,
+  entt::entity subject
 ) {
-  if (input.cancel_requested || input.clear_targets_requested) {
-    clear_enemy_lock(lock);
+  lock.fsm.initialize(lock.phase);
+  lock.phase = lock.fsm.phase();
+  const bool cycle_requested = input.enemy_target_cycle_requested || lock.cycle_requested;
+  const bool clear_requested = input.cancel_requested || input.clear_targets_requested || lock.clear_requested;
+  lock.cycle_requested = false;
+  lock.clear_requested = false;
+  if (clear_requested) {
+    clear_enemy_lock(lock, event_bus, subject);
     return;
   }
 
   if (has_locked_enemy(lock)) {
     if (!registry.valid(lock.target) || !registry.all_of<RaiderShip>(lock.target)) {
-      clear_enemy_lock(lock);
+      clear_enemy_lock(lock, event_bus, subject);
       return;
     }
     const RaiderShip& current = registry.get<RaiderShip>(lock.target);
     if (current.integrity <= 0.0F || current.phase == RaiderPhase::Escaped) {
-      clear_enemy_lock(lock);
+      clear_enemy_lock(lock, event_bus, subject);
       return;
     }
 
-    if (input.enemy_target_cycle_requested) {
+    if (cycle_requested) {
       entt::entity next_target = next_tracked_enemy(registry, tracked_targets, lock.target);
       if (next_target == entt::null) {
         next_target = nearest_enemy(registry, observer_position, sector, tuning.lock_range, lock.target);
       }
       if (next_target != entt::null) {
+        const entt::entity previous = lock.target;
+        if (!lock.fsm.cycle()) return;
         lock.target = next_target;
+        (void)previous;
+        emit_lock_event(event_bus, DomainEventType::EnemyTargetLockCycled, subject, next_target);
       }
     }
 
     refresh_enemy_lock(lock, registry.get<RaiderShip>(lock.target), observer_position, observer_velocity, sector);
     if (lock.wrapped_distance > tuning.release_range) {
-      clear_enemy_lock(lock);
+      clear_enemy_lock(lock, event_bus, subject);
     }
     return;
   }
 
-  if (!input.enemy_target_cycle_requested) {
+  if (!cycle_requested) {
     return;
   }
 
@@ -306,8 +387,10 @@ void update_enemy_target_lock(
     return;
   }
 
-  lock.phase = TargetLockPhase::Locked;
+  if (!lock.fsm.acquire()) return;
+  lock.phase = lock.fsm.phase();
   lock.target = target;
+  emit_lock_event(event_bus, DomainEventType::EnemyTargetLockAcquired, subject, target);
   refresh_enemy_lock(lock, registry.get<RaiderShip>(target), observer_position, observer_velocity, sector);
 }
 

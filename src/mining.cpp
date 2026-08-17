@@ -5,11 +5,70 @@
 #include "jolt_shape_queries.hpp"
 
 #include <algorithm>
+#include <boost/sml.hpp>
 #include <cmath>
 #include <limits>
 
 namespace hyperverse {
 namespace {
+namespace sml = boost::sml;
+struct mining_idle {};
+struct mining_active {};
+struct mining_unstable {};
+struct mining_venting {};
+struct mining_depleted {};
+struct start_mining {};
+struct stop_mining {};
+struct instability_reached {};
+struct venting_started {};
+struct resource_depleted {};
+struct MiningOperationMachine {
+  auto operator()() const {
+    using namespace sml;
+    return make_transition_table(
+      *state<mining_idle> + event<start_mining> = state<mining_active>,
+      state<mining_active> + event<stop_mining> = state<mining_idle>,
+      state<mining_unstable> + event<stop_mining> = state<mining_idle>,
+      state<mining_venting> + event<stop_mining> = state<mining_idle>,
+      state<mining_depleted> + event<stop_mining> = state<mining_idle>,
+      state<mining_active> + event<instability_reached> = state<mining_unstable>,
+      state<mining_unstable> + event<venting_started> = state<mining_venting>,
+      state<mining_active> + event<resource_depleted> = state<mining_depleted>,
+      state<mining_unstable> + event<resource_depleted> = state<mining_depleted>,
+      state<mining_venting> + event<resource_depleted> = state<mining_depleted>
+    );
+  }
+};
+}  // namespace
+
+struct MiningOperationFsm::Impl { sml::sm<MiningOperationMachine> machine; };
+MiningOperationFsm::MiningOperationFsm() : impl_{std::make_shared<Impl>()} {}
+bool MiningOperationFsm::start() { return impl_->machine.process_event(start_mining{}); }
+bool MiningOperationFsm::stop() { return impl_->machine.process_event(stop_mining{}); }
+bool MiningOperationFsm::become_unstable() { return impl_->machine.process_event(instability_reached{}); }
+bool MiningOperationFsm::begin_venting() { return impl_->machine.process_event(venting_started{}); }
+bool MiningOperationFsm::deplete() { return impl_->machine.process_event(resource_depleted{}); }
+MiningOperationPhase MiningOperationFsm::phase() const {
+  if (impl_->machine.is(sml::state<mining_active>)) return MiningOperationPhase::Active;
+  if (impl_->machine.is(sml::state<mining_unstable>)) return MiningOperationPhase::Unstable;
+  if (impl_->machine.is(sml::state<mining_venting>)) return MiningOperationPhase::Venting;
+  if (impl_->machine.is(sml::state<mining_depleted>)) return MiningOperationPhase::Depleted;
+  return MiningOperationPhase::Idle;
+}
+
+namespace {
+
+void emit_mining_event(DomainEventBus* bus, DomainEventType type, entt::entity subject, entt::entity target) {
+  if (bus != nullptr) bus->enqueue(type, DomainEvent{.type = type, .subject = subject, .target = target});
+}
+
+void stop_operation(MiningOperationModel* operation, DomainEventBus* bus, entt::entity subject) {
+  if (operation == nullptr || !operation->fsm.stop()) return;
+  const entt::entity previous = operation->target;
+  operation->phase = operation->fsm.phase();
+  operation->target = entt::null;
+  emit_mining_event(bus, DomainEventType::MiningOperationStopped, subject, previous);
+}
 
 struct MiningTarget {
   entt::entity entity{entt::null};
@@ -162,12 +221,16 @@ MiningHudSnapshot update_mining_laser(
   const SemanticInputFrame& input,
   const SectorTuning& sector,
   const MiningLaserTuning& tuning,
-  float dt_seconds
+  float dt_seconds,
+  MiningOperationModel* operation,
+  DomainEventBus* event_bus,
+  entt::entity subject
 ) {
   MiningHudSnapshot hud{};
   hud.beam_intensity = std::clamp(input.tool_intensity, 0.0F, 1.0F);
   const MiningTarget target = resolve_mining_target(registry, target_lock, ship, input, sector, tuning);
   if (target.entity == entt::null) {
+    stop_operation(operation, event_bus, subject);
     return hud;
   }
 
@@ -178,6 +241,15 @@ MiningHudSnapshot update_mining_laser(
   hud.beam_end_position = asteroid.position;
 
   if (hud.target_in_range && hud.beam_intensity > 0.0F && resource.integrity > 0.0F) {
+    if (operation != nullptr && operation->phase != MiningOperationPhase::Idle && operation->target != target.entity) {
+      stop_operation(operation, event_bus, subject);
+    }
+    if (operation != nullptr && operation->phase == MiningOperationPhase::Depleted) stop_operation(operation, event_bus, subject);
+    if (operation != nullptr && operation->phase == MiningOperationPhase::Idle && operation->fsm.start()) {
+      operation->phase = operation->fsm.phase();
+      operation->target = target.entity;
+      emit_mining_event(event_bus, DomainEventType::MiningOperationStarted, subject, target.entity);
+    }
     hud.beam_active = true;
     const float scaled_dt = hud.beam_intensity * dt_seconds;
     resource.integrity = std::max(0.0F, resource.integrity - (tuning.integrity_damage_per_second * scaled_dt));
@@ -186,37 +258,51 @@ MiningHudSnapshot update_mining_laser(
     resource.structural_stress = std::min(100.0F, resource.structural_stress + (tuning.stress_per_second * scaled_dt));
     resource.volatile_pressure = std::min(100.0F, resource.volatile_pressure + (tuning.pressure_per_second * scaled_dt));
   } else {
+    stop_operation(operation, event_bus, subject);
     resource.heat = std::max(0.0F, resource.heat - (tuning.heat_decay_per_second * dt_seconds));
     resource.structural_stress = std::max(0.0F, resource.structural_stress - (tuning.stress_relief_per_second * dt_seconds));
   }
 
   const bool blowout = resource.heat >= tuning.unstable_heat && resource.structural_stress >= tuning.unstable_stress &&
                        resource.volatile_pressure >= tuning.volatile_pressure_limit;
+  const bool unstable = resource.heat >= tuning.unstable_heat || resource.structural_stress >= tuning.unstable_stress ||
+                        resource.volatile_pressure >= tuning.volatile_pressure_limit;
+  if (unstable && operation != nullptr && operation->phase == MiningOperationPhase::Active && operation->fsm.become_unstable()) {
+    operation->phase = operation->fsm.phase();
+    emit_mining_event(event_bus, DomainEventType::MiningOperationUnstable, subject, target.entity);
+  }
   if (blowout) {
     hud.blowout = true;
     resource.integrity = std::max(0.0F, resource.integrity - tuning.blowout_integrity_damage);
     resource.structural_stress = std::max(0.0F, resource.structural_stress * 0.35F);
     resource.volatile_pressure = 0.0F;
     resource.venting = true;
+    emit_mining_event(event_bus, DomainEventType::MiningOperationBlowout, subject, target.entity);
   } else {
     resource.venting = resource.heat >= tuning.unstable_heat && resource.volatile_pressure > 0.0F;
     if (resource.venting) {
       resource.volatile_pressure = std::max(0.0F, resource.volatile_pressure - (tuning.pressure_vent_per_second * dt_seconds));
     }
   }
+  if (resource.venting && operation != nullptr && operation->phase == MiningOperationPhase::Unstable && operation->fsm.begin_venting()) {
+    operation->phase = operation->fsm.phase();
+    emit_mining_event(event_bus, DomainEventType::MiningOperationVenting, subject, target.entity);
+  }
 
   if (resource.integrity <= 0.0F) {
+    if (operation != nullptr && operation->fsm.deplete()) {
+      operation->phase = operation->fsm.phase();
+      emit_mining_event(event_bus, DomainEventType::MiningOperationDepleted, subject, target.entity);
+    }
     populate_hud_from_resource(hud, resource, tuning);
-    (void)fragment_asteroid(
-      registry,
-      target.entity,
-      AsteroidFragmentationRequest{
+    const AsteroidFragmentationRequest request{
         .impact_kind = AsteroidImpactKind::Laser,
         .impact_position = ship.position,
         .impact_velocity = facing_direction(ship.facing_radians) * tuning.range,
         .pieces = 4,
-      }
-    );
+      };
+    if (event_bus != nullptr) (void)fragment_asteroid(registry, *event_bus, target.entity, request);
+    else (void)fragment_asteroid(registry, target.entity, request);
     return hud;
   }
   populate_hud_from_resource(hud, resource, tuning);

@@ -21,6 +21,7 @@
 #include "hyperverse/input.hpp"
 #include "hyperverse/mining.hpp"
 #include "hyperverse/pressure.hpp"
+#include "hyperverse/player_lifecycle.hpp"
 #include "hyperverse/projectile.hpp"
 #include "hyperverse/raider.hpp"
 #include "hyperverse/radar_control.hpp"
@@ -29,16 +30,12 @@
 #include "hyperverse/ship_status.hpp"
 #include "hyperverse/sprite_frame_builder.hpp"
 #include "hyperverse/targeting.hpp"
+#include "hyperverse/system_menu.hpp"
 #include "hyperverse/universe_clock.hpp"
 #include "hyperverse/version.hpp"
 #include "hyperverse/vertical_slice_seed.hpp"
 
 #include <SDL3/SDL.h>
-
-#if defined(__EMSCRIPTEN__)
-#include <emscripten.h>
-#include <emscripten/html5.h>
-#endif
 
 #include <algorithm>
 #include <array>
@@ -127,6 +124,7 @@ public:
       entities_{seed_vertical_slice(account_)},
       player_{entities_.player},
       ship_{account_.registry().get<ShipMotion>(player_)},
+      system_menu_{account_.registry().get<SystemMenuModel>(player_)},
       timestep_{UniverseClock::FixedTickSeconds},
       sector_{default_sector()},
       gathering_site_{.position = {.x = 4300.0F, .y = 4300.0F}},
@@ -143,6 +141,19 @@ public:
     gamepad_.open_first_available();
     account_.registry().emplace_or_replace<ExtractionSite>(player_, gathering_site_);
     install_game_session_event_handlers(game_session_, account_.event_bus());
+    player_lifecycle_.home_position = ship_.position;
+    install_player_lifecycle_event_handlers(player_lifecycle_, account_.registry(), player_, entities_.mining_drones, account_.event_bus());
+    install_drone_presence_event_handlers(account_.registry(), entities_.mining_drones, account_.event_bus(), drone_presence_tuning_);
+    install_system_menu_event_handlers(system_menu_, account_.event_bus());
+    install_target_lock_event_handlers(
+      account_.registry().get<TargetLockModel>(player_),
+      account_.registry().get<EnemyTargetLockModel>(player_),
+      account_.event_bus()
+    );
+    account_.event_bus().appendListener(DomainEventType::SystemMenuExitSelected, [this](const DomainEvent&) { running_ = false; });
+    account_.event_bus().appendListener(DomainEventType::SystemMenuRestartSelected, [this](const DomainEvent&) {
+      account_.event_bus().dispatch(DomainEventType::PlayerRestartRequested, DomainEvent{.type = DomainEventType::PlayerRestartRequested, .subject = player_});
+    });
     install_cargo_dispatch_event_handlers(
       cargo_dispatch_,
       account_.registry(),
@@ -168,19 +179,6 @@ public:
     previous_time_ = current_time;
     return run_frame(elapsed_seconds);
   }
-
-#if defined(__EMSCRIPTEN__)
-  [[nodiscard]] bool frame_from_animation_timestamp(const double timestamp_milliseconds) {
-    if (!previous_animation_timestamp_.has_value()) {
-      previous_animation_timestamp_ = timestamp_milliseconds;
-      return run_frame(0.0F);
-    }
-
-    const float elapsed_seconds = static_cast<float>((timestamp_milliseconds - *previous_animation_timestamp_) / 1000.0);
-    previous_animation_timestamp_ = timestamp_milliseconds;
-    return run_frame(std::max(elapsed_seconds, 0.0F));
-  }
-#endif
 
   void wait_idle() const {
     renderer_.wait_idle();
@@ -227,13 +225,25 @@ private:
         gamepad_.close_if_removed(event.gdevice.which);
       }
 
-      if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_ESCAPE) {
-        running_ = false;
+      if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat) {
+        if (event.key.scancode == SDL_SCANCODE_ESCAPE) {
+          account_.event_bus().enqueue(DomainEventType::SystemMenuToggleRequested, DomainEvent{.type = DomainEventType::SystemMenuToggleRequested});
+        } else if (system_menu_.phase == SystemMenuPhase::Open &&
+                   (event.key.scancode == SDL_SCANCODE_UP || event.key.scancode == SDL_SCANCODE_DOWN)) {
+          account_.event_bus().enqueue(DomainEventType::SystemMenuSelectionChanged, DomainEvent{.type = DomainEventType::SystemMenuSelectionChanged});
+        } else if (system_menu_.phase == SystemMenuPhase::Open &&
+                   (event.key.scancode == SDL_SCANCODE_RETURN || event.key.scancode == SDL_SCANCODE_SPACE)) {
+          account_.event_bus().enqueue(DomainEventType::SystemMenuConfirmed, DomainEvent{.type = DomainEventType::SystemMenuConfirmed});
+        }
       }
     }
   }
 
   void tick() {
+    account_.event_bus().process();
+    if (system_menu_.phase == SystemMenuPhase::Open) {
+      return;
+    }
     SectorTickCtx tick_ctx{account_, sector_, timestep_.tick_seconds()};
     gamepad_.open_first_available();
     latest_intent_ = input_mapper_.map(gamepad_.sample());
@@ -253,9 +263,15 @@ private:
     GravitySlingHudSnapshot& gravity_sling_hud = account_.registry().get<GravitySlingHudSnapshot>(player_);
     HudNotice& hud_notice = account_.registry().get<HudNotice>(player_);
     ShipHealth& ship_health = account_.registry().get<ShipHealth>(player_);
+    update_player_lifecycle(player_lifecycle_, account_.registry(), player_, timestep_.tick_seconds(), account_.event_bus());
+    update_drone_presence(account_.registry(), entities_.mining_drones, timestep_.tick_seconds(), account_.event_bus(), drone_presence_tuning_);
+    if (player_lifecycle_.phase != PlayerLifecyclePhase::Alive || ship_health.armor <= 0.0F) {
+      latest_intent_ = {};
+    }
     EngineTrailModel& engine_trail = account_.registry().get<EngineTrailModel>(player_);
     RoundTimer& round_timer = account_.registry().get<RoundTimer>(player_);
     MiningHudSnapshot& mining_hud = account_.registry().get<MiningHudSnapshot>(player_);
+    MiningOperationModel& mining_operation = account_.registry().get<MiningOperationModel>(player_);
     CargoManifest& cargo_manifest = account_.registry().get<CargoManifest>(player_);
     CargoHudSnapshot& cargo_hud = account_.registry().get<CargoHudSnapshot>(player_);
     CargoEscortState& cargo_escort = account_.registry().get<CargoEscortState>(player_);
@@ -306,15 +322,16 @@ private:
     update_ship_status(ship_health, round_timer, timestep_.tick_seconds());
     update_hud_notice(hud_notice, timestep_.tick_seconds());
     SemanticInputFrame target_intent = latest_intent_;
-    target_intent.target_cycle_requested = radar_control.mining_target_cycle_requested;
-    target_intent.enemy_target_cycle_requested = radar_control.enemy_target_cycle_requested;
-    target_intent.clear_targets_requested = radar_control.clear_targets_requested;
-    update_target_lock(target_lock, account_.registry(), ship_.position, ship_.velocity, target_intent, sector_, {}, radar_model.target_order);
-    mining_hud = update_mining_laser(account_.registry(), target_lock, ship_, latest_intent_, sector_, mining_laser_, timestep_.tick_seconds());
+    target_intent.target_cycle_requested = false;
+    target_intent.enemy_target_cycle_requested = false;
+    target_intent.clear_targets_requested = false;
+    update_target_lock(target_lock, account_.registry(), ship_.position, ship_.velocity, target_intent, sector_, {}, radar_model.target_order, &account_.event_bus(), player_);
+    mining_hud = update_mining_laser(account_.registry(), target_lock, ship_, latest_intent_, sector_, mining_laser_, timestep_.tick_seconds(), &mining_operation, &account_.event_bus(), player_);
 
     drone_hud = {};
     (void)dispatch_cargo_drone_jobs(cargo_dispatch_, account_.registry(), entities_.mining_drones, &account_.event_bus());
     for (entt::entity drone_entity : entities_.mining_drones) {
+      if (account_.registry().get<DronePresence>(drone_entity).phase != DronePresencePhase::Following) continue;
       MiningDrone& drone = account_.registry().get<MiningDrone>(drone_entity);
       const MiningDroneHudSnapshot current_drone = update_mining_drone(
         drone,
@@ -426,7 +443,7 @@ private:
       combat_radar_model.update_seconds_remaining = 0.0F;
     }
     update_combat_radar_hud(combat_radar_model, account_.registry(), ship_, sector_, timestep_.tick_seconds(), radar_tuning_);
-    update_enemy_target_lock(enemy_target_lock, account_.registry(), ship_.position, ship_.velocity, target_intent, sector_, {}, combat_radar_model.target_order);
+    update_enemy_target_lock(enemy_target_lock, account_.registry(), ship_.position, ship_.velocity, target_intent, sector_, {}, combat_radar_model.target_order, &account_.event_bus(), player_);
     WeaponCtx player_weapon{tick_ctx.entity_context(player_)};
     if (const std::optional<ParticleCannonFireCommand> player_fire = request_player_particle_fire(
           player_weapon,
@@ -437,6 +454,7 @@ private:
     }
     update_player_homing_missile_launcher(player_weapon, enemy_target_lock, WeaponTrigger{.active = latest_intent_.missile_fire_active}, homing_missile_tuning_);
     for (entt::entity drone_entity : entities_.mining_drones) {
+      if (account_.registry().get<DronePresence>(drone_entity).phase != DronePresencePhase::Following) continue;
       WeaponCtx drone_weapon{tick_ctx.entity_context(drone_entity)};
       if (const std::optional<ParticleCannonFireCommand> drone_fire = request_drone_particle_fire(
             drone_weapon,
@@ -483,6 +501,7 @@ private:
   VerticalSliceEntities entities_;
   entt::entity player_;
   ShipMotion& ship_;
+  SystemMenuModel& system_menu_;
   GamepadSlot gamepad_;
   FixedTimestep timestep_;
   SectorTuning sector_;
@@ -498,6 +517,8 @@ private:
   CargoExtractionTuning cargo_extraction_tuning_{};
   SectorPressureTuning pressure_tuning_{.escalation_interval_seconds = 60.0F};
   MiningDroneTuning mining_drone_tuning_{};
+  DronePresenceTuning drone_presence_tuning_{};
+  PlayerLifecycleModel player_lifecycle_{};
   EngineTrailTuning engine_trail_tuning_{};
   GravitySlingTuning gravity_sling_tuning_{};
   ParticleCannonTuning particle_cannon_tuning_{};
@@ -510,40 +531,12 @@ private:
   GameSessionModel game_session_{};
   bool running_{true};
   std::chrono::steady_clock::time_point previous_time_;
-#if defined(__EMSCRIPTEN__)
-  std::optional<double> previous_animation_timestamp_;
-#endif
 };
-
-#if defined(__EMSCRIPTEN__)
-EM_BOOL run_animation_frame(const double timestamp_milliseconds, void* user_data) {
-  auto* runtime = static_cast<AppRuntime*>(user_data);
-  try {
-    if (!runtime->frame_from_animation_timestamp(timestamp_milliseconds)) {
-      runtime->wait_idle();
-      delete runtime;
-      return EM_FALSE;
-    }
-  } catch (const std::exception& error) {
-    std::cerr << "Fatal error: " << error.what() << "\n";
-    delete runtime;
-    return EM_FALSE;
-  }
-
-  return EM_TRUE;
-}
-#endif
 
 }  // namespace
 
 int App::run(AccountCtx& account) {
   try {
-#if defined(__EMSCRIPTEN__)
-    auto* runtime = new AppRuntime{account};
-    emscripten_request_animation_frame_loop(run_animation_frame, runtime);
-    emscripten_exit_with_live_runtime();
-    return 0;
-#else
     AppRuntime runtime{account};
     while (runtime.frame_from_clock()) {
       SDL_Delay(1);
@@ -551,7 +544,6 @@ int App::run(AccountCtx& account) {
 
     runtime.wait_idle();
     return 0;
-#endif
   } catch (const std::exception& error) {
     std::cerr << "Fatal error: " << error.what() << "\n";
     return 1;

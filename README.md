@@ -106,7 +106,8 @@ These assets are temporary implementation scaffolding, not a permanent visual co
 - Burst of speed: east face button
 - Engage/release Gravity Sling: `Q` or north face button
 - Activate cargo escort after quota authorization: `Space` or south face button
-- Cancel/quit: `Escape`
+- Cancel/unlock targets: `Escape`
+- Quit from keyboard: `Ctrl+Escape`
 
 ## Current Playable State
 

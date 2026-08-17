@@ -1,6 +1,7 @@
 #pragma once
 
 #include "hyperverse/input.hpp"
+#include "hyperverse/domain_events.hpp"
 #include "hyperverse/math.hpp"
 #include "hyperverse/sector.hpp"
 
@@ -8,6 +9,7 @@
 #include <entt/entity/registry.hpp>
 
 #include <span>
+#include <memory>
 
 namespace hyperverse {
 
@@ -28,6 +30,21 @@ enum class TargetLockPhase {
   Locked,
 };
 
+class TargetLockFsm {
+public:
+  TargetLockFsm();
+  void initialize(TargetLockPhase phase);
+  [[nodiscard]] bool acquire();
+  [[nodiscard]] bool cycle();
+  [[nodiscard]] bool release();
+  [[nodiscard]] TargetLockPhase phase() const;
+
+private:
+  struct Impl;
+  std::shared_ptr<Impl> impl_;
+  bool initialized_{false};
+};
+
 struct TargetingTuning {
   float lock_range{2500.0F};
   float release_range{3200.0F};
@@ -42,6 +59,9 @@ struct TargetLockModel {
   float closing_speed{0.0F};
   float time_to_contact_seconds{0.0F};
   float scan_confidence{0.0F};
+  TargetLockFsm fsm{};
+  bool cycle_requested{false};
+  bool clear_requested{false};
 };
 
 struct EnemyTargetLockModel {
@@ -51,7 +71,16 @@ struct EnemyTargetLockModel {
   Vec2 relative_velocity{};
   float wrapped_distance{0.0F};
   float integrity_fraction{0.0F};
+  TargetLockFsm fsm{};
+  bool cycle_requested{false};
+  bool clear_requested{false};
 };
+
+void install_target_lock_event_handlers(
+  TargetLockModel& asteroid_lock,
+  EnemyTargetLockModel& enemy_lock,
+  DomainEventBus& event_bus
+);
 
 [[nodiscard]] bool has_locked_target(const TargetLockModel& lock);
 [[nodiscard]] bool has_locked_enemy(const EnemyTargetLockModel& lock);
@@ -64,7 +93,9 @@ void update_target_lock(
   const SemanticInputFrame& input,
   const SectorTuning& sector,
   const TargetingTuning& tuning = {},
-  std::span<const entt::entity> tracked_targets = {}
+  std::span<const entt::entity> tracked_targets = {},
+  DomainEventBus* event_bus = nullptr,
+  entt::entity subject = entt::null
 );
 
 void update_asteroid_motion(AccountCtx& ctx, const SectorTuning& sector, float dt_seconds);
@@ -77,7 +108,9 @@ void update_enemy_target_lock(
   const SemanticInputFrame& input,
   const SectorTuning& sector,
   const TargetingTuning& tuning = {},
-  std::span<const entt::entity> tracked_targets = {}
+  std::span<const entt::entity> tracked_targets = {},
+  DomainEventBus* event_bus = nullptr,
+  entt::entity subject = entt::null
 );
 
 }  // namespace hyperverse

@@ -8,6 +8,7 @@
 
 #include <entt/entity/entity.hpp>
 #include <entt/entity/registry.hpp>
+#include <vector>
 
 namespace hyperverse {
 
@@ -18,6 +19,38 @@ enum class MiningDronePhase {
   CargoPickup,
   EscortingCargo,
 };
+
+enum class DronePresencePhase {
+  SpawnBarrelRoll,
+  Following,
+  ExitBarrelRoll,
+  Hidden,
+};
+
+struct DronePresence {
+  DronePresencePhase phase{DronePresencePhase::SpawnBarrelRoll};
+  float phase_seconds_remaining{0.0F};
+  float roll_radians{0.0F};
+};
+
+struct DronePresenceTuning {
+  float barrel_roll_seconds{0.8F};
+};
+
+void install_drone_presence_event_handlers(
+  entt::registry& registry,
+  const std::vector<entt::entity>& drones,
+  DomainEventBus& event_bus,
+  const DronePresenceTuning& tuning = {}
+);
+
+void update_drone_presence(
+  entt::registry& registry,
+  const std::vector<entt::entity>& drones,
+  float dt_seconds,
+  DomainEventBus& event_bus,
+  const DronePresenceTuning& tuning = {}
+);
 
 enum class MiningDroneWorkTransition {
   ReturnToFormation,

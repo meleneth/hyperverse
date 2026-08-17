@@ -22,45 +22,51 @@ struct GameSessionMachine {
   }
 };
 
-void replay_phase(sml::sm<GameSessionMachine>& machine, GameSessionPhase phase) {
+}  // namespace
+
+struct GameSessionFsm::Impl {
+  sml::sm<GameSessionMachine> machine;
+};
+
+GameSessionFsm::GameSessionFsm() : impl_{std::make_shared<Impl>()} {}
+
+void GameSessionFsm::initialize(GameSessionPhase phase) {
+  impl_ = std::make_shared<Impl>();
   if (phase == GameSessionPhase::PlayingRound) {
-    machine.process_event(contract_accepted{});
+    (void)impl_->machine.process_event(contract_accepted{});
   }
 }
 
-[[nodiscard]] GameSessionPhase read_phase(const sml::sm<GameSessionMachine>& machine) {
-  return machine.is(sml::state<playing_round>) ? GameSessionPhase::PlayingRound : GameSessionPhase::ContractChooser;
+bool GameSessionFsm::accept_contract() {
+  return impl_->machine.process_event(contract_accepted{});
 }
 
-void process_contract_accepted(GameSessionModel& session) {
-  sml::sm<GameSessionMachine> machine;
-  replay_phase(machine, session.phase);
-  machine.process_event(contract_accepted{});
-  session.phase = read_phase(machine);
+bool GameSessionFsm::complete_round() {
+  return impl_->machine.process_event(round_completed{});
 }
 
-void process_round_completed(GameSessionModel& session) {
-  sml::sm<GameSessionMachine> machine;
-  replay_phase(machine, session.phase);
-  machine.process_event(round_completed{});
-  session.phase = read_phase(machine);
+GameSessionPhase GameSessionFsm::phase() const {
+  return impl_->machine.is(sml::state<playing_round>) ? GameSessionPhase::PlayingRound : GameSessionPhase::ContractChooser;
 }
-
-}  // namespace
 
 void install_game_session_event_handlers(GameSessionModel& session, DomainEventBus& event_bus) {
-  event_bus.appendListener(DomainEventType::ContractAccepted, [&session](const DomainEvent&) { process_contract_accepted(session); });
-  event_bus.appendListener(DomainEventType::ContractRoundCompleted, [&session](const DomainEvent&) { process_round_completed(session); });
+  session.fsm.initialize(session.phase);
+  event_bus.appendListener(DomainEventType::ContractAccepted, [&session](const DomainEvent&) {
+    if (session.fsm.accept_contract()) session.phase = session.fsm.phase();
+  });
+  event_bus.appendListener(DomainEventType::ContractRoundCompleted, [&session](const DomainEvent&) {
+    if (session.fsm.complete_round()) session.phase = session.fsm.phase();
+  });
 }
 
 void accept_contract(GameSessionModel& session, DomainEventBus& event_bus) {
+  (void)session;
   event_bus.enqueue(DomainEventType::ContractAccepted, DomainEvent{.type = DomainEventType::ContractAccepted});
-  process_contract_accepted(session);
 }
 
 void complete_contract_round(GameSessionModel& session, DomainEventBus& event_bus) {
+  (void)session;
   event_bus.enqueue(DomainEventType::ContractRoundCompleted, DomainEvent{.type = DomainEventType::ContractRoundCompleted});
-  process_round_completed(session);
 }
 
 }  // namespace hyperverse

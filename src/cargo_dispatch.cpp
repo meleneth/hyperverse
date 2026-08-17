@@ -25,16 +25,6 @@ void emit_job_assigned(DomainEventBus* event_bus, entt::entity drone, entt::enti
   );
 }
 
-void emit_target_released(DomainEventBus* event_bus, entt::entity drone_entity, entt::entity target, Vec2 position) {
-  if (event_bus == nullptr || target == entt::null) {
-    return;
-  }
-  event_bus->enqueue(
-    DomainEventType::DroneTargetReleased,
-    DomainEvent{.type = DomainEventType::DroneTargetReleased, .subject = drone_entity, .target = target, .position = position}
-  );
-}
-
 [[nodiscard]] bool valid_job_box(entt::registry& registry, entt::entity box_entity) {
   if (box_entity == entt::null || !registry.valid(box_entity) || !registry.all_of<CargoBox>(box_entity)) {
     return false;
@@ -110,24 +100,23 @@ int dispatch_cargo_drone_jobs(
   for (CargoDroneJob& job : dispatch.jobs) {
     if (
       job.assigned_drone != entt::null &&
-      (!registry.valid(job.assigned_drone) || !registry.all_of<MiningDrone>(job.assigned_drone) ||
-       registry.get<MiningDrone>(job.assigned_drone).cargo_target != job.box)
+      (!registry.valid(job.assigned_drone) || !registry.all_of<MiningDrone>(job.assigned_drone))
     ) {
       job.assigned_drone = entt::null;
     }
     if (job.assigned_drone != entt::null) {
       continue;
     }
-    const auto drone = std::ranges::find_if(drones, [&registry](entt::entity drone_entity) { return drone_available(registry, drone_entity); });
+    const auto drone = std::ranges::find_if(drones, [&registry, &dispatch](entt::entity drone_entity) {
+      const bool reserved = std::ranges::any_of(dispatch.jobs, [drone_entity](const CargoDroneJob& candidate) {
+        return candidate.assigned_drone == drone_entity;
+      });
+      return !reserved && drone_available(registry, drone_entity);
+    });
     if (drone == drones.end()) {
       break;
     }
 
-    MiningDrone& assigned_drone = registry.get<MiningDrone>(*drone);
-    emit_target_released(event_bus, *drone, assigned_drone.target, assigned_drone.position);
-    assigned_drone.target = entt::null;
-    assigned_drone.cargo_target = job.box;
-    assigned_drone.cargo_destination = job.destination;
     job.assigned_drone = *drone;
     emit_job_assigned(event_bus, *drone, job.box, job.destination);
     ++assigned;
@@ -144,13 +133,30 @@ void install_cargo_dispatch_event_handlers(
   const SectorTuning& sector,
   DomainEventBus& event_bus
 ) {
-  event_bus.appendListener(DomainEventType::CargoBoxCreated, [&dispatch, &registry, &drones, &gathering_site, &tuning, &sector, &event_bus](const DomainEvent& event) {
+  event_bus.appendListener(DomainEventType::CargoBoxCreated, [&dispatch, &registry, &drones, gathering_site, tuning, sector, &event_bus](const DomainEvent& event) {
     schedule_cargo_delivery_job(dispatch, registry, event.subject, gathering_site, tuning, sector, &event_bus);
     (void)dispatch_cargo_drone_jobs(dispatch, registry, drones, &event_bus);
   });
   event_bus.appendListener(DomainEventType::CargoBoxDeliveredToGathering, [&dispatch, &registry, &drones, &event_bus](const DomainEvent& event) {
     complete_delivered_job(dispatch, event.target);
     (void)dispatch_cargo_drone_jobs(dispatch, registry, drones, &event_bus);
+  });
+  event_bus.appendListener(DomainEventType::CargoDroneJobAssigned, [&registry, &event_bus](const DomainEvent& event) {
+    if (event.subject == entt::null || event.target == entt::null || !registry.valid(event.subject) ||
+        !registry.all_of<MiningDrone>(event.subject) || !valid_job_box(registry, event.target)) {
+      return;
+    }
+    MiningDrone& drone = registry.get<MiningDrone>(event.subject);
+    if (drone.target != entt::null) {
+      event_bus.dispatch(
+        DomainEventType::DroneTargetReleased,
+        DomainEvent{.type = DomainEventType::DroneTargetReleased, .subject = event.subject, .target = drone.target, .position = drone.position}
+      );
+    }
+    drone.target = entt::null;
+    drone.cargo_target = event.target;
+    drone.cargo_destination = event.position;
+    (void)transition_mining_drone_cargo(drone, MiningDroneCargoTransition::AssignCargo);
   });
 }
 

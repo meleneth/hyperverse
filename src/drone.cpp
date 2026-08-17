@@ -28,6 +28,45 @@ struct drone_mining {};
 struct return_to_formation {};
 struct travel_to_work {};
 struct begin_mining {};
+struct presence_spawn_rolling {};
+struct presence_following {};
+struct presence_exit_rolling {};
+struct presence_hidden {};
+struct spawn_requested {};
+struct exit_requested {};
+struct barrel_roll_completed {};
+
+struct DronePresenceMachine {
+  auto operator()() const {
+    using namespace sml;
+    return make_transition_table(
+      *state<presence_spawn_rolling> + event<barrel_roll_completed> = state<presence_following>,
+      state<presence_following> + event<exit_requested> = state<presence_exit_rolling>,
+      state<presence_spawn_rolling> + event<exit_requested> = state<presence_exit_rolling>,
+      state<presence_exit_rolling> + event<barrel_roll_completed> = state<presence_hidden>,
+      state<presence_hidden> + event<spawn_requested> = state<presence_spawn_rolling>,
+      state<presence_following> + event<spawn_requested> = state<presence_spawn_rolling>,
+      state<presence_exit_rolling> + event<spawn_requested> = state<presence_spawn_rolling>,
+      state<presence_spawn_rolling> + event<spawn_requested> = state<presence_spawn_rolling>
+    );
+  }
+};
+
+void replay_presence(sml::sm<DronePresenceMachine>& machine, DronePresencePhase phase) {
+  switch (phase) {
+    case DronePresencePhase::SpawnBarrelRoll: return;
+    case DronePresencePhase::Following: machine.process_event(barrel_roll_completed{}); return;
+    case DronePresencePhase::ExitBarrelRoll: machine.process_event(barrel_roll_completed{}); machine.process_event(exit_requested{}); return;
+    case DronePresencePhase::Hidden: machine.process_event(barrel_roll_completed{}); machine.process_event(exit_requested{}); machine.process_event(barrel_roll_completed{}); return;
+  }
+}
+
+DronePresencePhase read_presence(const sml::sm<DronePresenceMachine>& machine) {
+  if (machine.is(sml::state<presence_following>)) return DronePresencePhase::Following;
+  if (machine.is(sml::state<presence_exit_rolling>)) return DronePresencePhase::ExitBarrelRoll;
+  if (machine.is(sml::state<presence_hidden>)) return DronePresencePhase::Hidden;
+  return DronePresencePhase::SpawnBarrelRoll;
+}
 
 struct DroneCargoMachine {
   auto operator()() const {
@@ -255,6 +294,47 @@ void move_drone_toward(MiningDrone& drone, Vec2 target, const SectorTuning& sect
 }
 
 }  // namespace
+
+void install_drone_presence_event_handlers(entt::registry& registry, const std::vector<entt::entity>& drones, DomainEventBus& event_bus, const DronePresenceTuning& tuning) {
+  auto transition = [&registry, &event_bus, &drones, tuning](const DomainEvent& event, DomainEventType request) {
+    if (event.subject == entt::null || std::find(drones.begin(), drones.end(), event.subject) == drones.end()) return;
+    DronePresence& presence = registry.get<DronePresence>(event.subject);
+    sml::sm<DronePresenceMachine> machine;
+    replay_presence(machine, presence.phase);
+    const bool accepted = request == DomainEventType::DroneExitRequested
+      ? machine.process_event(exit_requested{})
+      : request == DomainEventType::DroneSpawnRequested
+        ? machine.process_event(spawn_requested{})
+        : machine.process_event(barrel_roll_completed{});
+    if (!accepted) return;
+    presence.phase = read_presence(machine);
+    presence.phase_seconds_remaining =
+      presence.phase == DronePresencePhase::SpawnBarrelRoll || presence.phase == DronePresencePhase::ExitBarrelRoll
+        ? tuning.barrel_roll_seconds : 0.0F;
+    presence.roll_radians = 0.0F;
+    if (presence.phase == DronePresencePhase::Hidden) {
+      registry.get<MiningDrone>(event.subject).velocity = {};
+      event_bus.enqueue(DomainEventType::DroneDespawned, DomainEvent{.type = DomainEventType::DroneDespawned, .subject = event.subject});
+    }
+  };
+  event_bus.appendListener(DomainEventType::DroneExitRequested, [transition](const DomainEvent& event) { transition(event, DomainEventType::DroneExitRequested); });
+  event_bus.appendListener(DomainEventType::DroneSpawnRequested, [transition](const DomainEvent& event) { transition(event, DomainEventType::DroneSpawnRequested); });
+  event_bus.appendListener(DomainEventType::DroneBarrelRollCompleted, [transition](const DomainEvent& event) { transition(event, DomainEventType::DroneBarrelRollCompleted); });
+}
+
+void update_drone_presence(entt::registry& registry, const std::vector<entt::entity>& drones, float dt_seconds, DomainEventBus& event_bus, const DronePresenceTuning& tuning) {
+  const float dt = std::max(0.0F, dt_seconds);
+  for (const entt::entity entity : drones) {
+    DronePresence& presence = registry.get<DronePresence>(entity);
+    if (presence.phase != DronePresencePhase::SpawnBarrelRoll && presence.phase != DronePresencePhase::ExitBarrelRoll) continue;
+    presence.phase_seconds_remaining = std::max(0.0F, presence.phase_seconds_remaining - dt);
+    const float duration = std::max(tuning.barrel_roll_seconds, 0.001F);
+    presence.roll_radians = TauRadians * (1.0F - (presence.phase_seconds_remaining / duration));
+    if (presence.phase_seconds_remaining <= 0.0F) {
+      event_bus.enqueue(DomainEventType::DroneBarrelRollCompleted, DomainEvent{.type = DomainEventType::DroneBarrelRollCompleted, .subject = entity});
+    }
+  }
+}
 
 bool transition_mining_drone_cargo(MiningDrone& drone, MiningDroneCargoTransition transition) {
   sml::sm<DroneCargoMachine> machine;

@@ -168,6 +168,46 @@ TEST_CASE("clear targets request unlocks asteroid and enemy locks") {
   CHECK_FALSE(hyperverse::has_locked_enemy(enemy_lock));
 }
 
+TEST_CASE("radar domain events drive persistent target lock FSMs") {
+  entt::registry registry;
+  const entt::entity player = registry.create();
+  const entt::entity asteroid = registry.create();
+  registry.emplace<hyperverse::AsteroidBody>(asteroid, hyperverse::AsteroidBody{.position = {.x = 200.0F, .y = 100.0F}});
+  hyperverse::TargetLockModel asteroid_lock;
+  hyperverse::EnemyTargetLockModel enemy_lock;
+  hyperverse::DomainEventBus events;
+  hyperverse::install_target_lock_event_handlers(asteroid_lock, enemy_lock, events);
+  int acquired = 0;
+  int released = 0;
+  events.appendListener(hyperverse::DomainEventType::MiningTargetLockAcquired, [&](const hyperverse::DomainEvent& event) {
+    ++acquired;
+    CHECK(event.subject == player);
+    CHECK(event.target == asteroid);
+  });
+  events.appendListener(hyperverse::DomainEventType::MiningTargetLockReleased, [&](const hyperverse::DomainEvent& event) {
+    ++released;
+    CHECK(event.target == asteroid);
+  });
+
+  events.enqueue(hyperverse::DomainEventType::MiningTargetCycleRequested,
+                 hyperverse::DomainEvent{.type = hyperverse::DomainEventType::MiningTargetCycleRequested});
+  events.process();
+  hyperverse::update_target_lock(asteroid_lock, registry, {.x = 100.0F, .y = 100.0F}, {}, {},
+                                 {.width = 9000.0F, .height = 9000.0F}, {}, {}, &events, player);
+  events.process();
+  CHECK(asteroid_lock.phase == hyperverse::TargetLockPhase::Locked);
+  CHECK(acquired == 1);
+
+  events.enqueue(hyperverse::DomainEventType::RadarTargetsCleared,
+                 hyperverse::DomainEvent{.type = hyperverse::DomainEventType::RadarTargetsCleared});
+  events.process();
+  hyperverse::update_target_lock(asteroid_lock, registry, {.x = 100.0F, .y = 100.0F}, {}, {},
+                                 {.width = 9000.0F, .height = 9000.0F}, {}, {}, &events, player);
+  events.process();
+  CHECK(asteroid_lock.phase == hyperverse::TargetLockPhase::Unlocked);
+  CHECK(released == 1);
+}
+
 TEST_CASE("asteroid mass initializes from radius and is reduced by extraction") {
   entt::registry registry;
   const entt::entity asteroid = registry.create();

@@ -8,6 +8,7 @@
 #include <entt/entity/registry.hpp>
 
 #include <array>
+#include <memory>
 
 namespace hyperverse {
 
@@ -52,6 +53,29 @@ struct MiningResource {
   float volatile_pressure{0.0F};
   float extracted_mass{0.0F};
   bool venting{false};
+};
+
+enum class MiningOperationPhase { Idle, Active, Unstable, Venting, Depleted };
+
+class MiningOperationFsm {
+public:
+  MiningOperationFsm();
+  [[nodiscard]] bool start();
+  [[nodiscard]] bool stop();
+  [[nodiscard]] bool become_unstable();
+  [[nodiscard]] bool begin_venting();
+  [[nodiscard]] bool deplete();
+  [[nodiscard]] MiningOperationPhase phase() const;
+
+private:
+  struct Impl;
+  std::shared_ptr<Impl> impl_;
+};
+
+struct MiningOperationModel {
+  MiningOperationPhase phase{MiningOperationPhase::Idle};
+  entt::entity target{entt::null};
+  MiningOperationFsm fsm{};
 };
 
 [[nodiscard]] MineralComposition mineral_composition_for_tier(OreTier tier);
@@ -100,7 +124,10 @@ struct MiningHudSnapshot {
   const SemanticInputFrame& input,
   const SectorTuning& sector,
   const MiningLaserTuning& tuning,
-  float dt_seconds
+  float dt_seconds,
+  MiningOperationModel* operation = nullptr,
+  DomainEventBus* event_bus = nullptr,
+  entt::entity subject = entt::null
 );
 
 }  // namespace hyperverse
