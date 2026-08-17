@@ -11,12 +11,18 @@ struct Vec3 {
   float z{0.0F};
 };
 
+enum class AsteroidSurfaceKind : std::uint8_t {
+  Exterior,
+  Fracture,
+};
+
 struct AsteroidMeshVertex {
   Vec3 position{};
   float r{0.55F};
   float g{0.52F};
   float b{0.48F};
   float tint_blend{1.0F};
+  AsteroidSurfaceKind surface{AsteroidSurfaceKind::Exterior};
 };
 
 struct AsteroidMeshTriangle {
@@ -40,14 +46,12 @@ struct AsteroidGeometryTuning {
   float chip_strength{0.18F};
 };
 
-[[nodiscard]] AsteroidGeometry generate_asteroid_geometry(std::uint32_t seed, float radius, const AsteroidGeometryTuning& tuning = {});
-[[nodiscard]] std::vector<AsteroidGeometry> fracture_asteroid_geometry(
-  const AsteroidGeometry& parent,
-  Vec3 impact_direction,
-  int pieces,
-  float child_radius,
-  Vec3 inherited_tint = {.x = 1.0F, .y = 1.0F, .z = 1.0F}
-);
+[[nodiscard]] AsteroidGeometry generate_asteroid_geometry(std::uint32_t seed, float radius,
+                                                          const AsteroidGeometryTuning& tuning = {});
+[[nodiscard]] std::vector<AsteroidGeometry>
+fracture_asteroid_geometry(const AsteroidGeometry& parent, Vec3 impact_direction, int pieces, float child_radius,
+                           Vec3 inherited_tint = {.x = 1.0F, .y = 1.0F, .z = 1.0F},
+                           const std::vector<Vec3>& fracture_tints = {});
 void update_asteroid_tumble(AsteroidGeometry& geometry, float dt_seconds);
 
-}  // namespace hyperverse
+} // namespace hyperverse

@@ -2,8 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
-#include <map>
 #include <limits>
+#include <map>
 #include <numbers>
 #include <vector>
 
@@ -57,35 +57,37 @@ struct Rng32 {
 
 [[nodiscard]] Vec3 cross(Vec3 lhs, Vec3 rhs) {
   return {
-    .x = (lhs.y * rhs.z) - (lhs.z * rhs.y),
-    .y = (lhs.z * rhs.x) - (lhs.x * rhs.z),
-    .z = (lhs.x * rhs.y) - (lhs.y * rhs.x),
+      .x = (lhs.y * rhs.z) - (lhs.z * rhs.y),
+      .y = (lhs.z * rhs.x) - (lhs.x * rhs.z),
+      .z = (lhs.x * rhs.y) - (lhs.y * rhs.x),
   };
 }
 
 [[nodiscard]] Vec3 perpendicular_axis(Vec3 value) {
-  const Vec3 reference = std::abs(value.x) < 0.75F ? Vec3{.x = 1.0F, .y = 0.0F, .z = 0.0F} : Vec3{.x = 0.0F, .y = 1.0F, .z = 0.0F};
+  const Vec3 reference =
+      std::abs(value.x) < 0.75F ? Vec3{.x = 1.0F, .y = 0.0F, .z = 0.0F} : Vec3{.x = 0.0F, .y = 1.0F, .z = 0.0F};
   return normalize_or_zero(cross(value, reference));
 }
 
 [[nodiscard]] Vec3 face_point(int face, float u, float v) {
   switch (face) {
-    case 0:
-      return {.x = 1.0F, .y = u, .z = v};
-    case 1:
-      return {.x = -1.0F, .y = -u, .z = v};
-    case 2:
-      return {.x = u, .y = 1.0F, .z = v};
-    case 3:
-      return {.x = -u, .y = -1.0F, .z = v};
-    case 4:
-      return {.x = u, .y = v, .z = 1.0F};
-    default:
-      return {.x = u, .y = -v, .z = -1.0F};
+  case 0:
+    return {.x = 1.0F, .y = u, .z = v};
+  case 1:
+    return {.x = -1.0F, .y = -u, .z = v};
+  case 2:
+    return {.x = u, .y = 1.0F, .z = v};
+  case 3:
+    return {.x = -u, .y = -1.0F, .z = v};
+  case 4:
+    return {.x = u, .y = v, .z = 1.0F};
+  default:
+    return {.x = u, .y = -v, .z = -1.0F};
   }
 }
 
-[[nodiscard]] float directional_noise(Vec3 direction, const std::vector<Vec3>& lobes, const std::vector<float>& weights) {
+[[nodiscard]] float directional_noise(Vec3 direction, const std::vector<Vec3>& lobes,
+                                      const std::vector<float>& weights) {
   float value = 0.0F;
   for (std::size_t index = 0; index < lobes.size(); ++index) {
     const float alignment = std::max(0.0F, dot(direction, lobes[index]));
@@ -116,24 +118,28 @@ struct Rng32 {
   return std::clamp(static_cast<int>(normalized * static_cast<float>(pieces)), 0, pieces - 1);
 }
 
-[[nodiscard]] AsteroidMeshVertex scaled_fragment_vertex(const AsteroidMeshVertex& source, Vec3 center, float scale, Vec3 inherited_tint) {
+[[nodiscard]] AsteroidMeshVertex scaled_fragment_vertex(const AsteroidMeshVertex& source, Vec3 center, float scale,
+                                                        Vec3 inherited_tint) {
+  const float tint_blend = std::clamp(source.tint_blend, 0.0F, 1.0F);
   return {
-    .position = (source.position - center) * scale,
-    .r = source.r * inherited_tint.x,
-    .g = source.g * inherited_tint.y,
-    .b = source.b * inherited_tint.z,
-    .tint_blend = 0.0F,
+      .position = (source.position - center) * scale,
+      .r = source.r * (1.0F + ((inherited_tint.x - 1.0F) * tint_blend)),
+      .g = source.g * (1.0F + ((inherited_tint.y - 1.0F) * tint_blend)),
+      .b = source.b * (1.0F + ((inherited_tint.z - 1.0F) * tint_blend)),
+      .tint_blend = 0.0F,
+      .surface = source.surface,
   };
 }
 
-[[nodiscard]] AsteroidMeshVertex fracture_cap_vertex(Vec3 position, Rng32& rng) {
+[[nodiscard]] AsteroidMeshVertex fracture_cap_vertex(Vec3 position, Rng32& rng, Vec3 fracture_tint) {
   const float shade = rng.range(0.30F, 0.50F);
   return {
-    .position = position,
-    .r = shade * rng.range(0.86F, 1.02F),
-    .g = shade * rng.range(0.82F, 0.96F),
-    .b = shade * rng.range(0.76F, 0.90F),
-    .tint_blend = 1.0F,
+      .position = position,
+      .r = shade * fracture_tint.x,
+      .g = shade * fracture_tint.y,
+      .b = shade * fracture_tint.z,
+      .tint_blend = 0.0F,
+      .surface = AsteroidSurfaceKind::Fracture,
   };
 }
 
@@ -155,9 +161,9 @@ struct EdgeKey {
 [[nodiscard]] VertexKey vertex_key(Vec3 position) {
   constexpr float scale = 64.0F;
   return {
-    .x = static_cast<int>(std::round(position.x * scale)),
-    .y = static_cast<int>(std::round(position.y * scale)),
-    .z = static_cast<int>(std::round(position.z * scale)),
+      .x = static_cast<int>(std::round(position.x * scale)),
+      .y = static_cast<int>(std::round(position.y * scale)),
+      .z = static_cast<int>(std::round(position.z * scale)),
   };
 }
 
@@ -169,14 +175,10 @@ void count_edge(std::map<EdgeKey, int>& edge_counts, std::uint16_t lhs, std::uin
   ++edge_counts[edge_key(lhs, rhs)];
 }
 
-[[nodiscard]] std::uint16_t copied_fragment_vertex(
-  AsteroidGeometry& fragment,
-  std::map<VertexKey, std::uint16_t>& copied_vertices,
-  const AsteroidMeshVertex& source,
-  Vec3 center,
-  float scale,
-  Vec3 inherited_tint
-) {
+[[nodiscard]] std::uint16_t copied_fragment_vertex(AsteroidGeometry& fragment,
+                                                   std::map<VertexKey, std::uint16_t>& copied_vertices,
+                                                   const AsteroidMeshVertex& source, Vec3 center, float scale,
+                                                   Vec3 inherited_tint) {
   const VertexKey key = vertex_key(source.position);
   if (const auto found = copied_vertices.find(key); found != copied_vertices.end()) {
     return found->second;
@@ -187,21 +189,21 @@ void count_edge(std::map<EdgeKey, int>& edge_counts, std::uint16_t lhs, std::uin
   return index;
 }
 
-}  // namespace
+} // namespace
 
 AsteroidGeometry generate_asteroid_geometry(std::uint32_t seed, float radius, const AsteroidGeometryTuning& tuning) {
   Rng32 rng{seed == 0U ? 0xA5311E5DU : seed};
   AsteroidGeometry geometry{.seed = seed};
 
   geometry.tumble_angles = {
-    .x = rng.range(0.0F, std::numbers::pi_v<float> * 2.0F),
-    .y = rng.range(0.0F, std::numbers::pi_v<float> * 2.0F),
-    .z = rng.range(0.0F, std::numbers::pi_v<float> * 2.0F),
+      .x = rng.range(0.0F, std::numbers::pi_v<float> * 2.0F),
+      .y = rng.range(0.0F, std::numbers::pi_v<float> * 2.0F),
+      .z = rng.range(0.0F, std::numbers::pi_v<float> * 2.0F),
   };
   geometry.tumble_velocity = {
-    .x = rng.range(-0.28F, 0.28F),
-    .y = rng.range(-0.22F, 0.22F),
-    .z = rng.range(-0.34F, 0.34F),
+      .x = rng.range(-0.28F, 0.28F),
+      .y = rng.range(-0.22F, 0.22F),
+      .z = rng.range(-0.34F, 0.34F),
   };
 
   std::vector<Vec3> lobes;
@@ -209,7 +211,8 @@ AsteroidGeometry generate_asteroid_geometry(std::uint32_t seed, float radius, co
   lobes.reserve(20);
   weights.reserve(20);
   for (int index = 0; index < 20; ++index) {
-    lobes.push_back(normalize_or_zero({.x = rng.range(-1.0F, 1.0F), .y = rng.range(-1.0F, 1.0F), .z = rng.range(-1.0F, 1.0F)}));
+    lobes.push_back(
+        normalize_or_zero({.x = rng.range(-1.0F, 1.0F), .y = rng.range(-1.0F, 1.0F), .z = rng.range(-1.0F, 1.0F)}));
     weights.push_back(rng.range(-0.18F, 0.22F));
   }
 
@@ -218,7 +221,8 @@ AsteroidGeometry generate_asteroid_geometry(std::uint32_t seed, float radius, co
   chips.reserve(10);
   chip_depths.reserve(10);
   for (int index = 0; index < 10; ++index) {
-    chips.push_back(normalize_or_zero({.x = rng.range(-1.0F, 1.0F), .y = rng.range(-1.0F, 1.0F), .z = rng.range(-1.0F, 1.0F)}));
+    chips.push_back(
+        normalize_or_zero({.x = rng.range(-1.0F, 1.0F), .y = rng.range(-1.0F, 1.0F), .z = rng.range(-1.0F, 1.0F)}));
     chip_depths.push_back(rng.range(0.10F, tuning.chip_strength));
   }
 
@@ -248,14 +252,12 @@ AsteroidGeometry generate_asteroid_geometry(std::uint32_t seed, float radius, co
           }
         }
         const float shade = std::clamp(0.58F + ((distortion - 0.48F) * 1.1F) + rng.range(-0.10F, 0.10F), 0.26F, 0.86F);
-        geometry.vertices.push_back(
-          AsteroidMeshVertex{
+        geometry.vertices.push_back(AsteroidMeshVertex{
             .position = surface,
             .r = shade * rng.range(0.86F, 1.04F),
             .g = shade * rng.range(0.82F, 0.98F),
             .b = shade * rng.range(0.74F, 0.92F),
-          }
-        );
+        });
       }
     }
 
@@ -275,19 +277,20 @@ AsteroidGeometry generate_asteroid_geometry(std::uint32_t seed, float radius, co
   return geometry;
 }
 
-std::vector<AsteroidGeometry> fracture_asteroid_geometry(
-  const AsteroidGeometry& parent,
-  Vec3 impact_direction,
-  int pieces,
-  float child_radius,
-  Vec3 inherited_tint
-) {
+std::vector<AsteroidGeometry> fracture_asteroid_geometry(const AsteroidGeometry& parent, Vec3 impact_direction,
+                                                         int pieces, float child_radius, Vec3 inherited_tint,
+                                                         const std::vector<Vec3>& fracture_tints) {
   if (pieces < 2 || parent.vertices.empty() || parent.triangles.empty()) {
     return {};
   }
 
   const int fragment_count = std::clamp(pieces, 2, 6);
-  const Vec3 impact = normalize_or_zero(length(impact_direction) > 0.0F ? impact_direction : Vec3{.x = 1.0F, .y = 0.0F, .z = 0.0F});
+  const auto tint_for_fragment = [&](int index) {
+    return static_cast<std::size_t>(index) < fracture_tints.size() ? fracture_tints[static_cast<std::size_t>(index)]
+                                                                   : Vec3{.x = 1.0F, .y = 1.0F, .z = 1.0F};
+  };
+  const Vec3 impact =
+      normalize_or_zero(length(impact_direction) > 0.0F ? impact_direction : Vec3{.x = 1.0F, .y = 0.0F, .z = 0.0F});
   const Vec3 tangent = perpendicular_axis(impact);
   const Vec3 bitangent = normalize_or_zero(cross(impact, tangent));
   const float source_radius = std::max(1.0F, child_radius * std::sqrt(static_cast<float>(fragment_count)));
@@ -299,7 +302,9 @@ std::vector<AsteroidGeometry> fracture_asteroid_geometry(
   std::vector<std::map<VertexKey, std::uint16_t>> copied_vertices(static_cast<std::size_t>(fragment_count));
 
   for (const AsteroidMeshTriangle& triangle : parent.triangles) {
-    const Vec3 center = (parent.vertices[triangle.a].position + parent.vertices[triangle.b].position + parent.vertices[triangle.c].position) * (1.0F / 3.0F);
+    const Vec3 center = (parent.vertices[triangle.a].position + parent.vertices[triangle.b].position +
+                         parent.vertices[triangle.c].position) *
+                        (1.0F / 3.0F);
     const int slice = fracture_slice(center, impact, tangent, bitangent, fragment_count);
     centers[static_cast<std::size_t>(slice)] = centers[static_cast<std::size_t>(slice)] + center;
     ++center_counts[static_cast<std::size_t>(slice)];
@@ -308,7 +313,8 @@ std::vector<AsteroidGeometry> fracture_asteroid_geometry(
   for (int index = 0; index < fragment_count; ++index) {
     Vec3 center{};
     if (center_counts[static_cast<std::size_t>(index)] > 0) {
-      center = centers[static_cast<std::size_t>(index)] * (1.0F / static_cast<float>(center_counts[static_cast<std::size_t>(index)]));
+      center = centers[static_cast<std::size_t>(index)] *
+               (1.0F / static_cast<float>(center_counts[static_cast<std::size_t>(index)]));
     }
     centers[static_cast<std::size_t>(index)] = center;
   }
@@ -319,14 +325,16 @@ std::vector<AsteroidGeometry> fracture_asteroid_geometry(
     fragment.tumble_angles = parent.tumble_angles;
     const float spin_sign = parent.tumble_velocity.z < 0.0F ? -1.0F : 1.0F;
     fragment.tumble_velocity = {
-      .x = parent.tumble_velocity.x + (spin_sign * (0.05F + 0.02F * static_cast<float>(index))),
-      .y = parent.tumble_velocity.y + (spin_sign * (0.03F + 0.015F * static_cast<float>(index))),
-      .z = parent.tumble_velocity.z + (spin_sign * (0.08F + 0.025F * static_cast<float>(index))),
+        .x = parent.tumble_velocity.x + (spin_sign * (0.05F + 0.02F * static_cast<float>(index))),
+        .y = parent.tumble_velocity.y + (spin_sign * (0.03F + 0.015F * static_cast<float>(index))),
+        .z = parent.tumble_velocity.z + (spin_sign * (0.08F + 0.025F * static_cast<float>(index))),
     };
   }
 
   for (const AsteroidMeshTriangle& triangle : parent.triangles) {
-    const Vec3 center = (parent.vertices[triangle.a].position + parent.vertices[triangle.b].position + parent.vertices[triangle.c].position) * (1.0F / 3.0F);
+    const Vec3 center = (parent.vertices[triangle.a].position + parent.vertices[triangle.b].position +
+                         parent.vertices[triangle.c].position) *
+                        (1.0F / 3.0F);
     const int slice = fracture_slice(center, impact, tangent, bitangent, fragment_count);
     AsteroidGeometry& fragment = fragments[static_cast<std::size_t>(slice)];
     const Vec3 fragment_center = centers[static_cast<std::size_t>(slice)];
@@ -334,9 +342,12 @@ std::vector<AsteroidGeometry> fracture_asteroid_geometry(
       continue;
     }
     std::map<VertexKey, std::uint16_t>& vertex_map = copied_vertices[static_cast<std::size_t>(slice)];
-    const std::uint16_t a = copied_fragment_vertex(fragment, vertex_map, parent.vertices[triangle.a], fragment_center, scale, inherited_tint);
-    const std::uint16_t b = copied_fragment_vertex(fragment, vertex_map, parent.vertices[triangle.b], fragment_center, scale, inherited_tint);
-    const std::uint16_t c = copied_fragment_vertex(fragment, vertex_map, parent.vertices[triangle.c], fragment_center, scale, inherited_tint);
+    const std::uint16_t a = copied_fragment_vertex(fragment, vertex_map, parent.vertices[triangle.a], fragment_center,
+                                                   scale, inherited_tint);
+    const std::uint16_t b = copied_fragment_vertex(fragment, vertex_map, parent.vertices[triangle.b], fragment_center,
+                                                   scale, inherited_tint);
+    const std::uint16_t c = copied_fragment_vertex(fragment, vertex_map, parent.vertices[triangle.c], fragment_center,
+                                                   scale, inherited_tint);
     if (a != b && b != c && a != c) {
       fragment.triangles.push_back({.a = a, .b = b, .c = c});
     }
@@ -345,7 +356,8 @@ std::vector<AsteroidGeometry> fracture_asteroid_geometry(
   for (int index = 0; index < fragment_count; ++index) {
     AsteroidGeometry& fragment = fragments[static_cast<std::size_t>(index)];
     if (fragment.vertices.empty()) {
-      fragment = generate_asteroid_geometry(parent.seed ^ (0x51ED1234U + static_cast<std::uint32_t>(index)), child_radius);
+      fragment =
+          generate_asteroid_geometry(parent.seed ^ (0x51ED1234U + static_cast<std::uint32_t>(index)), child_radius);
       continue;
     }
 
@@ -358,8 +370,9 @@ std::vector<AsteroidGeometry> fracture_asteroid_geometry(
     }
 
     const std::uint16_t center_index = static_cast<std::uint16_t>(fragment.vertices.size());
-    const Vec3 cap_center = normalize_or_zero(centers[static_cast<std::size_t>(index)] * -1.0F) * (child_radius * rng.range(0.10F, 0.24F));
-    fragment.vertices.push_back(fracture_cap_vertex(cap_center, rng));
+    const Vec3 cap_center =
+        normalize_or_zero(centers[static_cast<std::size_t>(index)] * -1.0F) * (child_radius * rng.range(0.10F, 0.24F));
+    fragment.vertices.push_back(fracture_cap_vertex(cap_center, rng, tint_for_fragment(index)));
     for (const auto& [edge, count] : edge_counts) {
       if (count == 1) {
         fragment.triangles.push_back({.a = edge.a, .b = edge.b, .c = center_index});
@@ -378,4 +391,4 @@ void update_asteroid_tumble(AsteroidGeometry& geometry, float dt_seconds) {
   geometry.tumble_angles.z = std::fmod(geometry.tumble_angles.z + (geometry.tumble_velocity.z * dt), full_turn);
 }
 
-}  // namespace hyperverse
+} // namespace hyperverse

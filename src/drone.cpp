@@ -40,71 +40,79 @@ struct DronePresenceMachine {
   auto operator()() const {
     using namespace sml;
     return make_transition_table(
-      *state<presence_spawn_rolling> + event<barrel_roll_completed> = state<presence_following>,
-      state<presence_following> + event<exit_requested> = state<presence_exit_rolling>,
-      state<presence_spawn_rolling> + event<exit_requested> = state<presence_exit_rolling>,
-      state<presence_exit_rolling> + event<barrel_roll_completed> = state<presence_hidden>,
-      state<presence_hidden> + event<spawn_requested> = state<presence_spawn_rolling>,
-      state<presence_following> + event<spawn_requested> = state<presence_spawn_rolling>,
-      state<presence_exit_rolling> + event<spawn_requested> = state<presence_spawn_rolling>,
-      state<presence_spawn_rolling> + event<spawn_requested> = state<presence_spawn_rolling>
-    );
+        *state<presence_spawn_rolling> + event<barrel_roll_completed> = state<presence_following>,
+        state<presence_following> + event<exit_requested> = state<presence_exit_rolling>,
+        state<presence_spawn_rolling> + event<exit_requested> = state<presence_exit_rolling>,
+        state<presence_exit_rolling> + event<barrel_roll_completed> = state<presence_hidden>,
+        state<presence_hidden> + event<spawn_requested> = state<presence_spawn_rolling>,
+        state<presence_following> + event<spawn_requested> = state<presence_spawn_rolling>,
+        state<presence_exit_rolling> + event<spawn_requested> = state<presence_spawn_rolling>,
+        state<presence_spawn_rolling> + event<spawn_requested> = state<presence_spawn_rolling>);
   }
 };
 
 void replay_presence(sml::sm<DronePresenceMachine>& machine, DronePresencePhase phase) {
   switch (phase) {
-    case DronePresencePhase::SpawnBarrelRoll: return;
-    case DronePresencePhase::Following: machine.process_event(barrel_roll_completed{}); return;
-    case DronePresencePhase::ExitBarrelRoll: machine.process_event(barrel_roll_completed{}); machine.process_event(exit_requested{}); return;
-    case DronePresencePhase::Hidden: machine.process_event(barrel_roll_completed{}); machine.process_event(exit_requested{}); machine.process_event(barrel_roll_completed{}); return;
+  case DronePresencePhase::SpawnBarrelRoll:
+    return;
+  case DronePresencePhase::Following:
+    machine.process_event(barrel_roll_completed{});
+    return;
+  case DronePresencePhase::ExitBarrelRoll:
+    machine.process_event(barrel_roll_completed{});
+    machine.process_event(exit_requested{});
+    return;
+  case DronePresencePhase::Hidden:
+    machine.process_event(barrel_roll_completed{});
+    machine.process_event(exit_requested{});
+    machine.process_event(barrel_roll_completed{});
+    return;
   }
 }
 
 DronePresencePhase read_presence(const sml::sm<DronePresenceMachine>& machine) {
-  if (machine.is(sml::state<presence_following>)) return DronePresencePhase::Following;
-  if (machine.is(sml::state<presence_exit_rolling>)) return DronePresencePhase::ExitBarrelRoll;
-  if (machine.is(sml::state<presence_hidden>)) return DronePresencePhase::Hidden;
+  if (machine.is(sml::state<presence_following>))
+    return DronePresencePhase::Following;
+  if (machine.is(sml::state<presence_exit_rolling>))
+    return DronePresencePhase::ExitBarrelRoll;
+  if (machine.is(sml::state<presence_hidden>))
+    return DronePresencePhase::Hidden;
   return DronePresencePhase::SpawnBarrelRoll;
 }
 
 struct DroneCargoMachine {
   auto operator()() const {
     using namespace sml;
-    return make_transition_table(
-      *state<drone_unassigned> + event<cargo_assigned> = state<drone_pickup_cargo>,
-      state<drone_pickup_cargo> + event<cargo_picked_up> = state<drone_escorting_cargo>,
-      state<drone_escorting_cargo> + event<cargo_delivered> = state<drone_unassigned>
-    );
+    return make_transition_table(*state<drone_unassigned> + event<cargo_assigned> = state<drone_pickup_cargo>,
+                                 state<drone_pickup_cargo> + event<cargo_picked_up> = state<drone_escorting_cargo>,
+                                 state<drone_escorting_cargo> + event<cargo_delivered> = state<drone_unassigned>);
   }
 };
 
 struct DroneWorkMachine {
   auto operator()() const {
     using namespace sml;
-    return make_transition_table(
-      *state<drone_idle> + event<travel_to_work> = state<drone_travelling>,
-      state<drone_idle> + event<begin_mining> = state<drone_mining>,
-      state<drone_travelling> + event<return_to_formation> = state<drone_idle>,
-      state<drone_travelling> + event<begin_mining> = state<drone_mining>,
-      state<drone_mining> + event<return_to_formation> = state<drone_idle>,
-      state<drone_mining> + event<travel_to_work> = state<drone_travelling>
-    );
+    return make_transition_table(*state<drone_idle> + event<travel_to_work> = state<drone_travelling>,
+                                 state<drone_idle> + event<begin_mining> = state<drone_mining>,
+                                 state<drone_travelling> + event<return_to_formation> = state<drone_idle>,
+                                 state<drone_travelling> + event<begin_mining> = state<drone_mining>,
+                                 state<drone_mining> + event<return_to_formation> = state<drone_idle>,
+                                 state<drone_mining> + event<travel_to_work> = state<drone_travelling>);
   }
 };
 
 void replay_work_phase(sml::sm<DroneWorkMachine>& machine, MiningDronePhase phase) {
   switch (phase) {
-    case MiningDronePhase::Idle:
-    case MiningDronePhase::CargoPickup:
-    case MiningDronePhase::EscortingCargo:
-      return;
-    case MiningDronePhase::Travelling:
-      machine.process_event(travel_to_work{});
-      return;
-    case MiningDronePhase::Mining:
-      machine.process_event(begin_mining{});
-      return;
+  case MiningDronePhase::Idle:
+  case MiningDronePhase::CargoPickup:
+  case MiningDronePhase::EscortingCargo:
+    return;
+  case MiningDronePhase::Travelling:
+    machine.process_event(travel_to_work{});
+    return;
+  case MiningDronePhase::Mining:
+    machine.process_event(begin_mining{});
+    return;
   }
 }
 
@@ -121,17 +129,17 @@ void replay_work_phase(sml::sm<DroneWorkMachine>& machine, MiningDronePhase phas
 void replay_cargo_phase(sml::sm<DroneCargoMachine>& machine, MiningDronePhase phase, entt::entity cargo_target) {
   (void)cargo_target;
   switch (phase) {
-    case MiningDronePhase::Idle:
-    case MiningDronePhase::Travelling:
-    case MiningDronePhase::Mining:
-      return;
-    case MiningDronePhase::CargoPickup:
-      machine.process_event(cargo_assigned{});
-      return;
-    case MiningDronePhase::EscortingCargo:
-      machine.process_event(cargo_assigned{});
-      machine.process_event(cargo_picked_up{});
-      return;
+  case MiningDronePhase::Idle:
+  case MiningDronePhase::Travelling:
+  case MiningDronePhase::Mining:
+    return;
+  case MiningDronePhase::CargoPickup:
+    machine.process_event(cargo_assigned{});
+    return;
+  case MiningDronePhase::EscortingCargo:
+    machine.process_event(cargo_assigned{});
+    machine.process_event(cargo_picked_up{});
+    return;
   }
 }
 
@@ -146,10 +154,8 @@ void replay_cargo_phase(sml::sm<DroneCargoMachine>& machine, MiningDronePhase ph
 }
 
 [[nodiscard]] bool valid_mining_target(entt::registry& registry, entt::entity target) {
-  if (
-    target == entt::null || !registry.valid(target) || !registry.all_of<AsteroidBody, MiningResource>(target) ||
-    registry.get<MiningResource>(target).integrity <= 0.0F
-  ) {
+  if (target == entt::null || !registry.valid(target) || !registry.all_of<AsteroidBody, MiningResource>(target) ||
+      registry.get<MiningResource>(target).integrity <= 0.0F) {
     return false;
   }
   const AsteroidFragmentation* fragmentation = registry.try_get<AsteroidFragmentation>(target);
@@ -160,46 +166,46 @@ void emit_target_released(DomainEventBus* event_bus, entt::entity drone_entity, 
   if (event_bus == nullptr || target == entt::null) {
     return;
   }
-  event_bus->enqueue(
-    DomainEventType::DroneTargetReleased,
-    DomainEvent{
-      .type = DomainEventType::DroneTargetReleased,
-      .subject = drone_entity,
-      .target = target,
-      .position = position,
-    }
-  );
+  event_bus->enqueue(DomainEventType::DroneTargetReleased, DomainEvent{
+                                                               .type = DomainEventType::DroneTargetReleased,
+                                                               .subject = drone_entity,
+                                                               .target = target,
+                                                               .position = position,
+                                                           });
 }
 
 void emit_cargo_pickup_started(DomainEventBus* event_bus, entt::entity drone_entity, entt::entity box, Vec2 position) {
   if (event_bus == nullptr) {
     return;
   }
-  event_bus->enqueue(
-    DomainEventType::CargoBoxPickupStarted,
-    DomainEvent{.type = DomainEventType::CargoBoxPickupStarted, .subject = drone_entity, .target = box, .position = position}
-  );
+  event_bus->enqueue(DomainEventType::CargoBoxPickupStarted, DomainEvent{.type = DomainEventType::CargoBoxPickupStarted,
+                                                                         .subject = drone_entity,
+                                                                         .target = box,
+                                                                         .position = position});
 }
 
 void emit_cargo_delivered(DomainEventBus* event_bus, entt::entity drone_entity, entt::entity box, Vec2 position) {
   if (event_bus == nullptr) {
     return;
   }
-  event_bus->enqueue(
-    DomainEventType::CargoBoxDeliveredToGathering,
-    DomainEvent{.type = DomainEventType::CargoBoxDeliveredToGathering, .subject = drone_entity, .target = box, .position = position}
-  );
+  event_bus->enqueue(DomainEventType::CargoBoxDeliveredToGathering,
+                     DomainEvent{.type = DomainEventType::CargoBoxDeliveredToGathering,
+                                 .subject = drone_entity,
+                                 .target = box,
+                                 .position = position});
 }
 
 [[nodiscard]] Vec2 direction_from_angle(float radians) {
   return {.x = std::cos(radians), .y = std::sin(radians)};
 }
 
-[[nodiscard]] Vec2 idle_formation_position(const MiningDrone& drone, const ShipMotion& ship, const SectorTuning& sector, const MiningDroneTuning& tuning) {
+[[nodiscard]] Vec2 idle_formation_position(const MiningDrone& drone, const ShipMotion& ship, const SectorTuning& sector,
+                                           const MiningDroneTuning& tuning) {
   const Vec2 forward = direction_from_angle(ship.facing_radians);
   const Vec2 right{.x = -forward.y, .y = forward.x};
   const float side_offset = std::sin(drone.work_angle_radians) * tuning.formation_spread;
-  const float trail_offset = tuning.formation_trail_distance + (std::abs(std::cos(drone.work_angle_radians)) * tuning.formation_spread * 0.45F);
+  const float trail_offset = tuning.formation_trail_distance +
+                             (std::abs(std::cos(drone.work_angle_radians)) * tuning.formation_spread * 0.45F);
   return wrap_position(ship.position - (forward * trail_offset) + (right * side_offset), sector);
 }
 
@@ -217,7 +223,8 @@ void update_facing_from_velocity(MiningDrone& drone, float dead_stick_speed) {
   return box.state == CargoBoxState::PendingPickup || box.state == CargoBoxState::BeingHauled;
 }
 
-void move_drone_toward(MiningDrone& drone, Vec2 target, const SectorTuning& sector, float dt_seconds, const MiningDroneTuning& tuning) {
+void move_drone_toward(MiningDrone& drone, Vec2 target, const SectorTuning& sector, float dt_seconds,
+                       const MiningDroneTuning& tuning) {
   const float scaled_dt = std::max(0.0F, dt_seconds);
   const Vec2 delta = wrapped_delta(drone.position, target, sector);
   const float distance = length(delta);
@@ -238,15 +245,9 @@ void move_drone_toward(MiningDrone& drone, Vec2 target, const SectorTuning& sect
   update_facing_from_velocity(drone, tuning.facing_dead_stick_speed);
 }
 
-[[nodiscard]] bool update_cargo_haul(
-  MiningDrone& drone,
-  entt::registry& registry,
-  const SectorTuning& sector,
-  float dt_seconds,
-  const MiningDroneTuning& tuning,
-  DomainEventBus* event_bus,
-  MiningDroneHudSnapshot& hud
-) {
+[[nodiscard]] bool update_cargo_haul(MiningDrone& drone, entt::registry& registry, const SectorTuning& sector,
+                                     float dt_seconds, const MiningDroneTuning& tuning, DomainEventBus* event_bus,
+                                     MiningDroneHudSnapshot& hud) {
   if (!valid_cargo_target(registry, drone.cargo_target)) {
     (void)transition_mining_drone_cargo(drone, MiningDroneCargoTransition::CargoDelivered);
     drone.cargo_target = entt::null;
@@ -293,45 +294,58 @@ void move_drone_toward(MiningDrone& drone, Vec2 target, const SectorTuning& sect
   return true;
 }
 
-}  // namespace
+} // namespace
 
-void install_drone_presence_event_handlers(entt::registry& registry, const std::vector<entt::entity>& drones, DomainEventBus& event_bus, const DronePresenceTuning& tuning) {
+void install_drone_presence_event_handlers(entt::registry& registry, const std::vector<entt::entity>& drones,
+                                           DomainEventBus& event_bus, const DronePresenceTuning& tuning) {
   auto transition = [&registry, &event_bus, &drones, tuning](const DomainEvent& event, DomainEventType request) {
-    if (event.subject == entt::null || std::find(drones.begin(), drones.end(), event.subject) == drones.end()) return;
+    if (event.subject == entt::null || std::find(drones.begin(), drones.end(), event.subject) == drones.end())
+      return;
     DronePresence& presence = registry.get<DronePresence>(event.subject);
     sml::sm<DronePresenceMachine> machine;
     replay_presence(machine, presence.phase);
-    const bool accepted = request == DomainEventType::DroneExitRequested
-      ? machine.process_event(exit_requested{})
-      : request == DomainEventType::DroneSpawnRequested
-        ? machine.process_event(spawn_requested{})
-        : machine.process_event(barrel_roll_completed{});
-    if (!accepted) return;
+    const bool accepted = request == DomainEventType::DroneExitRequested ? machine.process_event(exit_requested{})
+                          : request == DomainEventType::DroneSpawnRequested
+                              ? machine.process_event(spawn_requested{})
+                              : machine.process_event(barrel_roll_completed{});
+    if (!accepted)
+      return;
     presence.phase = read_presence(machine);
     presence.phase_seconds_remaining =
-      presence.phase == DronePresencePhase::SpawnBarrelRoll || presence.phase == DronePresencePhase::ExitBarrelRoll
-        ? tuning.barrel_roll_seconds : 0.0F;
+        presence.phase == DronePresencePhase::SpawnBarrelRoll || presence.phase == DronePresencePhase::ExitBarrelRoll
+            ? tuning.barrel_roll_seconds
+            : 0.0F;
     presence.roll_radians = 0.0F;
     if (presence.phase == DronePresencePhase::Hidden) {
       registry.get<MiningDrone>(event.subject).velocity = {};
-      event_bus.enqueue(DomainEventType::DroneDespawned, DomainEvent{.type = DomainEventType::DroneDespawned, .subject = event.subject});
+      event_bus.enqueue(DomainEventType::DroneDespawned,
+                        DomainEvent{.type = DomainEventType::DroneDespawned, .subject = event.subject});
     }
   };
-  event_bus.appendListener(DomainEventType::DroneExitRequested, [transition](const DomainEvent& event) { transition(event, DomainEventType::DroneExitRequested); });
-  event_bus.appendListener(DomainEventType::DroneSpawnRequested, [transition](const DomainEvent& event) { transition(event, DomainEventType::DroneSpawnRequested); });
-  event_bus.appendListener(DomainEventType::DroneBarrelRollCompleted, [transition](const DomainEvent& event) { transition(event, DomainEventType::DroneBarrelRollCompleted); });
+  event_bus.appendListener(DomainEventType::DroneExitRequested, [transition](const DomainEvent& event) {
+    transition(event, DomainEventType::DroneExitRequested);
+  });
+  event_bus.appendListener(DomainEventType::DroneSpawnRequested, [transition](const DomainEvent& event) {
+    transition(event, DomainEventType::DroneSpawnRequested);
+  });
+  event_bus.appendListener(DomainEventType::DroneBarrelRollCompleted, [transition](const DomainEvent& event) {
+    transition(event, DomainEventType::DroneBarrelRollCompleted);
+  });
 }
 
-void update_drone_presence(entt::registry& registry, const std::vector<entt::entity>& drones, float dt_seconds, DomainEventBus& event_bus, const DronePresenceTuning& tuning) {
+void update_drone_presence(entt::registry& registry, const std::vector<entt::entity>& drones, float dt_seconds,
+                           DomainEventBus& event_bus, const DronePresenceTuning& tuning) {
   const float dt = std::max(0.0F, dt_seconds);
   for (const entt::entity entity : drones) {
     DronePresence& presence = registry.get<DronePresence>(entity);
-    if (presence.phase != DronePresencePhase::SpawnBarrelRoll && presence.phase != DronePresencePhase::ExitBarrelRoll) continue;
+    if (presence.phase != DronePresencePhase::SpawnBarrelRoll && presence.phase != DronePresencePhase::ExitBarrelRoll)
+      continue;
     presence.phase_seconds_remaining = std::max(0.0F, presence.phase_seconds_remaining - dt);
     const float duration = std::max(tuning.barrel_roll_seconds, 0.001F);
     presence.roll_radians = TauRadians * (1.0F - (presence.phase_seconds_remaining / duration));
     if (presence.phase_seconds_remaining <= 0.0F) {
-      event_bus.enqueue(DomainEventType::DroneBarrelRollCompleted, DomainEvent{.type = DomainEventType::DroneBarrelRollCompleted, .subject = entity});
+      event_bus.enqueue(DomainEventType::DroneBarrelRollCompleted,
+                        DomainEvent{.type = DomainEventType::DroneBarrelRollCompleted, .subject = entity});
     }
   }
 }
@@ -342,15 +356,15 @@ bool transition_mining_drone_cargo(MiningDrone& drone, MiningDroneCargoTransitio
   const MiningDronePhase previous = drone.phase;
   bool accepted = false;
   switch (transition) {
-    case MiningDroneCargoTransition::AssignCargo:
-      accepted = machine.process_event(cargo_assigned{});
-      break;
-    case MiningDroneCargoTransition::CargoPickedUp:
-      accepted = machine.process_event(cargo_picked_up{});
-      break;
-    case MiningDroneCargoTransition::CargoDelivered:
-      accepted = machine.process_event(cargo_delivered{});
-      break;
+  case MiningDroneCargoTransition::AssignCargo:
+    accepted = machine.process_event(cargo_assigned{});
+    break;
+  case MiningDroneCargoTransition::CargoPickedUp:
+    accepted = machine.process_event(cargo_picked_up{});
+    break;
+  case MiningDroneCargoTransition::CargoDelivered:
+    accepted = machine.process_event(cargo_delivered{});
+    break;
   }
   if (!accepted) {
     return false;
@@ -365,15 +379,15 @@ bool transition_mining_drone_work(MiningDrone& drone, MiningDroneWorkTransition 
   const MiningDronePhase previous = drone.phase;
   bool accepted = false;
   switch (transition) {
-    case MiningDroneWorkTransition::ReturnToFormation:
-      accepted = machine.process_event(return_to_formation{});
-      break;
-    case MiningDroneWorkTransition::TravelToWork:
-      accepted = machine.process_event(travel_to_work{});
-      break;
-    case MiningDroneWorkTransition::BeginMining:
-      accepted = machine.process_event(begin_mining{});
-      break;
+  case MiningDroneWorkTransition::ReturnToFormation:
+    accepted = machine.process_event(return_to_formation{});
+    break;
+  case MiningDroneWorkTransition::TravelToWork:
+    accepted = machine.process_event(travel_to_work{});
+    break;
+  case MiningDroneWorkTransition::BeginMining:
+    accepted = machine.process_event(begin_mining{});
+    break;
   }
   if (!accepted) {
     return false;
@@ -382,18 +396,13 @@ bool transition_mining_drone_work(MiningDrone& drone, MiningDroneWorkTransition 
   return drone.phase != previous;
 }
 
-MiningDroneHudSnapshot update_mining_drone(
-  MiningDrone& drone,
-  entt::registry& registry,
-  const TargetLockModel& mining_priority,
-  const ShipMotion& ship,
-  const SectorTuning& sector,
-  float dt_seconds,
-  const MiningDroneTuning& tuning,
-  DomainEventBus* event_bus
-) {
+MiningDroneHudSnapshot update_mining_drone(MiningDrone& drone, entt::registry& registry,
+                                           const TargetLockModel& mining_priority, const ShipMotion& ship,
+                                           const SectorTuning& sector, float dt_seconds,
+                                           const MiningDroneTuning& tuning, DomainEventBus* event_bus) {
   const float scaled_dt = std::max(0.0F, dt_seconds);
-  drone.work_angle_radians = std::fmod(drone.work_angle_radians + (tuning.work_angle_rotation_radians_per_second * scaled_dt), TauRadians);
+  drone.work_angle_radians =
+      std::fmod(drone.work_angle_radians + (tuning.work_angle_rotation_radians_per_second * scaled_dt), TauRadians);
   if (drone.work_angle_radians < 0.0F) {
     drone.work_angle_radians += TauRadians;
   }
@@ -439,7 +448,8 @@ MiningDroneHudSnapshot update_mining_drone(
   AsteroidBody& asteroid = registry.get<AsteroidBody>(drone.target);
   MiningResource& resource = registry.get<MiningResource>(drone.target);
   const float work_radius = asteroid.radius + tuning.work_standoff;
-  const Vec2 work_position = wrap_position(asteroid.position + (direction_from_angle(drone.work_angle_radians) * work_radius), sector);
+  const Vec2 work_position =
+      wrap_position(asteroid.position + (direction_from_angle(drone.work_angle_radians) * work_radius), sector);
   const Vec2 to_work_position = wrapped_delta(drone.position, work_position, sector);
   const Vec2 to_target = wrapped_delta(drone.position, asteroid.position, sector);
   hud.target_distance = length(to_target);
@@ -453,8 +463,9 @@ MiningDroneHudSnapshot update_mining_drone(
     (void)transition_mining_drone_work(drone, MiningDroneWorkTransition::BeginMining);
     drone.velocity = {};
     resource.integrity = std::max(0.0F, resource.integrity - (tuning.integrity_damage_per_second * scaled_dt));
-    const float extracted_mass = extract_asteroid_mass(registry, drone.target, tuning.extraction_per_second * scaled_dt);
-    resource.extracted_mass += extracted_mass;
+    const float extracted_mass =
+        extract_asteroid_mass(registry, drone.target, tuning.extraction_per_second * scaled_dt);
+    record_extracted_material(resource, registry.try_get<MineralComposition>(drone.target), extracted_mass);
     drone.extracted_mass += extracted_mass;
   }
 
@@ -464,4 +475,4 @@ MiningDroneHudSnapshot update_mining_drone(
   return hud;
 }
 
-}  // namespace hyperverse
+} // namespace hyperverse

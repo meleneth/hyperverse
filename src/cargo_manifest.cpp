@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <numeric>
 
 namespace hyperverse {
 namespace {
@@ -11,19 +12,24 @@ namespace {
   return static_cast<std::size_t>(tier);
 }
 
-}  // namespace
+} // namespace
 
-CargoHudSnapshot update_cargo_manifest(
-  CargoManifest& manifest,
-  entt::registry& registry,
-  const ContractQuotaTuning& tuning
-) {
+CargoHudSnapshot update_cargo_manifest(CargoManifest& manifest, entt::registry& registry,
+                                       const ContractQuotaTuning& tuning) {
   float delivered_mass = 0.0F;
   std::array<float, OreTierCount> delivered_mass_by_tier{};
   for (auto [entity, resource] : registry.view<MiningResource>().each()) {
     (void)entity;
     delivered_mass += resource.extracted_mass;
-    delivered_mass_by_tier[ore_tier_index(resource.tier)] += resource.extracted_mass;
+    const float allocated_mass =
+        std::accumulate(resource.extracted_mass_by_tier.begin(), resource.extracted_mass_by_tier.end(), 0.0F);
+    if (allocated_mass > 0.0001F) {
+      for (std::size_t tier = 0; tier < delivered_mass_by_tier.size(); ++tier) {
+        delivered_mass_by_tier[tier] += resource.extracted_mass_by_tier[tier];
+      }
+    } else {
+      delivered_mass_by_tier[ore_tier_index(resource.tier)] += resource.extracted_mass;
+    }
   }
 
   float cash = 0.0F;
@@ -44,17 +50,17 @@ CargoHudSnapshot update_cargo_manifest(
   const float bonus_steps = std::floor(over_quota_mass / bonus_step);
 
   return {
-    .delivered_mass = manifest.delivered_mass,
-    .delivered_mass_by_tier = manifest.delivered_mass_by_tier,
-    .cash = manifest.cash,
-    .score = manifest.score,
-    .required_mass = tuning.required_mass,
-    .quota_fraction = std::clamp(delivered_mass / required_mass, 0.0F, 1.0F),
-    .over_quota_mass = over_quota_mass,
-    .payout_multiplier = 1.0F + (bonus_steps * tuning.bonus_per_step),
-    .cargo_boxes = manifest.cargo_boxes,
-    .extraction_authorized = delivered_mass >= tuning.required_mass,
+      .delivered_mass = manifest.delivered_mass,
+      .delivered_mass_by_tier = manifest.delivered_mass_by_tier,
+      .cash = manifest.cash,
+      .score = manifest.score,
+      .required_mass = tuning.required_mass,
+      .quota_fraction = std::clamp(delivered_mass / required_mass, 0.0F, 1.0F),
+      .over_quota_mass = over_quota_mass,
+      .payout_multiplier = 1.0F + (bonus_steps * tuning.bonus_per_step),
+      .cargo_boxes = manifest.cargo_boxes,
+      .extraction_authorized = delivered_mass >= tuning.required_mass,
   };
 }
 
-}  // namespace hyperverse
+} // namespace hyperverse

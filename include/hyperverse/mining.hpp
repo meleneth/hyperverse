@@ -52,6 +52,7 @@ struct MiningResource {
   float structural_stress{0.0F};
   float volatile_pressure{0.0F};
   float extracted_mass{0.0F};
+  std::array<float, OreTierCount> extracted_mass_by_tier{};
   bool venting{false};
 };
 
@@ -84,6 +85,8 @@ struct MiningOperationModel {
 [[nodiscard]] float ore_tier_cash_per_mass(OreTier tier);
 [[nodiscard]] OreTint ore_tint(OreTier tier);
 [[nodiscard]] OreTint ore_tint(const MineralComposition& composition);
+[[nodiscard]] std::array<float, OreTierCount> ore_tier_fractions(const MineralComposition& composition);
+void record_extracted_material(MiningResource& resource, const MineralComposition* composition, float mass);
 
 struct MiningLaserTuning {
   float range{1250.0F};
@@ -117,17 +120,11 @@ struct MiningHudSnapshot {
   bool blowout{false};
 };
 
-[[nodiscard]] MiningHudSnapshot update_mining_laser(
-  entt::registry& registry,
-  const TargetLockModel& target_lock,
-  const ShipMotion& ship,
-  const SemanticInputFrame& input,
-  const SectorTuning& sector,
-  const MiningLaserTuning& tuning,
-  float dt_seconds,
-  MiningOperationModel* operation = nullptr,
-  DomainEventBus* event_bus = nullptr,
-  entt::entity subject = entt::null
-);
+[[nodiscard]] MiningHudSnapshot update_mining_laser(entt::registry& registry, const TargetLockModel& target_lock,
+                                                    const ShipMotion& ship, const SemanticInputFrame& input,
+                                                    const SectorTuning& sector, const MiningLaserTuning& tuning,
+                                                    float dt_seconds, MiningOperationModel* operation = nullptr,
+                                                    DomainEventBus* event_bus = nullptr,
+                                                    entt::entity subject = entt::null);
 
-}  // namespace hyperverse
+} // namespace hyperverse

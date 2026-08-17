@@ -104,6 +104,10 @@ Locking is not itself mining.
 ## Mining
 
 Asteroids start as large moving bodies with an explicit mass model, separate structural break progress, and two levels of fragmentation.
+Each breakup deterministically allocates the recoverable material among physical children. The same
+allocation drives child mass, mixed mineral composition, mined-value buckets, HUD composition, and
+newly exposed fracture colors. Copied exterior and older fracture colors are baked into the child
+mesh, so repeated breaks expose new interiors without repainting surfaces the player already saw.
 
 Lifecycle:
 

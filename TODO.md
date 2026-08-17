@@ -1,14 +1,5 @@
 # TODO
 
-## Dynamic asteroid interior texturing slice
-
-- Treat asteroid breaking like opening a geode: copied, previously exposed exterior triangles must retain their existing pre-break colors.
-- Color only newly exposed fracture caps/interior surfaces from the authoritative percentages of material remaining in that physical child piece.
-- Use one deterministic per-piece material allocation for both visuals and gameplay: fracture colors, `MineralComposition`, remaining mass, mining yield/value, HUD percentages, and subsequent fragmentation must agree.
-- Preserve mixed child compositions where appropriate; do not replace every fragment with a cosmetic or gameplay-only 100% single-mineral composition.
-- Make valuable internal components visually legible against the retained outer shell so players can still recognize the original rock while seeing what was exposed inside.
-- Add behavioral tests proving exterior color inheritance, composition-driven fracture-cap colors, material/mass conservation, HUD/stat agreement, and deterministic repeated breaks.
-
 ## Foundations
 
 - Replace the current maxed-out ship computer defaults with progression. Early equipment should degrade HUD accuracy/detail, scan resolution, prediction quality, and warning clarity; upgrades should restore the maxed-out HUD currently used for development.
