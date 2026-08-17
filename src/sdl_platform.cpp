@@ -22,7 +22,7 @@ SdlRuntime::~SdlRuntime() {
 }
 
 Window::Window() {
-  window_ = SDL_CreateWindow(application_name().data(), 1280, 720, SDL_WINDOW_RESIZABLE);
+  window_ = SDL_CreateWindow(application_name().data(), 1280, 720, SDL_WINDOW_RESIZABLE | SDL_WINDOW_VULKAN);
 
   if (window_ == nullptr) {
     throw std::runtime_error(std::string{"SDL_CreateWindow failed: "} + SDL_GetError());
@@ -41,9 +41,7 @@ Window::Window() {
     SDL_DestroySurface(icon_surface);
   }
 
-#if !defined(__EMSCRIPTEN__)
   (void)SDL_SetWindowFullscreen(window_, true);
-#endif
 }
 
 Window::~Window() {

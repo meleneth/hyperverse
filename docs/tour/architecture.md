@@ -45,4 +45,4 @@ helpers keeping movement and targeting deterministic across sector edges.
 
 ## Renderer Boundary
 
-Gameplay exposes renderer-neutral positions, velocities, intensities, phases, and HUD snapshots. Dawn/WebGPU handles stay behind renderer code such as `DawnRenderer` and effect-specific renderer resources.
+Gameplay exposes renderer-neutral positions, velocities, intensities, phases, and HUD snapshots. Vulkan handles stay behind `VulkanRenderer`; SDL3 owns platform window creation and supplies the native Vulkan surface.

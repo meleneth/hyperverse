@@ -9,15 +9,15 @@
 
 namespace hyperverse {
 
-class DawnRenderer {
+class VulkanRenderer {
 public:
-  explicit DawnRenderer(SDL_Window& window);
-  ~DawnRenderer();
+  explicit VulkanRenderer(SDL_Window& window);
+  ~VulkanRenderer();
 
-  DawnRenderer(const DawnRenderer&) = delete;
-  DawnRenderer& operator=(const DawnRenderer&) = delete;
-  DawnRenderer(DawnRenderer&&) = delete;
-  DawnRenderer& operator=(DawnRenderer&&) = delete;
+  VulkanRenderer(const VulkanRenderer&) = delete;
+  VulkanRenderer& operator=(const VulkanRenderer&) = delete;
+  VulkanRenderer(VulkanRenderer&&) = delete;
+  VulkanRenderer& operator=(VulkanRenderer&&) = delete;
 
   void draw_frame(const FrameSnapshot& frame = {});
   void draw_frame(const SpriteFrame& frame);

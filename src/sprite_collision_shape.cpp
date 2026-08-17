@@ -1,7 +1,6 @@
 #include "hyperverse/sprite_collision_shape.hpp"
 
 #include <algorithm>
-#include <cmath>
 
 namespace hyperverse {
 namespace {
@@ -35,8 +34,9 @@ namespace {
 }
 
 void append_hull_half(std::vector<Vec2>& hull, const std::vector<Vec2>& points) {
+  constexpr float collinear_epsilon = 0.0001F;
   for (Vec2 point : points) {
-    while (hull.size() >= 2U && cross(hull[hull.size() - 2U], hull.back(), point) <= 0.0F) {
+    while (hull.size() >= 2U && cross(hull[hull.size() - 2U], hull.back(), point) <= collinear_epsilon) {
       hull.pop_back();
     }
     hull.push_back(point);
@@ -64,14 +64,14 @@ SpriteSilhouette extract_sprite_silhouette(const SpriteAlphaMask& mask, std::uin
   }
 
   std::sort(points.begin(), points.end(), [](Vec2 lhs, Vec2 rhs) {
-    if (std::abs(lhs.x - rhs.x) > 0.0001F) {
+    if (lhs.x != rhs.x) {
       return lhs.x < rhs.x;
     }
     return lhs.y < rhs.y;
   });
   points.erase(
     std::unique(points.begin(), points.end(), [](Vec2 lhs, Vec2 rhs) {
-      return std::abs(lhs.x - rhs.x) <= 0.0001F && std::abs(lhs.y - rhs.y) <= 0.0001F;
+      return lhs.x == rhs.x && lhs.y == rhs.y;
     }),
     points.end()
   );

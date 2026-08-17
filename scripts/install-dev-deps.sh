@@ -14,6 +14,7 @@ install_apt() {
     cmake \
     g++ \
     git \
+    glslang-tools \
     libgl1-mesa-dev \
     libpng-dev \
     libx11-xcb-dev \
@@ -32,6 +33,7 @@ install_dnf() {
     cmake \
     gcc-c++ \
     git \
+    glslang \
     libX11-devel \
     libXcursor-devel \
     libXi-devel \
@@ -58,6 +60,7 @@ install_pacman() {
     base-devel \
     cmake \
     git \
+    glslang \
     libx11 \
     libxcursor \
     libxext \
@@ -82,6 +85,7 @@ install_zypper() {
     cmake \
     gcc-c++ \
     git \
+    glslang-devel \
     libX11-devel \
     libXcursor-devel \
     libXext-devel \
@@ -118,9 +122,10 @@ Install these tool categories manually:
 - Make or Ninja
 - pkg-config
 - Vulkan headers and loader development package
+- glslangValidator SPIR-V shader compiler
 - libpng development package
 - OpenGL/Mesa development package
-- X11, X11-XCB, and Wayland development packages used by SDL3 and Dawn
+- X11 and Wayland development packages used by SDL3
 EOF
   exit 1
 fi

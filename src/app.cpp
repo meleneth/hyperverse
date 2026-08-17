@@ -10,7 +10,7 @@
 #include "hyperverse/cargo_route.hpp"
 #include "hyperverse/cargo_train.hpp"
 #include "hyperverse/collision.hpp"
-#include "hyperverse/dawn_renderer.hpp"
+#include "hyperverse/vulkan_renderer.hpp"
 #include "hyperverse/drone.hpp"
 #include "hyperverse/engine_trail.hpp"
 #include "hyperverse/fixed_timestep.hpp"
@@ -479,7 +479,7 @@ private:
   AccountCtx account_;
   SdlRuntime sdl_;
   Window window_;
-  DawnRenderer renderer_;
+  VulkanRenderer renderer_;
   VerticalSliceEntities entities_;
   entt::entity player_;
   ShipMotion& ship_;

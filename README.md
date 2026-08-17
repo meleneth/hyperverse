@@ -8,7 +8,7 @@ The game is about feel, information, and controlled industrial violence.
 
 ## Current Project Shape
 
-- Playable 2D Dawn/WebGPU prototype in continuous wraparound sectors
+- Playable 2D Vulkan prototype in continuous wraparound sectors
 - Each sector is fixed at 9 by 9 1920x1080 reference screens, independent of the current window or browser resolution
 - Fixed 60 Hz simulation clock through `UniverseClock::FixedTickSeconds`
 - Development round pressure currently escalates every 1 minute
@@ -22,7 +22,7 @@ The game is about feel, information, and controlled industrial violence.
 - CMake
 - CPM
 - SDL3
-- Dawn/WebGPU
+- Vulkan 1.2
 - Jolt
 - EnTT
 - EventPP
@@ -32,11 +32,15 @@ The game is about feel, information, and controlled industrial violence.
 ## Bootstrap
 
 The repository builds a `hyperverse` executable and a Catch2 test target. The current executable
-opens an SDL3 window, initializes gamepad support, renders sprite assets and HUD geometry through Dawn,
+opens an SDL3 Vulkan window, initializes gamepad support, renders sprite assets and HUD geometry,
 and runs the playable mining/escort prototype.
 
 See [Installation and Bootstrap](docs/INSTALL.md) for Linux, Steam Deck, MSYS2, CI, and install
 commands.
+
+Build and test the deployable Steam Deck bundle in Valve's pinned Steam Linux Runtime SDK with
+`./scripts/build-steam-runtime.sh`; copy it to a Deck over SSH with
+`./scripts/deploy-steam-deck.sh deck@HOST`.
 
 ## Documentation
 
@@ -106,7 +110,7 @@ These assets are temporary implementation scaffolding, not a permanent visual co
 
 ## Current Playable State
 
-The current Dawn prototype draws Sector7-derived sprites, hardware-uploaded textures, line HUD
+The current Vulkan prototype draws Sector7-derived sprites, hardware-uploaded textures, line HUD
 brackets, text glyph HUD, mining beams, dual particle cannon shots, cargo boxes, active cargo train
 links, Gravity Sling constraint feedback, an escort gate route, drones, and raiders.
 

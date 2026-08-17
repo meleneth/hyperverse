@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.28)
+cmake_minimum_required(VERSION 3.25)
 
 project(
   hyperverse
@@ -8,9 +8,13 @@ project(
 )
 
 option(HYPERVERSE_BUILD_TESTS "Build Hyperverse tests" ON)
-option(HYPERVERSE_ENABLE_X11 "Build Dawn X11 surface support on Linux" ON)
-option(HYPERVERSE_EMSCRIPTEN_DEBUG "Enable Emscripten runtime assertions, safe heap checks, and source maps" OFF)
-set(HYPERVERSE_EMSCRIPTEN_STACK_SIZE "4194304" CACHE STRING "Emscripten stack size in bytes for browser builds")
+option(HYPERVERSE_STEAM_BUNDLE "Install a relocatable Steam Linux Runtime bundle" OFF)
+
+if(HYPERVERSE_STEAM_BUNDLE)
+  set(CMAKE_INSTALL_RPATH "$ORIGIN/lib")
+  set(CMAKE_BUILD_WITH_INSTALL_RPATH OFF)
+  set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)
+endif()
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -22,74 +26,8 @@ list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 include(FetchContent)
 include(CPM)
 include(CompilerWarnings)
-include(CheckIncludeFileCXX)
-
-if(EMSCRIPTEN)
-  add_library(hyperverse_emscripten_png INTERFACE)
-  add_library(PNG::PNG ALIAS hyperverse_emscripten_png)
-  target_compile_options(hyperverse_emscripten_png INTERFACE "SHELL:-sUSE_LIBPNG=1")
-  target_link_options(hyperverse_emscripten_png INTERFACE "SHELL:-sUSE_LIBPNG=1")
-else()
-  find_package(PNG REQUIRED)
-endif()
-
-set(DAWN_FETCH_DEPENDENCIES ON CACHE BOOL "" FORCE)
-set(DAWN_BUILD_MONOLITHIC_LIBRARY STATIC CACHE STRING "" FORCE)
-set(DAWN_BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
-set(DAWN_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(DAWN_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
-set(DAWN_ENABLE_DESKTOP_GL OFF CACHE BOOL "" FORCE)
-set(DAWN_ENABLE_OPENGLES OFF CACHE BOOL "" FORCE)
-set(DAWN_ENABLE_NULL OFF CACHE BOOL "" FORCE)
-set(DAWN_ENABLE_WEBGPU_ON_WEBGPU OFF CACHE BOOL "" FORCE)
-set(DAWN_USE_GLFW OFF CACHE BOOL "" FORCE)
-if(EMSCRIPTEN)
-  set(DAWN_ENABLE_D3D11 OFF CACHE BOOL "" FORCE)
-  set(DAWN_ENABLE_D3D12 OFF CACHE BOOL "" FORCE)
-  set(DAWN_ENABLE_VULKAN OFF CACHE BOOL "" FORCE)
-  set(DAWN_USE_WAYLAND OFF CACHE BOOL "" FORCE)
-  set(DAWN_USE_X11 OFF CACHE BOOL "" FORCE)
-elseif(WIN32 AND MINGW)
-  set(DAWN_ENABLE_D3D11 OFF CACHE BOOL "" FORCE)
-  set(DAWN_ENABLE_D3D12 OFF CACHE BOOL "" FORCE)
-  set(DAWN_ENABLE_VULKAN ON CACHE BOOL "" FORCE)
-  set(DAWN_USE_WINDOWS_UI OFF CACHE BOOL "" FORCE)
-  set(DAWN_USE_WAYLAND OFF CACHE BOOL "" FORCE)
-  set(DAWN_USE_X11 OFF CACHE BOOL "" FORCE)
-elseif(WIN32)
-  set(DAWN_ENABLE_D3D11 ON CACHE BOOL "" FORCE)
-  set(DAWN_ENABLE_D3D12 ON CACHE BOOL "" FORCE)
-  set(DAWN_ENABLE_VULKAN ON CACHE BOOL "" FORCE)
-  set(DAWN_USE_WAYLAND OFF CACHE BOOL "" FORCE)
-  set(DAWN_USE_X11 OFF CACHE BOOL "" FORCE)
-else()
-  set(DAWN_ENABLE_D3D11 OFF CACHE BOOL "" FORCE)
-  set(DAWN_ENABLE_D3D12 OFF CACHE BOOL "" FORCE)
-  set(DAWN_ENABLE_VULKAN ON CACHE BOOL "" FORCE)
-  set(DAWN_USE_WAYLAND ON CACHE BOOL "" FORCE)
-  set(DAWN_USE_X11 ${HYPERVERSE_ENABLE_X11} CACHE BOOL "" FORCE)
-endif()
-set(TINT_BUILD_CMD_TOOLS OFF CACHE BOOL "" FORCE)
-set(TINT_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN AND HYPERVERSE_ENABLE_X11)
-  check_include_file_cxx("X11/Xlib-xcb.h" HYPERVERSE_HAS_XLIB_XCB_H)
-  if(NOT HYPERVERSE_HAS_XLIB_XCB_H)
-    message(FATAL_ERROR "Dawn X11 support requires X11/Xlib-xcb.h. Install the Xlib/XCB development header package; on Debian/Trixie use libx11-xcb-dev.")
-  endif()
-endif()
-FetchContent_Declare(
-  dawn
-  GIT_REPOSITORY https://dawn.googlesource.com/dawn
-  GIT_TAG 2a49ad12f8a9bf7451cb71983647d662fbe70224
-  GIT_SUBMODULES ""
-  GIT_SUBMODULES_RECURSE FALSE
-)
-FetchContent_MakeAvailable(dawn)
-if(EMSCRIPTEN)
-  set(HYPERVERSE_DAWN_TARGETS webgpu_cpp)
-else()
-  set(HYPERVERSE_DAWN_TARGETS dawn::webgpu_dawn webgpu_cpp)
-endif()
+find_package(PNG REQUIRED)
+find_package(Vulkan 1.2 REQUIRED COMPONENTS glslangValidator)
 
 CPMAddPackage(
   NAME SDL3
@@ -179,7 +117,7 @@ add_library(
   src/cargo_route.cpp
   src/cargo_train.cpp
   src/collision.cpp
-  src/dawn_renderer.cpp
+  src/vulkan_renderer.cpp
   src/drone.cpp
   src/engine_trail.cpp
   src/fixed_timestep.cpp
@@ -226,57 +164,38 @@ target_link_libraries(
     hyperverse::eventpp
   PRIVATE
     ${HYPERVERSE_SDL_TARGET}
-    ${HYPERVERSE_DAWN_TARGETS}
+    Vulkan::Vulkan
     PNG::PNG
     ${HYPERVERSE_JOLT_TARGET}
 )
-if(HYPERVERSE_ENABLE_X11)
-  target_compile_definitions(hyperverse_core PRIVATE HYPERVERSE_ENABLE_X11=1)
-endif()
 hyperverse_enable_project_warnings(hyperverse_core)
+
+set(HYPERVERSE_SHADER_SOURCES
+  sprite.vert sprite.frag
+  color.vert color.frag
+  triangle.vert triangle.frag
+  trail.vert trail.frag
+)
+set(HYPERVERSE_SHADER_OUTPUTS)
+foreach(shader IN LISTS HYPERVERSE_SHADER_SOURCES)
+  set(source "${PROJECT_SOURCE_DIR}/shaders/${shader}")
+  set(output "${PROJECT_BINARY_DIR}/shaders/${shader}.spv")
+  add_custom_command(
+    OUTPUT "${output}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${PROJECT_BINARY_DIR}/shaders"
+    COMMAND Vulkan::glslangValidator -V --target-env vulkan1.2 -o "${output}" "${source}"
+    DEPENDS "${source}"
+    COMMENT "Compiling Vulkan shader ${shader}"
+    VERBATIM
+  )
+  list(APPEND HYPERVERSE_SHADER_OUTPUTS "${output}")
+endforeach()
+add_custom_target(hyperverse_shaders DEPENDS ${HYPERVERSE_SHADER_OUTPUTS})
+add_dependencies(hyperverse_core hyperverse_shaders)
 
 add_executable(hyperverse src/main.cpp)
 target_link_libraries(hyperverse PRIVATE hyperverse::core)
 hyperverse_enable_project_warnings(hyperverse)
-
-if(EMSCRIPTEN)
-  target_compile_options(hyperverse_core PRIVATE "SHELL:-fexceptions")
-  set_target_properties(hyperverse PROPERTIES SUFFIX ".html")
-  target_compile_options(hyperverse PRIVATE "SHELL:-fexceptions")
-  target_link_options(
-    hyperverse
-    PRIVATE
-      "SHELL:-fexceptions"
-      "SHELL:-sASYNCIFY=1"
-      "SHELL:-sALLOW_MEMORY_GROWTH=1"
-      "SHELL:-sEXIT_RUNTIME=0"
-      "SHELL:-sSTACK_SIZE=${HYPERVERSE_EMSCRIPTEN_STACK_SIZE}"
-      "SHELL:--preload-file ${PROJECT_SOURCE_DIR}/assets@/assets"
-  )
-  if(HYPERVERSE_EMSCRIPTEN_DEBUG)
-    target_compile_options(
-      hyperverse_core
-      PRIVATE
-        "SHELL:-g3"
-        "SHELL:-gsource-map"
-    )
-    target_compile_options(
-      hyperverse
-      PRIVATE
-        "SHELL:-g3"
-        "SHELL:-gsource-map"
-    )
-    target_link_options(
-      hyperverse
-      PRIVATE
-        "SHELL:-g3"
-        "SHELL:-gsource-map"
-        "SHELL:-sASSERTIONS=2"
-        "SHELL:-sSAFE_HEAP=1"
-        "SHELL:-sSTACK_OVERFLOW_CHECK=2"
-    )
-  endif()
-endif()
 
 if(WIN32)
   add_custom_command(
@@ -320,9 +239,23 @@ add_custom_command(
   VERBATIM
 )
 
-install(TARGETS hyperverse RUNTIME DESTINATION bin)
-install(DIRECTORY include/ DESTINATION include)
-install(DIRECTORY assets/ DESTINATION share/hyperverse/assets)
+if(HYPERVERSE_STEAM_BUNDLE)
+  install(TARGETS hyperverse RUNTIME DESTINATION . COMPONENT HyperverseRuntime)
+  install(DIRECTORY assets/ DESTINATION assets COMPONENT HyperverseRuntime)
+  install(DIRECTORY "${PROJECT_BINARY_DIR}/shaders/" DESTINATION shaders COMPONENT HyperverseRuntime)
+  install(
+    FILES "$<TARGET_FILE:${HYPERVERSE_SDL_TARGET}>"
+    DESTINATION lib
+    COMPONENT HyperverseRuntime
+  )
+  install(PROGRAMS packaging/steam-runtime/run-hyperverse.sh DESTINATION . COMPONENT HyperverseRuntime)
+  install(FILES packaging/steam-runtime/steam-runtime.txt DESTINATION . COMPONENT HyperverseRuntime)
+else()
+  install(TARGETS hyperverse RUNTIME DESTINATION bin)
+  install(DIRECTORY include/ DESTINATION include)
+  install(DIRECTORY assets/ DESTINATION share/hyperverse/assets)
+  install(DIRECTORY "${PROJECT_BINARY_DIR}/shaders/" DESTINATION share/hyperverse/shaders)
+endif()
 
 if(HYPERVERSE_BUILD_TESTS)
   include(CTest)
