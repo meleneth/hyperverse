@@ -9,8 +9,9 @@ Texture variants:
 - `textures/drone-friendly-albedo.png` — blue/cyan/yellow mining-drone material
 - `textures/drone-hostile-albedo.png` — charcoal/crimson/orange raider material
 
-The GLB embeds the friendly material. Engines can swap the albedo to the hostile image without
-changing geometry or UVs. Scale the same mesh per entity; do not duplicate it for enemy sizes.
+The GLB embeds the friendly material. Hyperverse runtime loads the OBJ once, renders mining drones
+with the friendly albedo at 28 pixels, and renders raiders with the hostile albedo at 46 pixels.
+Both use the same mesh and UVs; faction and size are per-instance presentation data.
 
 Rebuild the authored mesh and exports with:
 

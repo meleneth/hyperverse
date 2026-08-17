@@ -1,5 +1,10 @@
 # Gameplay Systems
 
+The Vulkan presentation layer loads the shared drone OBJ once and consumes renderer-neutral model
+instances from each frame. Mining drones and raiders use the same UV mesh at different sizes, with
+friendly and hostile albedo variants selected per instance. Gameplay systems know only entity state;
+they do not own model assets or Vulkan resources.
+
 ## Flight
 
 The ship uses strict thrust physics with strong flight-computer assistance layered on top.

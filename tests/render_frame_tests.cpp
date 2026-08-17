@@ -172,12 +172,30 @@ TEST_CASE("sprite frame fades active raiders in from cloak") {
     720
   );
 
-  const auto visible_raider = std::ranges::find_if(frame.sprites, [](const hyperverse::SpriteDraw& sprite) {
-    return sprite.texture == hyperverse::SpriteTexture::Drone && sprite.tint_r == Catch::Approx(0.95F);
+  const auto visible_raider = std::ranges::find_if(frame.models, [](const hyperverse::ModelDraw& model) {
+    return model.texture == hyperverse::ModelTexture::DroneHostile && model.size_pixels == Catch::Approx(46.0F);
   });
 
-  REQUIRE(visible_raider != frame.sprites.end());
+  REQUIRE(visible_raider != frame.models.end());
   CHECK(visible_raider->tint_a == Catch::Approx(0.5F));
+}
+
+TEST_CASE("sprite frame uses the shared friendly model for mining drones") {
+  TestAccountWorld world;
+  hyperverse::AccountCtx account = world.account_context();
+  const hyperverse::VerticalSliceEntities entities = hyperverse::seed_vertical_slice(account);
+  const hyperverse::ShipMotion& ship = account.registry().get<hyperverse::ShipMotion>(entities.player);
+  const hyperverse::SectorTuning sector = hyperverse::default_sector();
+  const hyperverse::SemanticInputFrame input{};
+
+  const hyperverse::SpriteFrame frame = hyperverse::build_sprite_frame(
+    account, entities.player, entities.mining_drones, entities.raider,
+    hyperverse::make_flight_hud_snapshot(ship, input, {}, sector), input, sector, 1280, 720
+  );
+
+  CHECK(std::ranges::count_if(frame.models, [](const hyperverse::ModelDraw& model) {
+    return model.texture == hyperverse::ModelTexture::DroneFriendly && model.size_pixels == Catch::Approx(28.0F);
+  }) == static_cast<std::ptrdiff_t>(entities.mining_drones.size()));
 }
 
 TEST_CASE("sprite frame does not reveal idle cargo thief when combat raiders are active") {
@@ -211,12 +229,12 @@ TEST_CASE("sprite frame does not reveal idle cargo thief when combat raiders are
     720
   );
 
-  const auto idle_thief = std::ranges::find_if(frame.sprites, [](const hyperverse::SpriteDraw& sprite) {
-    return sprite.texture == hyperverse::SpriteTexture::Drone && sprite.tint_r == Catch::Approx(0.55F) &&
-           sprite.tint_g == Catch::Approx(0.34F) && sprite.tint_b == Catch::Approx(0.16F);
+  const auto idle_thief = std::ranges::find_if(frame.models, [](const hyperverse::ModelDraw& model) {
+    return model.texture == hyperverse::ModelTexture::DroneHostile && model.tint_r == Catch::Approx(0.72F) &&
+           model.tint_g == Catch::Approx(0.68F) && model.tint_b == Catch::Approx(0.62F);
   });
 
-  CHECK(idle_thief == frame.sprites.end());
+  CHECK(idle_thief == frame.models.end());
 }
 
 TEST_CASE("sprite frame draws a red box around locked hostile targets") {

@@ -64,6 +64,25 @@ enum class SpriteTexture {
   Glyph7,
   Glyph8,
   Glyph9,
+  Count,
+};
+
+enum class ModelTexture {
+  DroneFriendly,
+  DroneHostile,
+};
+
+struct ModelDraw {
+  ModelTexture texture{ModelTexture::DroneFriendly};
+  float center_x_ndc{0.0F};
+  float center_y_ndc{0.0F};
+  float size_pixels{56.0F};
+  float rotation_radians{0.0F};
+  float roll_scale{1.0F};
+  float tint_r{1.0F};
+  float tint_g{1.0F};
+  float tint_b{1.0F};
+  float tint_a{1.0F};
 };
 
 struct SpriteDraw {
@@ -131,6 +150,7 @@ struct SpriteFrame {
   std::vector<StarDraw> stars{};
   std::vector<EngineTrailVertexDraw> engine_trails{};
   std::vector<TriangleDraw> triangles{};
+  std::vector<ModelDraw> models{};
   std::vector<SpriteDraw> sprites{};
   std::vector<LineDraw> lines{};
 };

@@ -129,6 +129,7 @@ add_library(
   src/hud_notice.cpp
   src/input.cpp
   src/mining.cpp
+  src/model_mesh.cpp
   src/png_rgba.cpp
   src/physics.cpp
   src/player_lifecycle.cpp
@@ -286,6 +287,7 @@ if(HYPERVERSE_BUILD_TESTS)
     tests/hud_notice_tests.cpp
     tests/input_tests.cpp
     tests/mining_tests.cpp
+    tests/model_mesh_tests.cpp
     tests/pressure_tests.cpp
     tests/player_lifecycle_tests.cpp
     tests/projectile_tests.cpp

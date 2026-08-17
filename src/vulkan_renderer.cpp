@@ -1,5 +1,7 @@
 #include "hyperverse/vulkan_renderer.hpp"
 
+#include "hyperverse/model_mesh.hpp"
+
 #include "png_rgba.hpp"
 
 #include <SDL3/SDL.h>
@@ -89,6 +91,8 @@ struct TrailVertex { float x{}, y{}, normalized_age{}, intensity{}, side{}; };
   for (std::uint32_t index = 0; index < 10U; ++index) {
     images.push_back(crop_rgba(digits, index * 8U, 0U, 8U, 16U));
   }
+  images.push_back(to_loaded_sprite(load_png_rgba("assets/models/drone/textures/drone-friendly-albedo.png")));
+  images.push_back(to_loaded_sprite(load_png_rgba("assets/models/drone/textures/drone-hostile-albedo.png")));
   return images;
 }
 
@@ -118,6 +122,37 @@ void append_sprite_vertices(
       .y = sprite.center_y_ndc + ((rotated_y * 2.0F) / viewport_height),
       .u = corner[2], .v = corner[3],
       .r = sprite.tint_r, .g = sprite.tint_g, .b = sprite.tint_b, .a = sprite.tint_a,
+    });
+  }
+}
+
+void append_model_vertices(
+  std::vector<SpriteVertex>& vertices,
+  const ModelMesh& mesh,
+  const ModelDraw& model,
+  const std::uint32_t width,
+  const std::uint32_t height
+) {
+  const float viewport_width = static_cast<float>(std::max(width, 1U));
+  const float viewport_height = static_cast<float>(std::max(height, 1U));
+  const float cosine = std::cos(model.rotation_radians);
+  const float sine = std::sin(model.rotation_radians);
+  vertices.reserve(vertices.size() + mesh.vertices.size());
+  for (const ModelMeshVertex& source : mesh.vertices) {
+    const float local_x = source.x * model.size_pixels * model.roll_scale;
+    const float local_y = source.y * model.size_pixels;
+    const float rotated_x = (local_x * cosine) - (local_y * sine);
+    const float rotated_y = (local_x * sine) + (local_y * cosine);
+    const float height_shade = std::clamp(0.90F + (source.height * 0.18F), 0.78F, 1.06F);
+    vertices.push_back({
+      .x = model.center_x_ndc + ((rotated_x * 2.0F) / viewport_width),
+      .y = model.center_y_ndc + ((rotated_y * 2.0F) / viewport_height),
+      .u = source.u,
+      .v = source.v,
+      .r = model.tint_r * height_shade,
+      .g = model.tint_g * height_shade,
+      .b = model.tint_b * height_shade,
+      .a = model.tint_a,
     });
   }
 }
@@ -166,6 +201,7 @@ struct VulkanRenderer::Impl {
       create_descriptor_resources();
       create_sampler();
       create_textures();
+      model_mesh_ = load_obj_model_mesh("assets/models/drone/drone.obj");
       create_swapchain();
       create_sync_resources();
     } catch (...) {
@@ -896,6 +932,16 @@ struct VulkanRenderer::Impl {
     }
     draw_vertices(trail_pipeline_, trails);
 
+    for (const ModelTexture texture : {ModelTexture::DroneFriendly, ModelTexture::DroneHostile}) {
+      const std::size_t texture_index = static_cast<std::size_t>(SpriteTexture::Count) + static_cast<std::size_t>(texture);
+      if (texture_index >= textures_.size()) continue;
+      std::vector<SpriteVertex> vertices;
+      for (const ModelDraw& model : frame.models) {
+        if (model.texture == texture) append_model_vertices(vertices, model_mesh_, model, extent_.width, extent_.height);
+      }
+      draw_vertices(sprite_pipeline_, vertices, textures_[texture_index].descriptor);
+    }
+
     for (const SpriteDraw& sprite : frame.sprites) {
       const std::size_t texture_index = static_cast<std::size_t>(sprite.texture);
       if (texture_index >= textures_.size()) continue;
@@ -1038,6 +1084,7 @@ struct VulkanRenderer::Impl {
   VkSemaphore render_finished_{VK_NULL_HANDLE};
   VkFence frame_fence_{VK_NULL_HANDLE};
   std::vector<Texture> textures_{};
+  ModelMesh model_mesh_{};
   std::vector<FrameBuffer> frame_buffers_{};
   bool swapchain_dirty_{false};
 };

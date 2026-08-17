@@ -71,6 +71,28 @@ constexpr float AsteroidRadarMinimumRadius = 400.0F;
   };
 }
 
+[[nodiscard]] hyperverse::ModelDraw make_world_model(
+  hyperverse::ModelTexture texture,
+  hyperverse::Vec2 world_position,
+  hyperverse::Vec2 camera_position,
+  const hyperverse::SectorTuning& sector,
+  std::uint32_t width,
+  std::uint32_t height,
+  float pixel_size,
+  float rotation_radians
+) {
+  const hyperverse::Vec2 relative = hyperverse::wrapped_delta(camera_position, world_position, sector) * hyperverse::PixelsPerWorldUnit;
+  const float screen_x = (static_cast<float>(width) * 0.5F) + relative.x;
+  const float screen_y = (static_cast<float>(height) * ScreenAnchorYFraction) + relative.y;
+  return {
+    .texture = texture,
+    .center_x_ndc = ((screen_x / static_cast<float>(width)) * 2.0F) - 1.0F,
+    .center_y_ndc = ((screen_y / static_cast<float>(height)) * 2.0F) - 1.0F,
+    .size_pixels = pixel_size,
+    .rotation_radians = rotation_radians,
+  };
+}
+
 [[nodiscard]] hyperverse::Vec2 world_to_ndc(
   hyperverse::Vec2 world_position,
   hyperverse::Vec2 camera_position,
@@ -1303,13 +1325,23 @@ SpriteFrame build_sprite_frame(
     const MiningDrone& drone = account.registry().get<MiningDrone>(drone_entity);
     const DronePresence& presence = account.registry().get<DronePresence>(drone_entity);
     if (presence.phase == DronePresencePhase::Hidden) continue;
-    SpriteDraw drone_sprite =
-      make_world_sprite(SpriteTexture::Drone, drone.position, camera.position, sector, width, height, 28.0F, ship_sprite_rotation(drone.facing_radians));
-    drone_sprite.half_height_ndc *= std::max(0.08F, std::abs(std::cos(presence.roll_radians)));
+    ModelDraw drone_model = make_world_model(
+      ModelTexture::DroneFriendly,
+      drone.position,
+      camera.position,
+      sector,
+      width,
+      height,
+      28.0F,
+      ship_sprite_rotation(drone.facing_radians)
+    );
+    drone_model.roll_scale = std::max(0.08F, std::abs(std::cos(presence.roll_radians)));
     if (drone.phase == MiningDronePhase::Mining) {
-      tint_sprite(drone_sprite, 0.55F, 1.0F, 0.65F);
+      drone_model.tint_r = 0.62F;
+      drone_model.tint_g = 1.0F;
+      drone_model.tint_b = 0.72F;
     }
-    frame.sprites.push_back(drone_sprite);
+    frame.models.push_back(drone_model);
   }
   (void)raider_entity;
   for (auto [entity, raider] : account.registry().view<RaiderShip>().each()) {
@@ -1320,8 +1352,8 @@ SpriteFrame build_sprite_frame(
     ) {
       continue;
     }
-    SpriteDraw raider_sprite = make_world_sprite(
-      SpriteTexture::Drone,
+    ModelDraw raider_model = make_world_model(
+      ModelTexture::DroneHostile,
       raider.position,
       camera.position,
       sector,
@@ -1331,14 +1363,21 @@ SpriteFrame build_sprite_frame(
       ship_sprite_rotation(raider.facing_radians)
     );
     const float cloak_alpha = std::clamp(raider.cloak_fade_seconds / RaiderCloakFadeSeconds, 0.0F, 1.0F);
+    raider_model.tint_a = cloak_alpha;
     if (raider.role == RaiderRole::Combat) {
-      tint_sprite(raider_sprite, 0.95F, 0.18F, 0.14F, cloak_alpha);
+      raider_model.tint_r = 1.0F;
+      raider_model.tint_g = 0.82F;
+      raider_model.tint_b = 0.78F;
     } else if (raider.phase == RaiderPhase::Disrupting) {
-      tint_sprite(raider_sprite, 0.86F, 0.32F, 0.12F, cloak_alpha);
+      raider_model.tint_r = 1.0F;
+      raider_model.tint_g = 0.68F;
+      raider_model.tint_b = 0.52F;
     } else {
-      tint_sprite(raider_sprite, 0.55F, 0.34F, 0.16F, cloak_alpha);
+      raider_model.tint_r = 0.72F;
+      raider_model.tint_g = 0.68F;
+      raider_model.tint_b = 0.62F;
     }
-    frame.sprites.push_back(raider_sprite);
+    frame.models.push_back(raider_model);
   }
   if (ship_health.armor > 0.0F) {
     frame.sprites.push_back(make_world_sprite(SpriteTexture::Ship, ship.position, camera.position, sector, width, height, 56.0F, ship_sprite_rotation(ship.facing_radians)));
