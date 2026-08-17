@@ -71,7 +71,7 @@ void GamepadSlot::open_first_available() {
     return;
   }
 
-  for (int index = 0; index < gamepad_count && gamepad_ == nullptr; ++index) {
+  for (int index = 0; index < gamepad_count; ++index) {
     open(gamepads[index]);
   }
 
@@ -79,25 +79,42 @@ void GamepadSlot::open_first_available() {
 }
 
 void GamepadSlot::open(SDL_JoystickID joystick_id) {
-  if (gamepad_ != nullptr) {
+  const auto already_open = std::ranges::find_if(gamepads_, [joystick_id](SDL_Gamepad* gamepad) {
+    return SDL_GetGamepadID(gamepad) == joystick_id;
+  });
+  if (already_open != gamepads_.end()) {
     return;
   }
 
-  gamepad_ = SDL_OpenGamepad(joystick_id);
-  if (gamepad_ != nullptr) {
-    joystick_id_ = SDL_GetGamepadID(gamepad_);
-    const char* name = SDL_GetGamepadName(gamepad_);
+  SDL_Gamepad* gamepad = SDL_OpenGamepad(joystick_id);
+  if (gamepad != nullptr) {
+    gamepads_.push_back(gamepad);
+    if (active_gamepad_ == nullptr) {
+      active_gamepad_ = gamepad;
+    }
+    const char* name = SDL_GetGamepadName(gamepad);
     std::cout << "Gamepad active: " << (name != nullptr ? name : "Unknown gamepad") << "\n";
   }
 }
 
 void GamepadSlot::close_if_removed(SDL_JoystickID joystick_id) {
-  if (gamepad_ != nullptr && joystick_id == joystick_id_) {
-    close();
+  const auto removed = std::ranges::find_if(gamepads_, [joystick_id](SDL_Gamepad* gamepad) {
+    return SDL_GetGamepadID(gamepad) == joystick_id;
+  });
+  if (removed != gamepads_.end()) {
+    SDL_Gamepad* gamepad = *removed;
+    if (active_gamepad_ == gamepad) {
+      active_gamepad_ = nullptr;
+    }
+    SDL_CloseGamepad(gamepad);
+    gamepads_.erase(removed);
+    if (active_gamepad_ == nullptr && !gamepads_.empty()) {
+      active_gamepad_ = gamepads_.front();
+    }
   }
 }
 
-RawInputFrame GamepadSlot::sample() const {
+RawInputFrame GamepadSlot::sample() {
   RawInputFrame raw{};
 
   int key_count = 0;
@@ -126,47 +143,73 @@ RawInputFrame GamepadSlot::sample() const {
     raw.tool_intensity = key_down(SDL_SCANCODE_F) ? 1.0F : 0.0F;
   }
 
-  if (gamepad_ != nullptr) {
+  constexpr float activity_threshold = 0.05F;
+  float strongest_activity = activity_threshold;
+  for (SDL_Gamepad* gamepad : gamepads_) {
+    float activity = 0.0F;
+    for (const SDL_GamepadAxis axis_id : {
+           SDL_GAMEPAD_AXIS_LEFTX,
+           SDL_GAMEPAD_AXIS_LEFTY,
+           SDL_GAMEPAD_AXIS_RIGHTX,
+           SDL_GAMEPAD_AXIS_RIGHTY,
+           SDL_GAMEPAD_AXIS_LEFT_TRIGGER,
+           SDL_GAMEPAD_AXIS_RIGHT_TRIGGER,
+         }) {
+      activity = std::max(activity, std::abs(axis(gamepad, axis_id)));
+    }
+    for (int button = SDL_GAMEPAD_BUTTON_SOUTH; button < SDL_GAMEPAD_BUTTON_COUNT; ++button) {
+      if (SDL_GetGamepadButton(gamepad, static_cast<SDL_GamepadButton>(button))) {
+        activity = 1.0F;
+      }
+    }
+    if (activity > strongest_activity) {
+      strongest_activity = activity;
+      active_gamepad_ = gamepad;
+    }
+  }
+
+  if (active_gamepad_ != nullptr) {
+    SDL_Gamepad* gamepad = active_gamepad_;
     raw.control_mapping = ControlMapping::Gamepad;
     raw.movement_axis = {
-      .x = axis(SDL_GAMEPAD_AXIS_LEFTX),
-      .y = axis(SDL_GAMEPAD_AXIS_LEFTY),
+      .x = axis(gamepad, SDL_GAMEPAD_AXIS_LEFTX),
+      .y = axis(gamepad, SDL_GAMEPAD_AXIS_LEFTY),
     };
     raw.aim_axis = {
-      .x = axis(SDL_GAMEPAD_AXIS_RIGHTX),
-      .y = axis(SDL_GAMEPAD_AXIS_RIGHTY),
+      .x = axis(gamepad, SDL_GAMEPAD_AXIS_RIGHTX),
+      .y = axis(gamepad, SDL_GAMEPAD_AXIS_RIGHTY),
     };
-    raw.confirm = raw.confirm || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_SOUTH);
-    raw.boost = raw.boost || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_EAST);
-    raw.gravity_sling = raw.gravity_sling || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_NORTH);
-    raw.enemy_target_cycle = raw.enemy_target_cycle || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
-    raw.target_cycle = raw.target_cycle || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
-    raw.clear_targets = raw.clear_targets || (SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER) &&
-                                              SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER));
-    raw.particle_fire = raw.particle_fire || SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_WEST);
-    raw.missile_fire = raw.missile_fire || trigger(SDL_GAMEPAD_AXIS_LEFT_TRIGGER) > 0.55F;
-    raw.tool_intensity = std::max(raw.tool_intensity, trigger(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER));
+    raw.confirm = raw.confirm || SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_SOUTH);
+    raw.boost = raw.boost || SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_EAST);
+    raw.gravity_sling = raw.gravity_sling || SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_NORTH);
+    raw.enemy_target_cycle = raw.enemy_target_cycle || SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
+    raw.target_cycle = raw.target_cycle || SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
+    raw.clear_targets = raw.clear_targets || (SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER) &&
+                                              SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER));
+    raw.particle_fire = raw.particle_fire || SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_WEST);
+    raw.missile_fire = raw.missile_fire || trigger(gamepad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER) > 0.55F;
+    raw.tool_intensity = std::max(raw.tool_intensity, trigger(gamepad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER));
   }
 
   return raw;
 }
 
-float GamepadSlot::axis(SDL_GamepadAxis axis_id) const {
+float GamepadSlot::axis(SDL_Gamepad* gamepad, SDL_GamepadAxis axis_id) {
   constexpr float axis_max = 32767.0F;
-  return static_cast<float>(SDL_GetGamepadAxis(gamepad_, axis_id)) / axis_max;
+  return static_cast<float>(SDL_GetGamepadAxis(gamepad, axis_id)) / axis_max;
 }
 
-float GamepadSlot::trigger(SDL_GamepadAxis axis_id) const {
+float GamepadSlot::trigger(SDL_Gamepad* gamepad, SDL_GamepadAxis axis_id) {
   constexpr float axis_max = 32767.0F;
-  return std::clamp(static_cast<float>(SDL_GetGamepadAxis(gamepad_, axis_id)) / axis_max, 0.0F, 1.0F);
+  return std::clamp(static_cast<float>(SDL_GetGamepadAxis(gamepad, axis_id)) / axis_max, 0.0F, 1.0F);
 }
 
 void GamepadSlot::close() {
-  if (gamepad_ != nullptr) {
-    SDL_CloseGamepad(gamepad_);
-    gamepad_ = nullptr;
-    joystick_id_ = 0;
+  for (SDL_Gamepad* gamepad : gamepads_) {
+    SDL_CloseGamepad(gamepad);
   }
+  gamepads_.clear();
+  active_gamepad_ = nullptr;
 }
 
 void log_gamepad_state() {

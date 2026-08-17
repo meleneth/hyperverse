@@ -5,6 +5,7 @@
 #include <SDL3/SDL.h>
 
 #include <string>
+#include <vector>
 
 namespace hyperverse {
 
@@ -49,15 +50,15 @@ public:
   void open_first_available();
   void open(SDL_JoystickID joystick_id);
   void close_if_removed(SDL_JoystickID joystick_id);
-  [[nodiscard]] RawInputFrame sample() const;
+  [[nodiscard]] RawInputFrame sample();
 
 private:
-  [[nodiscard]] float axis(SDL_GamepadAxis axis_id) const;
-  [[nodiscard]] float trigger(SDL_GamepadAxis axis_id) const;
+  [[nodiscard]] static float axis(SDL_Gamepad* gamepad, SDL_GamepadAxis axis_id);
+  [[nodiscard]] static float trigger(SDL_Gamepad* gamepad, SDL_GamepadAxis axis_id);
   void close();
 
-  SDL_Gamepad* gamepad_{nullptr};
-  SDL_JoystickID joystick_id_{0};
+  std::vector<SDL_Gamepad*> gamepads_;
+  SDL_Gamepad* active_gamepad_{nullptr};
 };
 
 void log_gamepad_state();
