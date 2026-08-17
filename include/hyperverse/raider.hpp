@@ -86,6 +86,9 @@ struct RaiderTuning {
   float combat_orbit_arrival_tolerance{90.0F};
   float combat_acceleration{720.0F};
   float turn_rate{8.0F};
+  float asteroid_avoidance_lookahead_seconds{1.6F};
+  float asteroid_avoidance_clearance{130.0F};
+  float asteroid_avoidance_strength{900.0F};
   float cloak_fade_seconds{1.15F};
 };
 

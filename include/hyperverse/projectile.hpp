@@ -72,6 +72,13 @@ struct ExplosionBurst {
   float radius{180.0F};
 };
 
+void spawn_explosion_burst(
+  entt::registry& registry,
+  Vec2 position,
+  float radius = 180.0F,
+  float ttl_seconds = 0.45F
+);
+
 struct ParticleCannonTuning {
   float projectile_speed{1450.0F};
   float projectile_radius{10.0F};

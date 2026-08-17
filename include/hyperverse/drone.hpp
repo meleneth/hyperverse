@@ -25,6 +25,7 @@ enum class DronePresencePhase {
   Following,
   ExitBarrelRoll,
   Hidden,
+  DestroyedAwaitingRespawn,
 };
 
 struct DronePresence {
@@ -35,6 +36,7 @@ struct DronePresence {
 
 struct DronePresenceTuning {
   float barrel_roll_seconds{0.8F};
+  float destroyed_respawn_seconds{15.0F};
 };
 
 void install_drone_presence_event_handlers(
@@ -49,7 +51,8 @@ void update_drone_presence(
   const std::vector<entt::entity>& drones,
   float dt_seconds,
   DomainEventBus& event_bus,
-  const DronePresenceTuning& tuning = {}
+  const DronePresenceTuning& tuning = {},
+  Vec2 respawn_origin = {}
 );
 
 enum class MiningDroneWorkTransition {
@@ -74,6 +77,8 @@ struct MiningDrone {
   float facing_radians{0.0F};
   float work_angle_radians{0.0F};
   float extracted_mass{0.0F};
+  float integrity{60.0F};
+  float max_integrity{60.0F};
 };
 
 [[nodiscard]] bool transition_mining_drone_work(

@@ -343,6 +343,44 @@ TEST_CASE("active raiders fire particle pairs toward the player") {
   }
 }
 
+TEST_CASE("raider particle fire destroys a drone before threatening the player") {
+  TestAccountWorld world;
+  hyperverse::AccountCtx account = world.account_context();
+  const entt::entity player = make_player(world, {.x = 500.0F, .y = 100.0F});
+  const entt::entity drone_entity = world.registry.create();
+  world.registry.emplace<hyperverse::MiningDrone>(
+    drone_entity,
+    hyperverse::MiningDrone{.position = {.x = 200.0F, .y = 100.0F}, .integrity = 20.0F, .max_integrity = 60.0F}
+  );
+  world.registry.emplace<hyperverse::DronePresence>(
+    drone_entity,
+    hyperverse::DronePresence{.phase = hyperverse::DronePresencePhase::Following}
+  );
+  const std::vector<entt::entity> drones{drone_entity};
+  hyperverse::install_drone_presence_event_handlers(world.registry, drones, world.event_bus);
+  const entt::entity shot = world.registry.create();
+  world.registry.emplace<hyperverse::ParticleShot>(
+    shot,
+    hyperverse::ParticleShot{
+      .position = {.x = 100.0F, .y = 100.0F},
+      .velocity = {.x = 200.0F, .y = 0.0F},
+      .damage = 25.0F,
+      .owner = hyperverse::ProjectileOwner::Raider,
+    }
+  );
+
+  const hyperverse::ShipHealth player_before = world.registry.get<hyperverse::ShipHealth>(player);
+  (void)hyperverse::update_particle_projectiles(
+    hyperverse::ProjectileSimCtx{tick_context(account, 1.0F), player}
+  );
+  world.event_bus.process();
+
+  CHECK(world.registry.get<hyperverse::MiningDrone>(drone_entity).integrity == Catch::Approx(0.0F));
+  CHECK(world.registry.get<hyperverse::DronePresence>(drone_entity).phase == hyperverse::DronePresencePhase::DestroyedAwaitingRespawn);
+  CHECK(world.registry.get<hyperverse::ShipHealth>(player).armor == Catch::Approx(player_before.armor));
+  CHECK(explosion_count(world.registry) == 1);
+}
+
 TEST_CASE("raider particle cannon uses slower dedicated cadence") {
   TestAccountWorld world;
   hyperverse::AccountCtx account = world.account_context();

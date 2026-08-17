@@ -2,6 +2,7 @@
 
 #include "hyperverse/engine_trail.hpp"
 #include "hyperverse/projectile.hpp"
+#include "hyperverse/asteroid_collision.hpp"
 
 #include <boost/sml.hpp>
 
@@ -262,13 +263,74 @@ void accelerate_raider_toward(RaiderShip& raider, Vec2 target, const SectorTunin
 
   const Vec2 delta = wrapped_delta(raider.position, target, sector);
   const float distance = length(delta);
-  const Vec2 thrust_direction = distance > 0.001F ? normalize_or_zero(delta) : normalize_or_zero(raider.velocity) * -1.0F;
-  if (length(thrust_direction) > 0.0001F) {
-    raider.velocity += thrust_direction * std::max(0.0F, tuning.combat_acceleration) * scaled_dt;
+  const Vec2 desired_velocity = distance > 0.001F ? normalize_or_zero(delta) * std::max(0.0F, max_speed) : Vec2{};
+  const Vec2 velocity_error = desired_velocity - raider.velocity;
+  const float acceleration_step = std::max(0.0F, tuning.combat_acceleration) * scaled_dt;
+  const Vec2 velocity_change = clamp_length(velocity_error, acceleration_step);
+  const Vec2 thrust_direction = normalize_or_zero(velocity_change);
+  if (length(velocity_change) > 0.0001F) {
+    raider.velocity += velocity_change;
     rotate_raider_toward(raider, thrust_direction, tuning.turn_rate, scaled_dt);
   }
-  raider.velocity = clamp_length(raider.velocity, max_speed);
   raider.position = wrap_position(raider.position + (raider.velocity * scaled_dt), sector);
+}
+
+struct RaiderAttackTarget {
+  Vec2 position{};
+  Vec2 velocity{};
+};
+
+[[nodiscard]] RaiderAttackTarget select_attack_target(
+  const RaiderShip& raider,
+  entt::registry& registry,
+  const ShipMotion& player,
+  const SectorTuning& sector
+) {
+  RaiderAttackTarget selected{.position = player.position, .velocity = player.velocity};
+  float nearest_distance = std::numeric_limits<float>::max();
+  for (auto [entity, drone, presence] : registry.view<MiningDrone, DronePresence>().each()) {
+    (void)entity;
+    if (drone.integrity <= 0.0F || presence.phase != DronePresencePhase::Following) {
+      continue;
+    }
+    const float distance = wrapped_distance(raider.position, drone.position, sector);
+    if (distance < nearest_distance) {
+      nearest_distance = distance;
+      selected = {.position = drone.position, .velocity = drone.velocity};
+    }
+  }
+  return selected;
+}
+
+[[nodiscard]] Vec2 asteroid_avoidance_offset(
+  const RaiderShip& raider,
+  entt::registry& registry,
+  const SectorTuning& sector,
+  const RaiderTuning& tuning
+) {
+  Vec2 avoidance{};
+  const float horizon = std::max(0.0F, tuning.asteroid_avoidance_lookahead_seconds);
+  for (auto [entity, asteroid] : registry.view<AsteroidBody>().each()) {
+    (void)entity;
+    const Vec2 relative_position = wrapped_delta(raider.position, asteroid.position, sector);
+    const Vec2 relative_velocity = asteroid.velocity - raider.velocity;
+    const float speed_squared = dot(relative_velocity, relative_velocity);
+    const float closest_seconds = speed_squared > 0.0001F
+                                    ? std::clamp(-dot(relative_position, relative_velocity) / speed_squared, 0.0F, horizon)
+                                    : 0.0F;
+    const Vec2 closest_delta = relative_position + (relative_velocity * closest_seconds);
+    const float safe_radius = asteroid_solid_radius(asteroid.radius) + std::max(0.0F, tuning.asteroid_avoidance_clearance);
+    const float closest_distance = length(closest_delta);
+    if (closest_distance >= safe_radius) {
+      continue;
+    }
+    Vec2 away = normalize_or_zero(closest_delta) * -1.0F;
+    if (length(away) <= 0.0001F) {
+      away = normalize_or_zero(Vec2{.x = -relative_velocity.y, .y = relative_velocity.x});
+    }
+    avoidance += away * (1.0F - (closest_distance / std::max(safe_radius, 0.001F)));
+  }
+  return clamp_length(avoidance, 1.0F) * std::max(0.0F, tuning.asteroid_avoidance_strength);
 }
 
 [[nodiscard]] float combat_orbit_speed_scale(RaiderTask task) {
@@ -299,6 +361,7 @@ void accelerate_raider_toward(RaiderShip& raider, Vec2 target, const SectorTunin
 
 void update_combat_raider(
   RaiderShip& raider,
+  entt::registry& registry,
   const ShipMotion& ship,
   const SectorTuning& sector,
   float dt_seconds,
@@ -307,7 +370,8 @@ void update_combat_raider(
   DomainEventBus* event_bus
 ) {
   const float scaled_dt = std::max(0.0F, dt_seconds);
-  const Vec2 to_player = wrapped_delta(raider.position, ship.position, sector);
+  const RaiderAttackTarget attack_target = select_attack_target(raider, registry, ship, sector);
+  const Vec2 to_player = wrapped_delta(raider.position, attack_target.position, sector);
   const float player_distance = length(to_player);
   if (std::abs(raider.orbit_radians) <= 0.0001F && player_distance > 0.001F) {
     raider.orbit_radians = std::atan2(-to_player.y, -to_player.x);
@@ -323,12 +387,15 @@ void update_combat_raider(
     raider.orbit_radians += std::numbers::pi_v<float> * 2.0F;
   }
 
-  const Vec2 forward = length(ship.velocity) > 24.0F ? normalize_or_zero(ship.velocity) : Vec2{.x = std::cos(ship.facing_radians), .y = std::sin(ship.facing_radians)};
+  Vec2 forward = length(attack_target.velocity) > 24.0F ? normalize_or_zero(attack_target.velocity) : normalize_or_zero(to_player);
+  if (length(forward) <= 0.0001F) {
+    forward = {.x = std::cos(raider.facing_radians), .y = std::sin(raider.facing_radians)};
+  }
   const Vec2 right{.x = -forward.y, .y = forward.x};
   const Vec2 orbit_offset =
     (forward * std::cos(raider.orbit_radians) * tuning.combat_orbit_x_radius * radius_scale) +
     (right * std::sin(raider.orbit_radians) * tuning.combat_orbit_y_radius * radius_scale);
-  const Vec2 desired_position = wrap_position(ship.position + orbit_offset, sector);
+  const Vec2 desired_position = wrap_position(attack_target.position + orbit_offset + asteroid_avoidance_offset(raider, registry, sector, tuning), sector);
   const float distance_to_orbit = length(wrapped_delta(raider.position, desired_position, sector));
 
   (void)transition_raider_phase(
@@ -475,7 +542,7 @@ RaiderHudSnapshot update_raider_threat(
   if (raider.role == RaiderRole::Combat) {
     const Vec2 to_player = wrapped_delta(raider.position, ship.position, sector);
     const float player_distance = length(to_player);
-    update_combat_raider(raider, ship, sector, dt_seconds, tuning, raider_entity, event_bus);
+    update_combat_raider(raider, registry, ship, sector, dt_seconds, tuning, raider_entity, event_bus);
     return {
       .phase = raider.phase,
       .task = raider.task,

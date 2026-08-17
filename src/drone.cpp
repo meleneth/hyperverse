@@ -32,9 +32,11 @@ struct presence_spawn_rolling {};
 struct presence_following {};
 struct presence_exit_rolling {};
 struct presence_hidden {};
+struct presence_destroyed {};
 struct spawn_requested {};
 struct exit_requested {};
 struct barrel_roll_completed {};
+struct destroyed {};
 
 struct DronePresenceMachine {
   auto operator()() const {
@@ -45,6 +47,9 @@ struct DronePresenceMachine {
         state<presence_spawn_rolling> + event<exit_requested> = state<presence_exit_rolling>,
         state<presence_exit_rolling> + event<barrel_roll_completed> = state<presence_hidden>,
         state<presence_hidden> + event<spawn_requested> = state<presence_spawn_rolling>,
+        state<presence_following> + event<destroyed> = state<presence_destroyed>,
+        state<presence_spawn_rolling> + event<destroyed> = state<presence_destroyed>,
+        state<presence_destroyed> + event<spawn_requested> = state<presence_spawn_rolling>,
         state<presence_following> + event<spawn_requested> = state<presence_spawn_rolling>,
         state<presence_exit_rolling> + event<spawn_requested> = state<presence_spawn_rolling>,
         state<presence_spawn_rolling> + event<spawn_requested> = state<presence_spawn_rolling>);
@@ -67,6 +72,10 @@ void replay_presence(sml::sm<DronePresenceMachine>& machine, DronePresencePhase 
     machine.process_event(exit_requested{});
     machine.process_event(barrel_roll_completed{});
     return;
+  case DronePresencePhase::DestroyedAwaitingRespawn:
+    machine.process_event(barrel_roll_completed{});
+    machine.process_event(destroyed{});
+    return;
   }
 }
 
@@ -77,6 +86,8 @@ DronePresencePhase read_presence(const sml::sm<DronePresenceMachine>& machine) {
     return DronePresencePhase::ExitBarrelRoll;
   if (machine.is(sml::state<presence_hidden>))
     return DronePresencePhase::Hidden;
+  if (machine.is(sml::state<presence_destroyed>))
+    return DronePresencePhase::DestroyedAwaitingRespawn;
   return DronePresencePhase::SpawnBarrelRoll;
 }
 
@@ -305,21 +316,32 @@ void install_drone_presence_event_handlers(entt::registry& registry, const std::
     sml::sm<DronePresenceMachine> machine;
     replay_presence(machine, presence.phase);
     const bool accepted = request == DomainEventType::DroneExitRequested ? machine.process_event(exit_requested{})
+                          : request == DomainEventType::DroneDestroyed ? machine.process_event(destroyed{})
                           : request == DomainEventType::DroneSpawnRequested
                               ? machine.process_event(spawn_requested{})
                               : machine.process_event(barrel_roll_completed{});
     if (!accepted)
       return;
     presence.phase = read_presence(machine);
-    presence.phase_seconds_remaining =
-        presence.phase == DronePresencePhase::SpawnBarrelRoll || presence.phase == DronePresencePhase::ExitBarrelRoll
-            ? tuning.barrel_roll_seconds
-            : 0.0F;
+    presence.phase_seconds_remaining = presence.phase == DronePresencePhase::DestroyedAwaitingRespawn
+                                         ? tuning.destroyed_respawn_seconds
+                                         : presence.phase == DronePresencePhase::SpawnBarrelRoll || presence.phase == DronePresencePhase::ExitBarrelRoll
+                                             ? tuning.barrel_roll_seconds
+                                             : 0.0F;
     presence.roll_radians = 0.0F;
     if (presence.phase == DronePresencePhase::Hidden) {
       registry.get<MiningDrone>(event.subject).velocity = {};
       event_bus.enqueue(DomainEventType::DroneDespawned,
                         DomainEvent{.type = DomainEventType::DroneDespawned, .subject = event.subject});
+    }
+    if (presence.phase == DronePresencePhase::DestroyedAwaitingRespawn) {
+      MiningDrone& drone = registry.get<MiningDrone>(event.subject);
+      drone.velocity = {};
+      drone.target = entt::null;
+      drone.cargo_target = entt::null;
+    } else if (presence.phase == DronePresencePhase::SpawnBarrelRoll) {
+      MiningDrone& drone = registry.get<MiningDrone>(event.subject);
+      drone.integrity = drone.max_integrity;
     }
   };
   event_bus.appendListener(DomainEventType::DroneExitRequested, [transition](const DomainEvent& event) {
@@ -331,21 +353,33 @@ void install_drone_presence_event_handlers(entt::registry& registry, const std::
   event_bus.appendListener(DomainEventType::DroneBarrelRollCompleted, [transition](const DomainEvent& event) {
     transition(event, DomainEventType::DroneBarrelRollCompleted);
   });
+  event_bus.appendListener(DomainEventType::DroneDestroyed, [transition](const DomainEvent& event) {
+    transition(event, DomainEventType::DroneDestroyed);
+  });
 }
 
 void update_drone_presence(entt::registry& registry, const std::vector<entt::entity>& drones, float dt_seconds,
-                           DomainEventBus& event_bus, const DronePresenceTuning& tuning) {
+                           DomainEventBus& event_bus, const DronePresenceTuning& tuning, Vec2 respawn_origin) {
   const float dt = std::max(0.0F, dt_seconds);
   for (const entt::entity entity : drones) {
     DronePresence& presence = registry.get<DronePresence>(entity);
-    if (presence.phase != DronePresencePhase::SpawnBarrelRoll && presence.phase != DronePresencePhase::ExitBarrelRoll)
+    if (presence.phase != DronePresencePhase::SpawnBarrelRoll && presence.phase != DronePresencePhase::ExitBarrelRoll &&
+        presence.phase != DronePresencePhase::DestroyedAwaitingRespawn)
       continue;
     presence.phase_seconds_remaining = std::max(0.0F, presence.phase_seconds_remaining - dt);
     const float duration = std::max(tuning.barrel_roll_seconds, 0.001F);
-    presence.roll_radians = TauRadians * (1.0F - (presence.phase_seconds_remaining / duration));
-    if (presence.phase_seconds_remaining <= 0.0F) {
-      event_bus.enqueue(DomainEventType::DroneBarrelRollCompleted,
-                        DomainEvent{.type = DomainEventType::DroneBarrelRollCompleted, .subject = entity});
+    if (presence.phase != DronePresencePhase::DestroyedAwaitingRespawn) {
+      presence.roll_radians = TauRadians * (1.0F - (presence.phase_seconds_remaining / duration));
+    }
+    if (presence.phase_seconds_remaining <= 0.0001F) {
+      if (presence.phase == DronePresencePhase::DestroyedAwaitingRespawn) {
+        MiningDrone& drone = registry.get<MiningDrone>(entity);
+        drone.position = respawn_origin;
+      }
+      const DomainEventType event_type = presence.phase == DronePresencePhase::DestroyedAwaitingRespawn
+                                           ? DomainEventType::DroneSpawnRequested
+                                           : DomainEventType::DroneBarrelRollCompleted;
+      event_bus.enqueue(event_type, DomainEvent{.type = event_type, .subject = entity});
     }
   }
 }

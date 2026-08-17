@@ -461,7 +461,17 @@ std::optional<ParticleCannonFireCommand> request_raider_particle_fire(
 ) {
   const EntityCtx raider_entity = ctx.entity_context();
   const RaiderShip& raider = raider_entity.get<RaiderShip>();
-  const ShipMotion& target_motion = target.get<ShipMotion>();
+  ShipMotion target_motion{};
+  if (target.registry().all_of<ShipMotion>(target.self())) {
+    target_motion = target.get<ShipMotion>();
+  } else if (target.registry().all_of<MiningDrone>(target.self())) {
+    const MiningDrone& drone = target.get<MiningDrone>();
+    target_motion.position = drone.position;
+    target_motion.velocity = drone.velocity;
+    target_motion.facing_radians = drone.facing_radians;
+  } else {
+    return std::nullopt;
+  }
   const Vec2 to_target = wrapped_delta(raider.position, target_motion.position, ctx.sector());
   const bool trigger_active = trigger.active && raider.integrity > 0.0F && length(to_target) <= tuning.raider_fire_range;
   if (!advance_particle_cannon_fsm(ctx.cannon(), trigger_active, ctx.dt(), raider_cannon_tuning(tuning)) || length(to_target) <= 0.0001F) {
@@ -678,13 +688,52 @@ ParticleCannonHudSnapshot update_particle_projectiles(
                 .amount = projectile.damage,
               }
             );
+            if (raider.integrity <= 0.0F) {
+              spawn_explosion_burst(registry, raider.position, 190.0F, 0.65F);
+            }
             hit = true;
             break;
           }
         }
       }
     } else {
-      if (projectile_hit_shape(
+      for (auto [drone_entity, drone, presence] : registry.view<MiningDrone, DronePresence>().each()) {
+        if (hit || drone.integrity <= 0.0F || presence.phase != DronePresencePhase::Following) {
+          continue;
+        }
+        if (projectile_hit_shape(
+              start_position,
+              projectile.position,
+              drone.position,
+              SpriteCollisionShape::Particle,
+              projectile.radius,
+              SpriteCollisionShape::Ship,
+              14.0F,
+              ctx.sector(),
+              hud.precise_collision_checks
+            )) {
+          drone.integrity = std::max(0.0F, drone.integrity - projectile.damage);
+          ctx.event_bus().enqueue(
+            DomainEventType::ParticleImpact,
+            DomainEvent{
+              .type = DomainEventType::ParticleImpact,
+              .subject = projectile_entity,
+              .target = drone_entity,
+              .position = projectile.position,
+              .amount = projectile.damage,
+            }
+          );
+          if (drone.integrity <= 0.0F) {
+            ctx.event_bus().enqueue(
+              DomainEventType::DroneDestroyed,
+              DomainEvent{.type = DomainEventType::DroneDestroyed, .subject = drone_entity, .position = drone.position}
+            );
+            spawn_explosion_burst(registry, drone.position, 110.0F, 0.65F);
+          }
+          hit = true;
+        }
+      }
+      if (!hit && projectile_hit_shape(
             start_position,
             projectile.position,
             ctx.player_motion().position,
@@ -778,12 +827,7 @@ HomingMissileHudSnapshot update_homing_missiles(
               .amount = missile.damage,
             }
           );
-          const entt::entity explosion = registry.create();
-          registry.emplace<ExplosionBurst>(
-            explosion,
-            ExplosionBurst{.position = missile.position, .ttl_seconds = tuning.explosion_ttl_seconds, .radius = tuning.explosion_radius}
-          );
-          (void)explosion;
+          spawn_explosion_burst(registry, missile.position, tuning.explosion_radius, tuning.explosion_ttl_seconds);
           ++hud.impacts;
           hit = true;
         }
@@ -802,6 +846,18 @@ HomingMissileHudSnapshot update_homing_missiles(
   }
 
   return hud;
+}
+
+void spawn_explosion_burst(entt::registry& registry, Vec2 position, float radius, float ttl_seconds) {
+  const entt::entity explosion = registry.create();
+  registry.emplace<ExplosionBurst>(
+    explosion,
+    ExplosionBurst{
+      .position = position,
+      .ttl_seconds = std::max(0.001F, ttl_seconds),
+      .radius = std::max(0.0F, radius),
+    }
+  );
 }
 
 void update_explosion_bursts(entt::registry& registry, float dt_seconds) {

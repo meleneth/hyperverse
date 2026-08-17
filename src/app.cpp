@@ -43,6 +43,7 @@
 #include <cmath>
 #include <exception>
 #include <iostream>
+#include <limits>
 #include <optional>
 #include <string>
 #include <utility>
@@ -143,6 +144,16 @@ public:
     install_game_session_event_handlers(game_session_, account_.event_bus());
     player_lifecycle_.home_position = ship_.position;
     install_player_lifecycle_event_handlers(player_lifecycle_, account_.registry(), player_, entities_.mining_drones, account_.event_bus());
+    account_.event_bus().appendListener(DomainEventType::PlayerDied, [this](const DomainEvent& event) {
+      if (event.subject == player_) {
+        spawn_explosion_burst(
+          account_.registry(),
+          event.position,
+          lethal_collision_tuning_.player_explosion_radius,
+          lethal_collision_tuning_.explosion_ttl_seconds
+        );
+      }
+    });
     install_drone_presence_event_handlers(account_.registry(), entities_.mining_drones, account_.event_bus(), drone_presence_tuning_);
     install_system_menu_event_handlers(system_menu_, account_.event_bus());
     install_target_lock_event_handlers(
@@ -264,7 +275,14 @@ private:
     HudNotice& hud_notice = account_.registry().get<HudNotice>(player_);
     ShipHealth& ship_health = account_.registry().get<ShipHealth>(player_);
     update_player_lifecycle(player_lifecycle_, account_.registry(), player_, timestep_.tick_seconds(), account_.event_bus());
-    update_drone_presence(account_.registry(), entities_.mining_drones, timestep_.tick_seconds(), account_.event_bus(), drone_presence_tuning_);
+    update_drone_presence(
+      account_.registry(),
+      entities_.mining_drones,
+      timestep_.tick_seconds(),
+      account_.event_bus(),
+      drone_presence_tuning_,
+      ship_.position
+    );
     if (player_lifecycle_.phase != PlayerLifecyclePhase::Alive || ship_health.armor <= 0.0F) {
       latest_intent_ = {};
     }
@@ -293,6 +311,7 @@ private:
     if (sling_input.gravity_sling_requested && length(sling_input.primary_aim) <= 0.0001F && has_locked_target(target_lock)) {
       sling_input.primary_aim = normalize_or_zero(target_lock.relative_position);
     }
+    const Vec2 player_start_position = ship_.position;
     gravity_sling_hud = update_gravity_sling(
       gravity_sling,
       account_.registry(),
@@ -306,6 +325,21 @@ private:
     );
     if (gravity_sling.phase == GravitySlingPhase::FreeFlight) {
       simulate_assisted_flight(account_, ship_, latest_intent_, flight_, sector_, timestep_.tick_seconds());
+    }
+    if (ship_health.armor > 0.0F) {
+      const AsteroidImpact impact = detect_asteroid_impact(
+        player_start_position,
+        ship_.velocity,
+        lethal_collision_tuning_.player_radius,
+        account_.registry(),
+        sector_,
+        timestep_.tick_seconds()
+      );
+      if (impact.hit) {
+        ship_.position = impact.position;
+        ship_health.shields = 0.0F;
+        ship_health.armor = 0.0F;
+      }
     }
     if (ship_health.armor <= 0.0F) {
       reset_engine_trail(engine_trail);
@@ -333,6 +367,7 @@ private:
     for (entt::entity drone_entity : entities_.mining_drones) {
       if (account_.registry().get<DronePresence>(drone_entity).phase != DronePresencePhase::Following) continue;
       MiningDrone& drone = account_.registry().get<MiningDrone>(drone_entity);
+      const Vec2 drone_start_position = drone.position;
       const MiningDroneHudSnapshot current_drone = update_mining_drone(
         drone,
         account_.registry(),
@@ -343,6 +378,29 @@ private:
         mining_drone_tuning_,
         &account_.event_bus()
       );
+      const AsteroidImpact drone_impact = detect_asteroid_impact(
+        drone_start_position,
+        drone.velocity,
+        lethal_collision_tuning_.drone_radius,
+        account_.registry(),
+        sector_,
+        timestep_.tick_seconds()
+      );
+      if (drone_impact.hit) {
+        drone.position = drone_impact.position;
+        drone.velocity = {};
+        drone.integrity = 0.0F;
+        account_.event_bus().enqueue(
+          DomainEventType::DroneDestroyed,
+          DomainEvent{.type = DomainEventType::DroneDestroyed, .subject = drone_entity, .position = drone_impact.position}
+        );
+        spawn_explosion_burst(
+          account_.registry(),
+          drone_impact.position,
+          lethal_collision_tuning_.drone_explosion_radius,
+          lethal_collision_tuning_.explosion_ttl_seconds
+        );
+      }
       update_drone_engine_trail(
         account_.registry().get<EngineTrailModel>(drone_entity),
         drone,
@@ -397,6 +455,7 @@ private:
     raider_hud = {};
     std::vector<std::pair<entt::entity, RaiderHudSnapshot>> active_raiders;
     for (auto [raider_entity, raider] : account_.registry().view<RaiderShip>().each()) {
+      const Vec2 raider_start_position = raider.position;
       RaiderHudSnapshot current_raider =
         update_raider_threat(
           raider,
@@ -409,6 +468,28 @@ private:
           raider_entity,
           &account_.event_bus()
         );
+      if (current_raider.active) {
+        const AsteroidImpact raider_impact = detect_asteroid_impact(
+          raider_start_position,
+          raider.velocity,
+          lethal_collision_tuning_.raider_radius,
+          account_.registry(),
+          sector_,
+          timestep_.tick_seconds()
+        );
+        if (raider_impact.hit) {
+          raider.position = raider_impact.position;
+          raider.velocity = {};
+          raider.integrity = 0.0F;
+          current_raider = {};
+          spawn_explosion_burst(
+            account_.registry(),
+            raider_impact.position,
+            lethal_collision_tuning_.raider_explosion_radius,
+            lethal_collision_tuning_.explosion_ttl_seconds
+          );
+        }
+      }
       if (EngineTrailModel* trail = account_.registry().try_get<EngineTrailModel>(raider_entity); trail != nullptr) {
         if (current_raider.active) {
           update_raider_engine_trail(*trail, raider, sector_, timestep_.tick_seconds(), raider_tuning_, engine_trail_tuning_);
@@ -467,9 +548,24 @@ private:
     }
     for (const auto& [raider_entity, current_raider] : active_raiders) {
       WeaponCtx raider_weapon{tick_ctx.entity_context(raider_entity)};
+      entt::entity raider_target = player_;
+      float nearest_drone_distance = std::numeric_limits<float>::max();
+      const RaiderShip& firing_raider = account_.registry().get<RaiderShip>(raider_entity);
+      for (const entt::entity drone_entity : entities_.mining_drones) {
+        const MiningDrone& drone = account_.registry().get<MiningDrone>(drone_entity);
+        const DronePresence& presence = account_.registry().get<DronePresence>(drone_entity);
+        if (drone.integrity <= 0.0F || presence.phase != DronePresencePhase::Following) {
+          continue;
+        }
+        const float distance = wrapped_distance(firing_raider.position, drone.position, sector_);
+        if (distance < nearest_drone_distance) {
+          nearest_drone_distance = distance;
+          raider_target = drone_entity;
+        }
+      }
       if (const std::optional<ParticleCannonFireCommand> raider_fire = request_raider_particle_fire(
             raider_weapon,
-            tick_ctx.entity_context(player_),
+            tick_ctx.entity_context(raider_target),
             WeaponTrigger{.active = current_raider.active},
             particle_cannon_tuning_
           )) {
@@ -524,6 +620,7 @@ private:
   ParticleCannonTuning particle_cannon_tuning_{};
   HomingMissileTuning homing_missile_tuning_{};
   RaiderTuning raider_tuning_{};
+  LethalCollisionTuning lethal_collision_tuning_{};
   RadarHudTuning radar_tuning_;
   RadarControlModel radar_control_{};
   FlightInputMapper input_mapper_;

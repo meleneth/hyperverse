@@ -50,3 +50,38 @@ TEST_CASE("initially spawned drone rolls before it follows") {
   world.event_bus.process();
   CHECK(world.registry.get<hyperverse::DronePresence>(drone).phase == hyperverse::DronePresencePhase::Following);
 }
+
+TEST_CASE("destroyed drone respawns after fifteen seconds") {
+  hyperverse::test::TestAccountWorld world;
+  const entt::entity drone_entity = world.registry.create();
+  world.registry.emplace<hyperverse::MiningDrone>(
+    drone_entity,
+    hyperverse::MiningDrone{.position = {.x = 400.0F, .y = 500.0F}, .integrity = 0.0F}
+  );
+  world.registry.emplace<hyperverse::DronePresence>(
+    drone_entity,
+    hyperverse::DronePresence{.phase = hyperverse::DronePresencePhase::Following}
+  );
+  const std::vector<entt::entity> drones{drone_entity};
+  hyperverse::install_drone_presence_event_handlers(world.registry, drones, world.event_bus);
+
+  world.event_bus.enqueue(
+    hyperverse::DomainEventType::DroneDestroyed,
+    hyperverse::DomainEvent{.type = hyperverse::DomainEventType::DroneDestroyed, .subject = drone_entity}
+  );
+  world.event_bus.process();
+  CHECK(world.registry.get<hyperverse::DronePresence>(drone_entity).phase == hyperverse::DronePresencePhase::DestroyedAwaitingRespawn);
+  CHECK(world.registry.get<hyperverse::DronePresence>(drone_entity).phase_seconds_remaining == Catch::Approx(15.0F));
+
+  hyperverse::update_drone_presence(world.registry, drones, 14.9F, world.event_bus, {}, {.x = 100.0F, .y = 200.0F});
+  world.event_bus.process();
+  CHECK(world.registry.get<hyperverse::DronePresence>(drone_entity).phase == hyperverse::DronePresencePhase::DestroyedAwaitingRespawn);
+
+  hyperverse::update_drone_presence(world.registry, drones, 0.1F, world.event_bus, {}, {.x = 100.0F, .y = 200.0F});
+  world.event_bus.process();
+  const hyperverse::MiningDrone& drone = world.registry.get<hyperverse::MiningDrone>(drone_entity);
+  CHECK(world.registry.get<hyperverse::DronePresence>(drone_entity).phase == hyperverse::DronePresencePhase::SpawnBarrelRoll);
+  CHECK(drone.integrity == Catch::Approx(drone.max_integrity));
+  CHECK(drone.position.x == Catch::Approx(100.0F));
+  CHECK(drone.position.y == Catch::Approx(200.0F));
+}

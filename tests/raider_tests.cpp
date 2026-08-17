@@ -364,6 +364,62 @@ TEST_CASE("combat raider movement is acceleration constrained") {
   CHECK(hyperverse::length(combat.velocity) < 500.0F);
 }
 
+TEST_CASE("combat raiders prioritize live drones over the player") {
+  entt::registry registry;
+  const entt::entity drone_entity = registry.create();
+  registry.emplace<hyperverse::MiningDrone>(
+    drone_entity,
+    hyperverse::MiningDrone{.position = {.x = 1000.0F, .y = 1800.0F}}
+  );
+  registry.emplace<hyperverse::DronePresence>(
+    drone_entity,
+    hyperverse::DronePresence{.phase = hyperverse::DronePresencePhase::Following}
+  );
+  hyperverse::RaiderShip combat{
+    .position = {.x = 1000.0F, .y = 1000.0F},
+    .role = hyperverse::RaiderRole::Combat,
+  };
+
+  (void)hyperverse::update_raider_threat(
+    combat,
+    registry,
+    {.phase = hyperverse::CargoEscortPhase::Mining},
+    {.position = {.x = 1800.0F, .y = 1000.0F}},
+    {.width = 9000.0F, .height = 9000.0F},
+    0.1F,
+    {.max_speed = 500.0F, .combat_orbit_x_radius = 0.0F, .combat_orbit_y_radius = 0.0F, .combat_acceleration = 100.0F}
+  );
+
+  CHECK(combat.velocity.y > 0.0F);
+  CHECK(std::abs(combat.velocity.y) > std::abs(combat.velocity.x));
+}
+
+TEST_CASE("combat raiders steer away from predicted asteroid impacts") {
+  entt::registry registry;
+  const entt::entity asteroid = registry.create();
+  registry.emplace<hyperverse::AsteroidBody>(
+    asteroid,
+    hyperverse::AsteroidBody{.position = {.x = 1250.0F, .y = 1000.0F}, .radius = 180.0F}
+  );
+  hyperverse::RaiderShip combat{
+    .position = {.x = 1000.0F, .y = 1000.0F},
+    .velocity = {.x = 300.0F, .y = 0.0F},
+    .role = hyperverse::RaiderRole::Combat,
+  };
+
+  (void)hyperverse::update_raider_threat(
+    combat,
+    registry,
+    {.phase = hyperverse::CargoEscortPhase::Mining},
+    {.position = {.x = 2000.0F, .y = 1200.0F}},
+    {.width = 9000.0F, .height = 9000.0F},
+    0.1F,
+    {.max_speed = 500.0F, .combat_orbit_x_radius = 0.0F, .combat_orbit_y_radius = 0.0F, .combat_acceleration = 200.0F}
+  );
+
+  CHECK(std::abs(combat.velocity.y) > 0.1F);
+}
+
 TEST_CASE("active raiders fade in from cloak") {
   entt::registry registry;
   hyperverse::RaiderShip combat{

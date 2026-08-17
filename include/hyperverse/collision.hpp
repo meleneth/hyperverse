@@ -39,7 +39,34 @@ struct SweptCircleHit {
   float separation{0.0F};
 };
 
+struct AsteroidImpact {
+  bool hit{false};
+  entt::entity asteroid{entt::null};
+  Vec2 position{};
+  float fraction{0.0F};
+  float impact_speed{0.0F};
+};
+
+struct LethalCollisionTuning {
+  float player_radius{28.0F};
+  float drone_radius{14.0F};
+  float raider_radius{23.0F};
+  float player_explosion_radius{260.0F};
+  float drone_explosion_radius{110.0F};
+  float raider_explosion_radius{190.0F};
+  float explosion_ttl_seconds{0.65F};
+};
+
 [[nodiscard]] SweptCircleHit swept_circle_intersection(Vec2 relative_position, Vec2 motion, float combined_radius);
+
+[[nodiscard]] AsteroidImpact detect_asteroid_impact(
+  Vec2 start_position,
+  Vec2 velocity,
+  float ship_radius,
+  entt::registry& registry,
+  const SectorTuning& sector,
+  float dt_seconds
+);
 
 [[nodiscard]] CollisionHudSnapshot predict_ship_asteroid_collision(
   const ShipMotion& ship,

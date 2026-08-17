@@ -43,6 +43,7 @@ enum class DomainEventType {
   DroneSpawnRequested,
   DroneBarrelRollCompleted,
   DroneDespawned,
+  DroneDestroyed,
   SystemMenuToggleRequested,
   SystemMenuSelectionChanged,
   SystemMenuConfirmed,

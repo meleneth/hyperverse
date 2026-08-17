@@ -1324,7 +1324,7 @@ SpriteFrame build_sprite_frame(
   for (entt::entity drone_entity : mining_drones) {
     const MiningDrone& drone = account.registry().get<MiningDrone>(drone_entity);
     const DronePresence& presence = account.registry().get<DronePresence>(drone_entity);
-    if (presence.phase == DronePresencePhase::Hidden) continue;
+    if (presence.phase == DronePresencePhase::Hidden || presence.phase == DronePresencePhase::DestroyedAwaitingRespawn) continue;
     ModelDraw drone_model = make_world_model(
       ModelTexture::DroneFriendly,
       drone.position,

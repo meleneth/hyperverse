@@ -115,9 +115,9 @@ The current Vulkan prototype draws Sector7-derived sprites, hardware-uploaded te
 brackets, text glyph HUD, mining beams, dual particle cannon shots, cargo boxes, active cargo train
 links, Gravity Sling constraint feedback, an escort gate route, drones, and raiders.
 
-The ship uses assisted desired-motion flight, a short burst-speed mode, shields, armor, semantic
-input mapping, and a fixed-step simulation loop. Boost doubles top speed briefly and falls off on a
-short hockey-stick curve. Boost detaches cargo tow links.
+The ship uses assisted desired-motion flight, a short high-thrust boost, shields, armor, semantic
+input mapping, and a fixed-step simulation loop. Continued thrust can build velocity without an
+artificial top speed. Boost detaches cargo tow links.
 
 Asteroids are large moving bodies with explicit mass, structural break progress, two break levels,
 composition, ore rarity, velocity, and spin. Kinetic particle shots apply linear impulse, and
@@ -132,18 +132,20 @@ world-space velocity.
 
 Ship and raider movement now use a stricter spacecraft model: thrust changes velocity, micro
 rotation changes facing, braking is counterthrust, and boost increases thrust authority rather than
-setting speed directly. Collision prediction accounts for high-speed tunneling with swept-radius
-checks whose candidate budget scales from speed and zoom/view tuning.
+setting speed directly. Swept gameplay collision checks prevent fast ships from tunneling through
+asteroids; contact destroys players, drones, and raiders and produces an explosion.
 
 Mining drones operate autonomously against valid target sizes, spread around work targets, return
 to formation, haul pending cargo from the mining site, and break off when their target is invalid.
-The current prototype still starts with eight strong drones so high-end behavior is visible before
-progression is designed.
+Destroyed drones respawn after 15 seconds. The current prototype still starts with eight strong
+drones so high-end behavior is visible before progression is designed.
 
 Cargo is generated from extracted mass and ore value, inherits ore color, follows the ship as a
 train during escort, stages as a group near the jump gate, and extracts sequentially. Raiders can
 attack cargo and the player; gate arrival can spawn combat raiders. Raider AI now tracks explicit
-tasks including cargo theft, player harassment, covering an active thief, and full aggression.
+tasks including cargo theft, drone suppression, player harassment, covering an active thief, and
+full aggression. Combat raiders prioritize live drones, fly acceleration-limited swooping passes,
+and steer away from predicted asteroid impacts.
 Threat escalation now spawns additional combat raider contacts around the player; high pressure
 contacts enter full aggression.
 
@@ -165,9 +167,9 @@ current threat level, next threat countdown, and progress toward the next escala
 - Mining drones cannot work the largest asteroid tier. The player must break big rocks into medium or small pieces before drones can safely mine them.
 - Mined cargo starts at the gathering site. The extraction gate is derived as the furthest wrapped-sector point from that gathering site.
 - During escort, cargo follows the player as a train. Once the player reaches the extraction gate, cargo remains gate-bound and stages as a group near the gate before loading starts.
-- Burst of speed doubles the ship's normal top speed, then falls off on a short hockey-stick curve over roughly a third of a second. Bursting while towing cargo breaks the cargo train coupling.
+- Boost temporarily doubles thrust authority. Bursting while towing cargo breaks the cargo train coupling.
 - Gate extraction processes cargo boxes sequentially at roughly five seconds per box. A round is not complete until extraction finishes.
-- Reaching the extraction gate spawns combat raiders that prioritize killing the player over stealing cargo.
+- Reaching the extraction gate spawns combat raiders that suppress live drones before attacking the player.
 - Asteroid damage, fragmentation, consumption, particle fire/impact, cargo lifecycle events, and drone target release are event-visible gameplay facts. New behavior should prefer event responders over hidden direct call chains.
 - GrandCentral owns the EventPP bus and context objects expose it. App still contains too much orchestration and should keep shrinking toward platform setup plus GrandCentral startup.
 

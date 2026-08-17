@@ -22,7 +22,7 @@ Primary tuning dimensions:
 - acceleration
 - braking
 - rotational response
-- speed envelope assist
+- HUD speed reference
 - assisted facing
 - lateral correction
 - camera position lag
@@ -32,7 +32,8 @@ Primary tuning dimensions:
 
 `flight_computer_assist` converts semantic movement and aim intent into a `ThrusterCommand`.
 `apply_thruster_physics` consumes that command and owns physical integration: thrust, rotation
-rate limiting, speed envelope assist, and sector wrapping. This keeps the eventual flight computer
+rate limiting and sector wrapping. Velocity is not clamped; the HUD speed reference only scales
+presentation. This keeps the eventual flight computer
 replaceable without loosening the underlying spacecraft model.
 
 Raiders follow the same physical rule: their steering code chooses thrust direction and facing, then
@@ -241,7 +242,10 @@ Current tasks:
 - cover an active cargo thief
 - full aggression
 
-Cargo thieves prioritize cargo pod theft. Combat raiders harass the player by default, switch to cover behavior when a thief is actively disrupting or towing cargo, and switch to full aggression during extraction or terminal gate pressure.
+Cargo thieves prioritize cargo pod theft. Combat raiders prioritize live drones as tactical
+targets, then harass the player, cover an active thief, or enter full aggression. Their moving
+attack points produce acceleration-limited swooping passes, while predictive steering diverts
+passes around lethal asteroid paths.
 
 ## Weapons
 
@@ -286,6 +290,11 @@ distance-ranked candidate set around the ship. The number of swept checks scales
 and zoom/view tuning, then each candidate gets a cheap swept-radius line test before the precise
 Jolt shape cast. HUD snapshots expose candidate and swept-check counts so prediction cost and
 warning quality can be tuned instead of guessed.
+
+Gameplay impacts use an unbounded swept segment for each fixed tick, so increasing ship speed
+cannot skip an asteroid between endpoint checks. Asteroid contact is lethal to the player, mining
+drones, and raiders. Destruction spawns a visible explosion; destroyed drones enter a dedicated
+15-second respawn state before restoring integrity and returning through their spawn roll.
 
 Projectile impacts use the same cheap-first approach. Each projectile records its start and end
 position for the tick. Distant targets are rejected by a combined-radius endpoint check and then a

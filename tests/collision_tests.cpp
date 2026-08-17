@@ -55,6 +55,30 @@ TEST_CASE("swept collision catches fast ship crossing an asteroid between ticks"
   CHECK(collision.swept_checks == 1U);
 }
 
+TEST_CASE("gameplay asteroid impact catches a ship crossing between ticks") {
+  entt::registry registry;
+  const entt::entity asteroid = registry.create();
+  registry.emplace<hyperverse::AsteroidBody>(
+    asteroid,
+    hyperverse::AsteroidBody{.position = {.x = 200.0F, .y = 100.0F}, .radius = 12.0F}
+  );
+
+  const hyperverse::AsteroidImpact impact = hyperverse::detect_asteroid_impact(
+    {.x = 100.0F, .y = 100.0F},
+    {.x = 10000.0F, .y = 0.0F},
+    3.0F,
+    registry,
+    {.width = 9000.0F, .height = 9000.0F},
+    0.016F
+  );
+
+  CHECK(impact.hit);
+  CHECK(impact.asteroid == asteroid);
+  CHECK(impact.fraction > 0.0F);
+  CHECK(impact.fraction < 1.0F);
+  CHECK(impact.impact_speed == Catch::Approx(10000.0F));
+}
+
 TEST_CASE("collision prediction scales swept checks from speed and zoom tuning") {
   entt::registry registry;
   for (int index = 0; index < 20; ++index) {

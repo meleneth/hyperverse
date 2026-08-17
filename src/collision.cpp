@@ -52,6 +52,41 @@ SweptCircleHit swept_circle_intersection(Vec2 relative_position, Vec2 motion, fl
   return {.hit = false, .separation = separation};
 }
 
+AsteroidImpact detect_asteroid_impact(
+  Vec2 start_position,
+  Vec2 velocity,
+  float ship_radius,
+  entt::registry& registry,
+  const SectorTuning& sector,
+  float dt_seconds
+) {
+  const float dt = std::max(0.0F, dt_seconds);
+  AsteroidImpact nearest{};
+  float nearest_fraction = 1.0F;
+
+  for (auto [entity, asteroid] : registry.view<AsteroidBody>().each()) {
+    const Vec2 asteroid_start = wrap_position(asteroid.position - (asteroid.velocity * dt), sector);
+    const Vec2 relative_position = wrapped_delta(start_position, asteroid_start, sector);
+    const Vec2 relative_motion = (velocity - asteroid.velocity) * dt;
+    const float combined_radius = std::max(0.0F, ship_radius) + asteroid_solid_radius(asteroid.radius);
+    const SweptCircleHit hit = swept_circle_intersection(relative_position, relative_motion, combined_radius);
+    if (!hit.hit || hit.fraction > nearest_fraction) {
+      continue;
+    }
+
+    nearest_fraction = hit.fraction;
+    nearest = {
+      .hit = true,
+      .asteroid = entity,
+      .position = wrap_position(start_position + (velocity * dt * hit.fraction), sector),
+      .fraction = hit.fraction,
+      .impact_speed = length(velocity - asteroid.velocity),
+    };
+  }
+
+  return nearest;
+}
+
 CollisionHudSnapshot predict_ship_asteroid_collision(
   const ShipMotion& ship,
   entt::registry& registry,
