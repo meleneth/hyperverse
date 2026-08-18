@@ -148,6 +148,112 @@ TEST_CASE("idle mining drones form up behind the player ship") {
   CHECK(hud.target_distance > 0.0F);
 }
 
+TEST_CASE("mining drone navigation is acceleration constrained") {
+  entt::registry registry;
+  const entt::entity drone_entity = registry.create();
+  hyperverse::MiningDrone& drone = registry.emplace<hyperverse::MiningDrone>(
+    drone_entity,
+    hyperverse::MiningDrone{.position = {.x = 500.0F, .y = 500.0F}}
+  );
+
+  (void)hyperverse::update_mining_drone(
+    drone,
+    registry,
+    {},
+    {.position = {.x = 1000.0F, .y = 500.0F}, .facing_radians = 3.1415926F},
+    {.width = 9000.0F, .height = 9000.0F},
+    0.1F,
+    {.max_speed = 500.0F, .acceleration = 100.0F}
+  );
+
+  CHECK(hyperverse::length(drone.velocity) == Catch::Approx(10.0F));
+}
+
+TEST_CASE("mining drones steer around asteroids on the route to work") {
+  entt::registry registry;
+  const entt::entity target = registry.create();
+  registry.emplace<hyperverse::AsteroidBody>(
+    target,
+    hyperverse::AsteroidBody{.position = {.x = 1000.0F, .y = 100.0F}, .radius = 40.0F}
+  );
+  registry.emplace<hyperverse::MiningResource>(target);
+  const entt::entity obstacle = registry.create();
+  registry.emplace<hyperverse::AsteroidBody>(
+    obstacle,
+    hyperverse::AsteroidBody{.position = {.x = 300.0F, .y = 135.0F}, .radius = 140.0F}
+  );
+  const entt::entity drone_entity = registry.create();
+  hyperverse::MiningDrone& drone = registry.emplace<hyperverse::MiningDrone>(
+    drone_entity,
+    hyperverse::MiningDrone{.position = {.x = 100.0F, .y = 100.0F}, .work_angle_radians = 3.1415926F}
+  );
+
+  (void)hyperverse::update_mining_drone(
+    drone,
+    registry,
+    {.phase = hyperverse::TargetLockPhase::Locked, .target = target},
+    {.position = {.x = 100.0F, .y = 100.0F}},
+    {.width = 9000.0F, .height = 9000.0F},
+    0.1F,
+    {.max_speed = 500.0F, .work_standoff = 40.0F, .work_angle_rotation_radians_per_second = 0.0F, .acceleration = 500.0F}
+  );
+
+  CHECK(drone.velocity.x > 0.0F);
+  CHECK(drone.velocity.y < 0.0F);
+}
+
+TEST_CASE("mining drones apply separation thrust before their paths intersect") {
+  entt::registry registry;
+  const entt::entity first_entity = registry.create();
+  const entt::entity second_entity = registry.create();
+  hyperverse::MiningDrone& first = registry.emplace<hyperverse::MiningDrone>(
+    first_entity,
+    hyperverse::MiningDrone{.position = {.x = 100.0F, .y = 100.0F}}
+  );
+  registry.emplace<hyperverse::MiningDrone>(
+    second_entity,
+    hyperverse::MiningDrone{.position = {.x = 140.0F, .y = 100.0F}}
+  );
+
+  (void)hyperverse::update_mining_drone(
+    first,
+    registry,
+    {},
+    {.position = {.x = 1000.0F, .y = 100.0F}, .facing_radians = 3.1415926F},
+    {.width = 9000.0F, .height = 9000.0F},
+    0.1F,
+    {.max_speed = 500.0F, .formation_trail_distance = 0.0F, .formation_spread = 0.0F, .acceleration = 500.0F}
+  );
+
+  CHECK(std::abs(first.velocity.y) > 0.1F);
+}
+
+TEST_CASE("mining drone contact constraint resolves residual overlap") {
+  entt::registry registry;
+  const entt::entity first_entity = registry.create();
+  const entt::entity second_entity = registry.create();
+  registry.emplace<hyperverse::MiningDrone>(
+    first_entity,
+    hyperverse::MiningDrone{.position = {.x = 100.0F, .y = 100.0F}, .velocity = {.x = 20.0F, .y = 0.0F}}
+  );
+  registry.emplace<hyperverse::MiningDrone>(
+    second_entity,
+    hyperverse::MiningDrone{.position = {.x = 110.0F, .y = 100.0F}, .velocity = {.x = -20.0F, .y = 0.0F}}
+  );
+
+  hyperverse::resolve_mining_drone_overlaps(
+    registry,
+    {first_entity, second_entity},
+    {.width = 9000.0F, .height = 9000.0F},
+    {.collision_radius = 14.0F}
+  );
+
+  const hyperverse::MiningDrone& first = registry.get<hyperverse::MiningDrone>(first_entity);
+  const hyperverse::MiningDrone& second = registry.get<hyperverse::MiningDrone>(second_entity);
+  CHECK(hyperverse::wrapped_distance(first.position, second.position, {.width = 9000.0F, .height = 9000.0F}) == Catch::Approx(28.0F));
+  CHECK(second.velocity.x - first.velocity.x >= 0.0F);
+}
+
 TEST_CASE("mining drone work angles rotate slowly over time") {
   entt::registry registry;
   hyperverse::MiningDrone drone{.position = {.x = 500.0F, .y = 500.0F}, .work_angle_radians = 6.20F};

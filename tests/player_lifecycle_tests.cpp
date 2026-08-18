@@ -85,3 +85,27 @@ TEST_CASE("destroyed drone respawns after fifteen seconds") {
   CHECK(drone.position.x == Catch::Approx(100.0F));
   CHECK(drone.position.y == Catch::Approx(200.0F));
 }
+
+TEST_CASE("destroying a drone clears its engine trail immediately") {
+  hyperverse::test::TestAccountWorld world;
+  const entt::entity drone_entity = world.registry.create();
+  world.registry.emplace<hyperverse::MiningDrone>(drone_entity);
+  world.registry.emplace<hyperverse::DronePresence>(
+    drone_entity,
+    hyperverse::DronePresence{.phase = hyperverse::DronePresencePhase::Following}
+  );
+  hyperverse::EngineTrailModel& trail = world.registry.emplace<hyperverse::EngineTrailModel>(drone_entity);
+  trail.active_sources = 2U;
+  trail.engines[0].count = 4U;
+  const std::vector<entt::entity> drones{drone_entity};
+  hyperverse::install_drone_presence_event_handlers(world.registry, drones, world.event_bus);
+
+  world.event_bus.enqueue(
+    hyperverse::DomainEventType::DroneDestroyed,
+    hyperverse::DomainEvent{.type = hyperverse::DomainEventType::DroneDestroyed, .subject = drone_entity}
+  );
+  world.event_bus.process();
+
+  CHECK(trail.active_sources == 0U);
+  CHECK(trail.engines[0].count == 0U);
+}

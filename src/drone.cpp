@@ -1,14 +1,15 @@
 #include "hyperverse/drone.hpp"
 
 #include "hyperverse/asteroid_fragmentation.hpp"
+#include "hyperverse/asteroid_collision.hpp"
 #include "hyperverse/asteroid_mass.hpp"
 #include "hyperverse/cargo_box.hpp"
+#include "hyperverse/engine_trail.hpp"
 
 #include <boost/sml.hpp>
 
 #include <algorithm>
 #include <cmath>
-#include <limits>
 
 namespace hyperverse {
 namespace {
@@ -234,25 +235,89 @@ void update_facing_from_velocity(MiningDrone& drone, float dead_stick_speed) {
   return box.state == CargoBoxState::PendingPickup || box.state == CargoBoxState::BeingHauled;
 }
 
-void move_drone_toward(MiningDrone& drone, Vec2 target, const SectorTuning& sector, float dt_seconds,
-                       const MiningDroneTuning& tuning) {
+[[nodiscard]] Vec2 drone_avoidance(
+  const MiningDrone& drone,
+  entt::registry& registry,
+  Vec2 planned_velocity,
+  const SectorTuning& sector,
+  const MiningDroneTuning& tuning
+) {
+  Vec2 steering{};
+  entt::entity self = entt::null;
+  for (auto [entity, candidate] : registry.view<MiningDrone>().each()) {
+    if (&candidate == &drone) {
+      self = entity;
+      break;
+    }
+  }
+  const float asteroid_horizon = std::max(0.0F, tuning.asteroid_avoidance_lookahead_seconds);
+  for (auto [entity, asteroid] : registry.view<AsteroidBody>().each()) {
+    (void)entity;
+    const Vec2 relative_position = wrapped_delta(drone.position, asteroid.position, sector);
+    const Vec2 relative_velocity = asteroid.velocity - planned_velocity;
+    const float speed_squared = dot(relative_velocity, relative_velocity);
+    const float closest_seconds = speed_squared > 0.0001F
+                                    ? std::clamp(-dot(relative_position, relative_velocity) / speed_squared, 0.0F, asteroid_horizon)
+                                    : 0.0F;
+    const Vec2 closest_delta = relative_position + (relative_velocity * closest_seconds);
+    const float safe_radius = asteroid_solid_radius(asteroid.radius) + std::max(0.0F, tuning.asteroid_avoidance_clearance);
+    const float closest_distance = length(closest_delta);
+    if (closest_distance >= safe_radius) {
+      continue;
+    }
+    Vec2 away = normalize_or_zero(closest_delta) * -1.0F;
+    if (length(away) <= 0.0001F) {
+      away = normalize_or_zero(Vec2{.x = -relative_velocity.y, .y = relative_velocity.x});
+    }
+    steering += away * (1.0F - (closest_distance / std::max(safe_radius, 0.001F))) * tuning.asteroid_avoidance_weight;
+  }
+
+  const float separation_radius = std::max(0.0F, tuning.separation_radius);
+  const float separation_horizon = std::max(0.0F, tuning.separation_lookahead_seconds);
+  for (auto [entity, other] : registry.view<MiningDrone>().each()) {
+    (void)entity;
+    if (&other == &drone || other.integrity <= 0.0F) {
+      continue;
+    }
+    const Vec2 relative_position = wrapped_delta(drone.position, other.position, sector);
+    const Vec2 relative_velocity = other.velocity - planned_velocity;
+    const float speed_squared = dot(relative_velocity, relative_velocity);
+    const float closest_seconds = speed_squared > 0.0001F
+                                    ? std::clamp(-dot(relative_position, relative_velocity) / speed_squared, 0.0F, separation_horizon)
+                                    : 0.0F;
+    const Vec2 closest_delta = relative_position + (relative_velocity * closest_seconds);
+    const float closest_distance = length(closest_delta);
+    if (closest_distance >= separation_radius) {
+      continue;
+    }
+    Vec2 away = normalize_or_zero(closest_delta) * -1.0F;
+    if (length(away) <= 0.0001F) {
+      away = entt::to_integral(self) < entt::to_integral(entity) ? Vec2{.x = 0.0F, .y = -1.0F} : Vec2{.x = 0.0F, .y = 1.0F};
+    }
+    steering += away * (1.0F - (closest_distance / std::max(separation_radius, 0.001F))) * tuning.separation_weight;
+  }
+  return steering;
+}
+
+void move_drone_toward(MiningDrone& drone, entt::registry& registry, Vec2 target, Vec2 target_velocity,
+                       const SectorTuning& sector, float dt_seconds, const MiningDroneTuning& tuning) {
   const float scaled_dt = std::max(0.0F, dt_seconds);
   const Vec2 delta = wrapped_delta(drone.position, target, sector);
   const float distance = length(delta);
-  if (distance <= 0.001F || scaled_dt <= 0.0F) {
-    drone.velocity = {};
+  if (scaled_dt <= 0.0F) {
     return;
   }
 
-  const Vec2 desired_velocity = normalize_or_zero(delta) * tuning.max_speed;
-  const Vec2 step = desired_velocity * scaled_dt;
-  if (length(step) >= distance) {
-    drone.velocity = delta * (1.0F / std::max(scaled_dt, std::numeric_limits<float>::epsilon()));
-    drone.position = target;
-  } else {
-    drone.velocity = desired_velocity;
-    drone.position = wrap_position(drone.position + step, sector);
+  const float acceleration = std::max(0.0F, tuning.acceleration);
+  const float stopping_speed = std::sqrt(std::max(0.0F, 2.0F * acceleration * distance));
+  const float approach_speed = std::min(std::max(0.0F, tuning.max_speed), stopping_speed);
+  Vec2 desired_velocity = target_velocity + (normalize_or_zero(delta) * approach_speed);
+  const Vec2 avoidance = drone_avoidance(drone, registry, desired_velocity, sector, tuning);
+  if (length(avoidance) > 0.0001F) {
+    desired_velocity = target_velocity + (normalize_or_zero(normalize_or_zero(delta) + avoidance) * approach_speed);
   }
+  drone.velocity += clamp_length(desired_velocity - drone.velocity, acceleration * scaled_dt);
+  drone.position = wrap_position(drone.position + (drone.velocity * scaled_dt), sector);
   update_facing_from_velocity(drone, tuning.facing_dead_stick_speed);
 }
 
@@ -274,7 +339,7 @@ void move_drone_toward(MiningDrone& drone, Vec2 target, const SectorTuning& sect
     hud.target = drone.cargo_target;
     hud.target_distance = distance;
     if (distance > tuning.cargo_pickup_tolerance) {
-      move_drone_toward(drone, box.position, sector, dt_seconds, tuning);
+      move_drone_toward(drone, registry, box.position, box.velocity, sector, dt_seconds, tuning);
     } else {
       (void)transition_cargo_box(box, CargoBoxTransition::StartHaul, drone.cargo_target, event_bus);
       (void)transition_mining_drone_cargo(drone, MiningDroneCargoTransition::CargoPickedUp);
@@ -291,7 +356,7 @@ void move_drone_toward(MiningDrone& drone, Vec2 target, const SectorTuning& sect
   hud.target = drone.cargo_target;
   hud.target_distance = distance;
   if (distance > tuning.cargo_delivery_tolerance) {
-    move_drone_toward(drone, delivery_position, sector, dt_seconds, tuning);
+    move_drone_toward(drone, registry, delivery_position, {}, sector, dt_seconds, tuning);
     box.position = drone.position;
     box.velocity = drone.velocity;
   } else {
@@ -339,6 +404,9 @@ void install_drone_presence_event_handlers(entt::registry& registry, const std::
       drone.velocity = {};
       drone.target = entt::null;
       drone.cargo_target = entt::null;
+      if (EngineTrailModel* trail = registry.try_get<EngineTrailModel>(event.subject); trail != nullptr) {
+        reset_engine_trail(*trail);
+      }
     } else if (presence.phase == DronePresencePhase::SpawnBarrelRoll) {
       MiningDrone& drone = registry.get<MiningDrone>(event.subject);
       drone.integrity = drone.max_integrity;
@@ -466,14 +534,7 @@ MiningDroneHudSnapshot update_mining_drone(MiningDrone& drone, entt::registry& r
     const Vec2 to_formation = wrapped_delta(drone.position, formation_position, sector);
     (void)transition_mining_drone_work(drone, MiningDroneWorkTransition::ReturnToFormation);
     hud.target_distance = length(to_formation);
-    if (hud.target_distance > tuning.arrival_tolerance) {
-      drone.velocity = normalize_or_zero(to_formation) * tuning.max_speed;
-      update_facing_from_velocity(drone, tuning.facing_dead_stick_speed);
-      drone.position = wrap_position(drone.position + (drone.velocity * dt_seconds), sector);
-    } else {
-      drone.velocity = ship.velocity;
-      update_facing_from_velocity(drone, tuning.facing_dead_stick_speed);
-    }
+    move_drone_toward(drone, registry, formation_position, ship.velocity, sector, dt_seconds, tuning);
     hud.phase = drone.phase;
     hud.target = drone.target;
     return hud;
@@ -490,12 +551,10 @@ MiningDroneHudSnapshot update_mining_drone(MiningDrone& drone, entt::registry& r
 
   if (length(to_work_position) > tuning.arrival_tolerance) {
     (void)transition_mining_drone_work(drone, MiningDroneWorkTransition::TravelToWork);
-    drone.velocity = normalize_or_zero(to_work_position) * tuning.max_speed;
-    update_facing_from_velocity(drone, tuning.facing_dead_stick_speed);
-    drone.position = wrap_position(drone.position + (drone.velocity * dt_seconds), sector);
+    move_drone_toward(drone, registry, work_position, asteroid.velocity, sector, dt_seconds, tuning);
   } else {
     (void)transition_mining_drone_work(drone, MiningDroneWorkTransition::BeginMining);
-    drone.velocity = {};
+    move_drone_toward(drone, registry, work_position, asteroid.velocity, sector, dt_seconds, tuning);
     resource.integrity = std::max(0.0F, resource.integrity - (tuning.integrity_damage_per_second * scaled_dt));
     const float extracted_mass =
         extract_asteroid_mass(registry, drone.target, tuning.extraction_per_second * scaled_dt);
@@ -507,6 +566,51 @@ MiningDroneHudSnapshot update_mining_drone(MiningDrone& drone, entt::registry& r
   hud.target = drone.target;
   hud.extracted_mass = drone.extracted_mass;
   return hud;
+}
+
+void resolve_mining_drone_overlaps(
+  entt::registry& registry,
+  const std::vector<entt::entity>& drones,
+  const SectorTuning& sector,
+  const MiningDroneTuning& tuning
+) {
+  const float minimum_distance = std::max(0.0F, tuning.collision_radius) * 2.0F;
+  for (std::size_t outer = 0; outer < drones.size(); ++outer) {
+    if (!registry.valid(drones[outer]) || !registry.all_of<MiningDrone>(drones[outer])) {
+      continue;
+    }
+    MiningDrone& first = registry.get<MiningDrone>(drones[outer]);
+    if (first.integrity <= 0.0F) {
+      continue;
+    }
+    for (std::size_t inner = outer + 1U; inner < drones.size(); ++inner) {
+      if (!registry.valid(drones[inner]) || !registry.all_of<MiningDrone>(drones[inner])) {
+        continue;
+      }
+      MiningDrone& second = registry.get<MiningDrone>(drones[inner]);
+      if (second.integrity <= 0.0F) {
+        continue;
+      }
+      Vec2 delta = wrapped_delta(first.position, second.position, sector);
+      const float distance = length(delta);
+      if (distance >= minimum_distance) {
+        continue;
+      }
+      if (distance <= 0.0001F) {
+        delta = {.x = 1.0F, .y = 0.0F};
+      }
+      const Vec2 normal = normalize_or_zero(delta);
+      const float correction = (minimum_distance - distance) * 0.5F;
+      first.position = wrap_position(first.position - (normal * correction), sector);
+      second.position = wrap_position(second.position + (normal * correction), sector);
+      const float closing_speed = dot(second.velocity - first.velocity, normal);
+      if (closing_speed < 0.0F) {
+        const Vec2 velocity_correction = normal * (closing_speed * 0.5F);
+        first.velocity += velocity_correction;
+        second.velocity -= velocity_correction;
+      }
+    }
+  }
 }
 
 } // namespace hyperverse

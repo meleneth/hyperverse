@@ -76,6 +76,10 @@ void update_drone_engine_trail(
   const MiningDroneTuning& tuning,
   const EngineTrailTuning& trail_tuning
 ) {
+  if (drone.integrity <= 0.0F) {
+    reset_engine_trail(trail);
+    return;
+  }
   const float intensity = movement_intensity(drone.velocity, tuning.max_speed);
   const Vec2 exhaust_direction = direction_from_angle(drone.facing_radians + (TauRadians * 0.5F));
   std::array<EngineTrailNozzle, 2> nozzles{};
@@ -420,6 +424,7 @@ private:
         drone_hud.target_distance = current_drone.target_distance;
       }
     }
+    resolve_mining_drone_overlaps(account_.registry(), entities_.mining_drones, sector_, mining_drone_tuning_);
 
     cargo_hud = update_cargo_manifest(cargo_manifest, account_.registry(), quota_);
     escort_hud = update_cargo_escort_state(cargo_escort, cargo_hud, latest_intent_, &account_.event_bus());

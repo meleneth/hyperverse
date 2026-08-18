@@ -105,6 +105,14 @@ struct MiningDroneTuning {
   float max_target_distance_from_ship{2200.0F};
   float cargo_pickup_tolerance{34.0F};
   float cargo_delivery_tolerance{42.0F};
+  float acceleration{1100.0F};
+  float asteroid_avoidance_lookahead_seconds{1.5F};
+  float asteroid_avoidance_clearance{105.0F};
+  float asteroid_avoidance_weight{2.4F};
+  float separation_radius{72.0F};
+  float separation_lookahead_seconds{0.8F};
+  float separation_weight{2.0F};
+  float collision_radius{14.0F};
 };
 
 struct MiningDroneHudSnapshot {
@@ -123,6 +131,13 @@ struct MiningDroneHudSnapshot {
   float dt_seconds,
   const MiningDroneTuning& tuning = {},
   DomainEventBus* event_bus = nullptr
+);
+
+void resolve_mining_drone_overlaps(
+  entt::registry& registry,
+  const std::vector<entt::entity>& drones,
+  const SectorTuning& sector,
+  const MiningDroneTuning& tuning = {}
 );
 
 }  // namespace hyperverse

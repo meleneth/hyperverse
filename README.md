@@ -139,6 +139,8 @@ Mining drones operate autonomously against valid target sizes, spread around wor
 to formation, haul pending cargo from the mining site, and break off when their target is invalid.
 Destroyed drones respawn after 15 seconds. The current prototype still starts with eight strong
 drones so high-end behavior is visible before progression is designed.
+Drone formation, mining, and cargo routes use acceleration-limited thrust with predictive asteroid
+avoidance and neighbor separation; destroyed drones clear their engine trails immediately.
 
 Cargo is generated from extracted mass and ore value, inherits ore color, follows the ship as a
 train during escort, stages as a group near the jump gate, and extracts sequentially. Raiders can

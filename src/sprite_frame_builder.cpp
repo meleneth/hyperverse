@@ -1313,7 +1313,11 @@ SpriteFrame build_sprite_frame(
   }
   const EngineTrailTuning engine_trail_tuning{};
   for (auto [entity, engine_trail] : account.registry().view<EngineTrailModel>().each()) {
-    (void)entity;
+    if (const DronePresence* presence = account.registry().try_get<DronePresence>(entity);
+        presence != nullptr &&
+        (presence->phase == DronePresencePhase::Hidden || presence->phase == DronePresencePhase::DestroyedAwaitingRespawn)) {
+      continue;
+    }
     for (const EngineTrailEngine& engine : engine_trail.engines) {
       append_engine_trail_ribbon(frame.engine_trails, engine, camera.position, sector, width, height, engine_trail_tuning);
     }

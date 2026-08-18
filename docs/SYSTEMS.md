@@ -328,6 +328,12 @@ Endgame may support approximately 8 drones, but this is a tuning target rather t
 
 Drone movement speed, acceleration/formation response, mining efficiency, extraction efficiency, and travel-to-work behavior should become upgradeable equipment axes. Current builds start with strong values so the slice shows the intended high-end feel first.
 
+Every drone route uses one acceleration-limited steering primitive. Desired formation, work, and
+cargo velocities are blended with swept-lookahead asteroid avoidance and predictive drone-drone
+separation. A minimum-distance contact constraint resolves any residual pair overlap after steering.
+Drone navigation never assigns cruise velocity or snaps to a destination. Destruction
+also resets renderer-neutral engine trail state before the drone enters its respawn timer.
+
 The current playable build starts with 8 strong mining drones. That is a development fixture for
 making high-end drone behavior visible before progression, loadouts, and role counts are designed.
 
