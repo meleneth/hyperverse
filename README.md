@@ -44,12 +44,14 @@ Build and test the deployable Steam Deck bundle in Valve's pinned Steam Linux Ru
 
 ### Tracy profiling
 
-Profiling is optional and disabled in normal builds. Configure a dedicated instrumented build with:
+Profiling is optional and disabled in normal builds. Build and launch the instrumented game with:
 
 ```sh
-cmake -S . -B build-tracy -DHYPERVERSE_ENABLE_TRACY=ON -DHYPERVERSE_BUILD_TESTS=OFF
-cmake --build build-tracy -j2
+./scripts/run-tracy.sh
 ```
+
+Pass `--build-only` to compile without launching. `JOBS`, `BUILD_TYPE`, and `TRACY_BUILD_DIR` may be
+set to override their defaults.
 
 Start the Tracy 0.13.1 profiler, connect to the running `build-tracy/hyperverse` client, and capture.
 The initial timeline exposes complete frames, fixed simulation ticks, SDL event pumping, render-frame
