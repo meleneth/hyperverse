@@ -1,6 +1,7 @@
 #include "hyperverse/vulkan_renderer.hpp"
 
 #include "hyperverse/model_mesh.hpp"
+#include "hyperverse/profiling.hpp"
 
 #include "png_rgba.hpp"
 
@@ -971,6 +972,7 @@ struct VulkanRenderer::Impl {
   }
 
   void draw_frame(const SpriteFrame& frame) {
+    HYPERVERSE_PROFILE_ZONE("Vulkan draw and present");
     if (swapchain_dirty_) recreate_swapchain();
     if (swapchain_dirty_ || extent_.width == 0 || extent_.height == 0) return;
     vk_check(vkWaitForFences(device_, 1, &frame_fence_, VK_TRUE, UINT64_MAX), "vkWaitForFences");

@@ -3,6 +3,7 @@
 #include "hyperverse/engine_trail.hpp"
 #include "hyperverse/projectile.hpp"
 #include "hyperverse/asteroid_collision.hpp"
+#include "hyperverse/profiling.hpp"
 
 #include <boost/sml.hpp>
 
@@ -529,6 +530,7 @@ RaiderHudSnapshot update_raider_threat(
   entt::entity raider_entity,
   DomainEventBus* event_bus
 ) {
+  HYPERVERSE_PROFILE_ZONE("Raider AI");
   if (raider.integrity <= 0.0F) {
     (void)transition_raider_phase(raider, RaiderTransition::Deactivate, raider_entity, event_bus);
     raider.velocity = {};

@@ -2,6 +2,7 @@
 
 #include "hyperverse/asteroid_collision.hpp"
 #include "jolt_shape_queries.hpp"
+#include "hyperverse/profiling.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -60,6 +61,7 @@ AsteroidImpact detect_asteroid_impact(
   const SectorTuning& sector,
   float dt_seconds
 ) {
+  HYPERVERSE_PROFILE_ZONE("Swept asteroid collision");
   const float dt = std::max(0.0F, dt_seconds);
   AsteroidImpact nearest{};
   float nearest_fraction = 1.0F;

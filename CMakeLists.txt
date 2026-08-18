@@ -9,6 +9,7 @@ project(
 
 option(HYPERVERSE_BUILD_TESTS "Build Hyperverse tests" ON)
 option(HYPERVERSE_STEAM_BUNDLE "Install a relocatable Steam Linux Runtime bundle" OFF)
+option(HYPERVERSE_ENABLE_TRACY "Enable Tracy profiler instrumentation" OFF)
 
 if(HYPERVERSE_STEAM_BUNDLE)
   set(CMAKE_INSTALL_RPATH "$ORIGIN/lib")
@@ -73,6 +74,17 @@ CPMAddPackage(
   GIT_TAG v0.1.3
   DOWNLOAD_ONLY YES
 )
+
+if(HYPERVERSE_ENABLE_TRACY)
+  CPMAddPackage(
+    NAME Tracy
+    GITHUB_REPOSITORY wolfpld/tracy
+    GIT_TAG v0.13.1
+    OPTIONS
+      "TRACY_ENABLE ON"
+      "TRACY_ON_DEMAND ON"
+  )
+endif()
 
 add_library(hyperverse_boost_sml INTERFACE)
 add_library(hyperverse::boost_sml ALIAS hyperverse_boost_sml)
@@ -172,6 +184,10 @@ target_link_libraries(
     ${HYPERVERSE_JOLT_TARGET}
 )
 hyperverse_enable_project_warnings(hyperverse_core)
+if(HYPERVERSE_ENABLE_TRACY)
+  target_link_libraries(hyperverse_core PRIVATE Tracy::TracyClient)
+  target_compile_definitions(hyperverse_core PRIVATE HYPERVERSE_ENABLE_TRACY=1)
+endif()
 
 set(HYPERVERSE_SHADER_SOURCES
   sprite.vert sprite.frag

@@ -42,6 +42,20 @@ Build and test the deployable Steam Deck bundle in Valve's pinned Steam Linux Ru
 `./scripts/build-steam-runtime.sh`; copy it to a Deck over SSH with
 `./scripts/deploy-steam-deck.sh deck@HOST`.
 
+### Tracy profiling
+
+Profiling is optional and disabled in normal builds. Configure a dedicated instrumented build with:
+
+```sh
+cmake -S . -B build-tracy -DHYPERVERSE_ENABLE_TRACY=ON -DHYPERVERSE_BUILD_TESTS=OFF
+cmake --build build-tracy -j2
+```
+
+Start the Tracy 0.13.1 profiler, connect to the running `build-tracy/hyperverse` client, and capture.
+The initial timeline exposes complete frames, fixed simulation ticks, SDL event pumping, render-frame
+construction/submission, Vulkan draw/present, drone navigation/contact constraints, raider AI, and
+swept asteroid collision. On-demand mode keeps capture traffic inactive until the profiler connects.
+
 ## Documentation
 
 The embedded project guide is published through GitHub Pages at

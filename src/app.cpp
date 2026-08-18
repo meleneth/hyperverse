@@ -21,6 +21,7 @@
 #include "hyperverse/input.hpp"
 #include "hyperverse/mining.hpp"
 #include "hyperverse/pressure.hpp"
+#include "hyperverse/profiling.hpp"
 #include "hyperverse/player_lifecycle.hpp"
 #include "hyperverse/projectile.hpp"
 #include "hyperverse/raider.hpp"
@@ -201,26 +202,34 @@ public:
 
 private:
   [[nodiscard]] bool run_frame(const float elapsed_seconds) {
+    HYPERVERSE_PROFILE_ZONE("Frame");
     timestep_.accumulate(elapsed_seconds);
-    pump_events();
+    {
+      HYPERVERSE_PROFILE_ZONE("SDL events");
+      pump_events();
+    }
 
     while (timestep_.consume_tick()) {
       tick();
     }
 
     renderer_.refresh_extent();
-    const FlightHudSnapshot hud = make_flight_hud_snapshot(ship_, latest_intent_, flight_, sector_);
-    renderer_.draw_frame(build_sprite_frame(
-      account_,
-      player_,
-      entities_.mining_drones,
-      entities_.raider,
-      hud,
-      latest_intent_,
-      sector_,
-      renderer_.width(),
-      renderer_.height()
-    ));
+    {
+      HYPERVERSE_PROFILE_ZONE("Build and submit render frame");
+      const FlightHudSnapshot hud = make_flight_hud_snapshot(ship_, latest_intent_, flight_, sector_);
+      renderer_.draw_frame(build_sprite_frame(
+        account_,
+        player_,
+        entities_.mining_drones,
+        entities_.raider,
+        hud,
+        latest_intent_,
+        sector_,
+        renderer_.width(),
+        renderer_.height()
+      ));
+    }
+    HYPERVERSE_PROFILE_FRAME();
 
     return running_;
   }
@@ -255,6 +264,7 @@ private:
   }
 
   void tick() {
+    HYPERVERSE_PROFILE_ZONE("Simulation tick");
     account_.event_bus().process();
     if (system_menu_.phase == SystemMenuPhase::Open) {
       return;

@@ -5,6 +5,7 @@
 #include "hyperverse/asteroid_mass.hpp"
 #include "hyperverse/cargo_box.hpp"
 #include "hyperverse/engine_trail.hpp"
+#include "hyperverse/profiling.hpp"
 
 #include <boost/sml.hpp>
 
@@ -502,6 +503,7 @@ MiningDroneHudSnapshot update_mining_drone(MiningDrone& drone, entt::registry& r
                                            const TargetLockModel& mining_priority, const ShipMotion& ship,
                                            const SectorTuning& sector, float dt_seconds,
                                            const MiningDroneTuning& tuning, DomainEventBus* event_bus) {
+  HYPERVERSE_PROFILE_ZONE("Drone navigation");
   const float scaled_dt = std::max(0.0F, dt_seconds);
   drone.work_angle_radians =
       std::fmod(drone.work_angle_radians + (tuning.work_angle_rotation_radians_per_second * scaled_dt), TauRadians);
@@ -574,6 +576,7 @@ void resolve_mining_drone_overlaps(
   const SectorTuning& sector,
   const MiningDroneTuning& tuning
 ) {
+  HYPERVERSE_PROFILE_ZONE("Drone contact constraints");
   const float minimum_distance = std::max(0.0F, tuning.collision_radius) * 2.0F;
   for (std::size_t outer = 0; outer < drones.size(); ++outer) {
     if (!registry.valid(drones[outer]) || !registry.all_of<MiningDrone>(drones[outer])) {
